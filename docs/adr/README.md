@@ -40,7 +40,10 @@ ADR создаётся для каждого решения, которое:
 
 | ID | Решение | Статус | Файл |
 |---|---|---|---|
+| ADR-004 | Decimal128 Precision/Scale для Arrow/Parquet Schema | ACCEPTED | `ADR-004-decimal128-precision-scale.md` |
 | ADR-012 | Разделение development- и production-хоста (закрывает CONFLICT-004) | ACCEPTED | `ADR-012-development-and-production-hosts.md` |
+
+ADR-004 частично закрывает обязательный ADR-004 из §1.2 (каноническая integer/Decimal-модель), фиксируя Decimal128 для Parquet. Wire-format и Protobuf-схемы остаются в OPEN до ADR-002.
 
 ADR-012 принят вне обязательного списка §1.2: решение потребовалось раньше, чем ADR-001…011, потому что платформенная привязка dependency lock блокировала P1-S1-003. Остаточные открытые вопросы решения — в OPEN-005.
 

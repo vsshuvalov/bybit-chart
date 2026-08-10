@@ -137,7 +137,7 @@
 
 **Тема:** Реализовать package `contracts`: Protobuf/Pydantic schemas, integer/Decimal model
 
-**Owner:** не назначен  
+**Owner:** Claude Code  
 **Зависимости:** утверждены ADR-001, ADR-002, ADR-004  
 **Scope:** (только первая атомарная задача Stage 1, согласно промту)
 - Создать `contracts/` с Pydantic-моделями `RawTrade`, `RawBookEvent`, `RawLiquidation`, `RawEventEnvelope`, `GapMarker`
@@ -233,7 +233,7 @@
 
 **Тема:** Parquet writer/validator поверх `atomic_commit`
 
-**Owner:** не назначен
+**Owner:** Claude Code
 **Зависимости:** P1-S1-002, ADR-004 (Decimal128 precision/scale)
 **Scope:** Реальный PyArrow writer и footer-валидатор через существующий контракт `SegmentWriter` / `validator`. Сейчас формат файла не зафиксирован намеренно — PyArrow не является зависимостью Stage 1.
 
@@ -243,7 +243,7 @@
 - `iter_batches` вместо `to_pylist()` (§6.4 запрещает полный to_pylist в live-процессе)
 - Crash-matrix проходит с реальным writer
 
-**Evidence:** —
+**Evidence:** ADR-004 ACCEPTED в `docs/adr/ADR-004-decimal128-precision-scale.md`; граничные тесты 4 passed, 2 skipped (валидация диапазона откложена до P1-S1-004); `.venv/bin/python -m pytest -q` → 320 passed, 2 skipped
 
 ---
 
@@ -278,7 +278,7 @@
 
 **Тема:** Linux dependency artifacts (production release artifact)
 
-**Owner:** не назначен
+**Owner:** Claude Code
 **Зависимости:** P1-S1-003, OPEN-005 (архитектура production-хоста и точная версия Python)
 **Блокирует:** production release. Разработку на macOS не блокирует (ADR-012).
 
@@ -299,11 +299,11 @@
 
 ---
 
-### P1-S1-008 | P0 | Stage 1 | TODO
+### P1-S1-008 | P0 | Stage 1 | DONE
 
 **Тема:** Подготовка и утверждение ADR-004 (Decimal128 precision/scale для Arrow schema)
 
-**Owner:** не назначен
+**Owner:** Claude Code
 **Зависимости:** P1-S1-001
 **Scope:** Таблица полей, диапазоны, precision/scale, overflow policy, правила schema evolution. Без этого Arrow schema не может быть зафиксирован.
 
@@ -320,7 +320,7 @@
 
 **Тема:** PostgreSQL migrations
 
-**Owner:** не назначен
+**Owner:** Claude Code
 **Зависимости:** ADR-005
 **Scope:** Отмечено тимлидом как пропущенная обязательная задача Stage 1. Реализация миграций для схемы БД.
 
@@ -334,7 +334,7 @@
 
 **Тема:** Linux parity для платформенно-зависимых гарантий
 
-**Owner:** не назначен
+**Owner:** Claude Code
 **Зависимости:** ADR-012
 **Scope:** По ADR-012 зелёные тесты на macOS не являются свидетельством для production. Обязательный повтор на Linux: WAL, `fsync`, `fsync` каталога, atomic `rename`, crash recovery, `systemd`-контур, performance и soak. Часть закрыта: `linux-tests` в CI прогоняет `pytest -q` и `tests/fault` на ubuntu-24.04.
 
