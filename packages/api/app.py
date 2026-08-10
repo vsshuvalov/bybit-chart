@@ -24,7 +24,8 @@ from pydantic import ValidationError
 
 from packages.api.aggregation import aggregate_ohlc, parse_interval
 from packages.api.models import TradesQueryParams, TradesResponse, OHLCQueryParams, OHLCResponse
-from packages.api.websocket import register_websocket_endpoints
+from packages.api.websocket import register_websocket_endpoints, live_feed_manager
+from packages.api.redis_subscriber import register_redis_subscriber
 from packages.storage.parquet_reader import ParquetReader
 
 # Конфигурация
@@ -464,6 +465,10 @@ def create_app(data_dir: Path | str | None = None) -> FastAPI:
 
     # Регистрируем WebSocket endpoints
     register_websocket_endpoints(app, reader)
+
+    # Roadmap §2.1: Redis pub/sub для zero-latency broadcast
+    # Если Redis недоступен — fallback на polling (уже в websocket.py)
+    register_redis_subscriber(app, live_feed_manager, redis_url="redis://localhost:6379/0")
 
     return app
 

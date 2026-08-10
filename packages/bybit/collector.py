@@ -23,6 +23,7 @@ from typing import Any
 
 from contracts.schemas import RawTrade, BookCheckpoint
 from packages.storage import WalPartition, GroupCommitPolicy
+from packages.storage.redis_publisher import get_redis_publisher
 
 logger = logging.getLogger(__name__)
 
@@ -87,12 +88,22 @@ class EventCollector:
             wal_offset записи
 
         Примечание: commit происходит автоматически по GroupCommitPolicy.
+        Roadmap §2.1: публикует в Redis для real-time broadcast.
         """
         # Сериализация: JSON для MVP (ADR-002 заменит на Protobuf)
         payload = self._serialize_event(trade)
 
         result = self.wal.append(payload)
         logger.debug(f"Записан trade: offset={result.wal_offset}, id={trade.trade_id}")
+
+        # Roadmap §2.1: публикуем в Redis для real-time broadcast
+        try:
+            redis_pub = get_redis_publisher()
+            trade_dict = trade.model_dump(mode='json')
+            redis_pub.publish_event(self.partition_id, {"type": "trade", "data": trade_dict})
+        except Exception as exc:
+            # Redis публикация не критична — не ломаем основной flow
+            logger.debug(f"Redis publish failed (non-critical): {exc}")
 
         return result.wal_offset
 
@@ -106,6 +117,7 @@ class EventCollector:
             wal_offset записи
 
         Roadmap §8.2: Только snapshot, delta reconstruction — будущее расширение.
+        Roadmap §2.1: публикует в Redis для real-time broadcast.
         """
         # Сериализация: JSON для MVP
         payload = self._serialize_event(checkpoint)
@@ -116,6 +128,14 @@ class EventCollector:
             f"symbol={checkpoint.symbol}, depth={checkpoint.depth}, "
             f"levelCount={checkpoint.level_count}"
         )
+
+        # Roadmap §2.1: публикуем в Redis
+        try:
+            redis_pub = get_redis_publisher()
+            checkpoint_dict = checkpoint.model_dump(mode='json')
+            redis_pub.publish_event(self.partition_id, {"type": "book_checkpoint", "data": checkpoint_dict})
+        except Exception as exc:
+            logger.debug(f"Redis publish failed (non-critical): {exc}")
 
         return result.wal_offset
 
