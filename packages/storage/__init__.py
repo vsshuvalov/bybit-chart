@@ -20,6 +20,13 @@ from packages.storage.atomic_commit import (
     default_validator,
     recover_orphan_tmp_files,
 )
+from packages.storage.parquet_writer import (
+    BTCUSDT_SCHEMA,
+    SCHEMA_VERSION_MAJOR,
+    SCHEMA_VERSION_MINOR,
+    ParquetWriter,
+    validate_parquet_footer,
+)
 from packages.storage.frames import (
     CorruptFrameError,
     Frame,
@@ -106,4 +113,10 @@ __all__ = [
     "compute_checksum",
     "default_validator",
     "recover_orphan_tmp_files",
+    # parquet writer
+    "ParquetWriter",
+    "BTCUSDT_SCHEMA",
+    "SCHEMA_VERSION_MAJOR",
+    "SCHEMA_VERSION_MINOR",
+    "validate_parquet_footer",
 ]

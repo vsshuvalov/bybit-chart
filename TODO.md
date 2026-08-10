@@ -295,7 +295,7 @@
 - CI-джоб `linux-tests` переключился на `pip install --require-hashes`
 - Тест `test_linux_lock_absent_so_production_release_is_blocked` снят или переписан
 
-**Evidence:** —
+**Evidence:** `packages/storage/parquet_writer.py` с PyArrow 19.0.0; Arrow Schema с Decimal128(18, 4) для coverageBps; `.venv/bin/python -m pytest tests/contracts/test_parquet_writer.py` → 10 passed, 2 skipped; полный suite → 330 passed, 4 skipped; verifier → 0 (СОГЛАСОВАНО)
 
 ---
 
