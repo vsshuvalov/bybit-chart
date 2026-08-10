@@ -1,10 +1,11 @@
 # NEXT
 
-Обновлён: 2026-08-10T02:35:00+0700  
+Обновлён: 2026-08-10T02:47:00+0700  
 Project state: GREENFIELD  
 Roadmap: `/Users/vs/Desktop/bybit-chart/docs/specifications/source/BYBIT_MULTIPROCESS_PLATFORM_ROADMAP.md`  
 SHA-256 roadmap: `191e78a88efa5be21343d0ceb25caef0727070a7d5d329cbd537ce46dd399930`  
-Active stage/task: Stage 0 / P0-S0-004
+Active stage/task: Stage 1 / P1-S1-001  
+Last commit: `6edc666` — Stage 0 complete
 
 ---
 

@@ -128,7 +128,7 @@
 
 ## Stage 1 — Shared schemas и storage core (NOT_STARTED)
 
-### P1-S1-001 | P0 | Stage 1 | TODO
+### P1-S1-001 | P0 | Stage 1 | DONE
 
 **Тема:** Реализовать package `contracts`: Protobuf/Pydantic schemas, integer/Decimal model
 
