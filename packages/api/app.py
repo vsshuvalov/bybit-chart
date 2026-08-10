@@ -460,6 +460,161 @@ def create_app(data_dir: Path | str | None = None) -> FastAPI:
             raise HTTPException(status_code=500, detail=f"Ошибка: {exc}")
 
     # ========================================================================
+    # Order Flow Endpoints (Roadmap §9: Time & Sales, Footprint)
+    # ========================================================================
+
+    @app.get("/api/v1/tape/{symbol}")
+    async def get_tape(
+        symbol: str,
+        start_ts: int = Query(..., description="Начало диапазона (microseconds)", ge=0),
+        end_ts: int = Query(..., description="Конец диапазона (microseconds)", ge=0),
+        limit: int = Query(100, description="Максимум записей", ge=1, le=1000),
+    ):
+        """Получить Time & Sales tape (trade stream).
+
+        Roadmap §9: Time & Sales — поток сделок с aggressor side.
+
+        Query params:
+            - symbol: BTCUSDT | ETHUSDT | XRPUSDT
+            - start_ts: начало диапазона (microseconds)
+            - end_ts: конец диапазона (microseconds)
+            - limit: максимум записей (default 100, max 1000)
+
+        Returns:
+            {
+                "symbol": "BTCUSDT",
+                "start_ts": int,
+                "end_ts": int,
+                "tape": [
+                    {
+                        "timestamp_us": int,
+                        "price_ticks": int,
+                        "qty_steps": int,
+                        "aggressor_side": "Buy" | "Sell",
+                        "trade_id": str
+                    },
+                    ...
+                ],
+                "stats": {
+                    "total_volume": int,
+                    "buy_volume": int,
+                    "sell_volume": int,
+                    "tape_speed": float,
+                    ...
+                }
+            }
+        """
+        from packages.analytics.time_and_sales import create_tape_from_trades
+
+        try:
+            events = reader.read_range(
+                symbol=symbol,
+                start_ts=start_ts,
+                end_ts=end_ts,
+                event_type="RawTrade",
+            )
+
+            tape = create_tape_from_trades(events)
+            tape_entries = tape.get_recent(count=limit)
+            stats = tape.calculate_tape_stats(window_entries=len(tape.entries))
+
+            return JSONResponse(
+                status_code=200,
+                content={
+                    "symbol": symbol,
+                    "start_ts": start_ts,
+                    "end_ts": end_ts,
+                    "tape": [e.to_dict() for e in tape_entries],
+                    "stats": stats,
+                    "count": len(tape_entries),
+                },
+            )
+
+        except FileNotFoundError:
+            raise HTTPException(status_code=404, detail=f"Symbol не найден: {symbol}")
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=f"Ошибка: {exc}")
+
+    @app.get("/api/v1/footprint/{symbol}")
+    async def get_footprint(
+        symbol: str,
+        start_ts: int = Query(..., description="Начало диапазона (microseconds)", ge=0),
+        end_ts: int = Query(..., description="Конец диапазона (microseconds)", ge=0),
+        interval: str = Query(..., description="Интервал (1m, 5m, 15m, 1h)"),
+    ):
+        """Получить Footprint chart (volume distribution per price level).
+
+        Roadmap §9: Footprint — распределение объёма внутри свечей.
+
+        Query params:
+            - symbol: BTCUSDT | ETHUSDT | XRPUSDT
+            - start_ts: начало диапазона (microseconds)
+            - end_ts: конец диапазона (microseconds)
+            - interval: candle interval (1m, 5m, 15m, 30m, 1h, 4h)
+
+        Returns:
+            {
+                "symbol": "BTCUSDT",
+                "interval": "1m",
+                "candles": [
+                    {
+                        "timestamp_us": int,
+                        "open_ticks": int,
+                        "high_ticks": int,
+                        "low_ticks": int,
+                        "close_ticks": int,
+                        "poc_price": int,
+                        "cells": [
+                            {
+                                "price_ticks": int,
+                                "buy_volume": int,
+                                "sell_volume": int,
+                                "delta": int,
+                                "imbalance": float
+                            },
+                            ...
+                        ]
+                    },
+                    ...
+                ]
+            }
+        """
+        from packages.analytics.footprint import create_footprint_from_trades
+
+        try:
+            interval_us = parse_interval(interval)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+
+        try:
+            events = reader.read_range(
+                symbol=symbol,
+                start_ts=start_ts,
+                end_ts=end_ts,
+                event_type="RawTrade",
+            )
+
+            footprint = create_footprint_from_trades(events, interval_us)
+            candles = footprint.to_dict_list(start_ts, end_ts)
+
+            return JSONResponse(
+                status_code=200,
+                content={
+                    "symbol": symbol,
+                    "interval": interval,
+                    "start_ts": start_ts,
+                    "end_ts": end_ts,
+                    "candles": candles,
+                    "count": len(candles),
+                },
+            )
+
+        except FileNotFoundError:
+            raise HTTPException(status_code=404, detail=f"Symbol не найден: {symbol}")
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=f"Ошибка: {exc}")
+
+    # ========================================================================
     # WebSocket Live Feed (Roadmap §2.1)
     # ========================================================================
 
