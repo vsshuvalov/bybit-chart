@@ -319,11 +319,16 @@ async def main():
         max_restarts=5,
     ))
 
-    # TODO: Add more workers
-    # supervisor.add_worker(WorkerConfig(
-    #     name="api-server",
-    #     command=[sys.executable, "workers/api_server.py"],
-    # ))
+    # Add API server
+    supervisor.add_worker(WorkerConfig(
+        name="api-server",
+        command=[
+            sys.executable,
+            "workers/api_server.py",
+        ],
+        restart_policy="on-failure",
+        max_restarts=5,
+    ))
 
     # Setup signal handlers
     loop = asyncio.get_running_loop()

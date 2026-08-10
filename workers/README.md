@@ -23,7 +23,7 @@
 └──────────────────────────────────────────────────┘
 
 ┌──────────────────────────────────────────────────┐
-│  api_server.py (TODO)                            │
+│  api_server.py                                   │
 │  REST API + WebSocket                            │
 │  Requests data from analytics via IPC            │
 └──────────────────────────────────────────────────┘
@@ -72,8 +72,8 @@ python workers/collector_worker.py data BTCUSDT,ETHUSDT,XRPUSDT
 # Terminal 2: Start analytics worker
 python workers/analytics_worker.py data
 
-# Terminal 3: Start API server (TODO)
-# python workers/api_server.py
+# Terminal 3: Start API server
+python workers/api_server.py
 ```
 
 ## Worker Details
@@ -185,6 +185,58 @@ request = IPCMessage(
 client = UDSClient(Path("/tmp/bybit-analytics.sock"), "test")
 response = await client.send_message(health_msg)
 # {"status": "healthy", "process": "analytics-worker", "cached_engines": {...}}
+```
+
+### api_server.py
+
+**Purpose:** REST API + WebSocket server
+
+**Responsibilities:**
+- Serve REST API endpoints
+- WebSocket real-time updates
+- IPC requests to analytics worker for data
+- Prometheus metrics export
+- Health checks
+
+**Arguments:**
+- No arguments (configured in code: host=127.0.0.1, port=8000)
+
+**Endpoints:**
+- `GET /health` — health check
+- `GET /metrics` — Prometheus metrics
+- `GET /api/v1/symbols` — available symbols (via IPC)
+- `GET /api/v1/delta` — Delta bars (via IPC)
+
+**IPC Communication:**
+- Connects to analytics worker at startup
+- Sends request messages
+- Receives response messages
+- Request timeout: 10s (analytics queries), 5s (symbols)
+
+**Architecture:**
+```
+HTTP Client → API Server → IPC request → Analytics Worker
+                                      ← IPC response
+```
+
+**Health Check:**
+```bash
+curl http://127.0.0.1:8000/health
+# {
+#   "status": "healthy",
+#   "service": "bybit-chart-api-server",
+#   "version": "2.0.0",
+#   "analytics": "healthy"
+# }
+```
+
+**API Example:**
+```bash
+# Get symbols
+curl http://127.0.0.1:8000/api/v1/symbols
+
+# Get Delta
+curl "http://127.0.0.1:8000/api/v1/delta?symbol=BTCUSDT&start_ts=1234567890000000&end_ts=1234567900000000&interval=1m"
 ```
 
 ## Benefits (Roadmap §3)
