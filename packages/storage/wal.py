@@ -394,3 +394,157 @@ class WalPartition:
                     )
                 )
         return result
+
+    # ------------------------------------------------------------------
+    # Parquet integration (P1-S1-004)
+    # ------------------------------------------------------------------
+
+    def close_and_publish_segment(
+        self,
+        start_offset: int,
+        end_offset: int,
+        *,
+        parquet_writer_class=None,
+    ) -> Path:
+        """Закрыть WAL-диапазон и опубликовать как Parquet-сегмент.
+
+        Roadmap §6.4: атомарный commit WAL → Parquet → manifest → checkpoint.
+
+        Args:
+            start_offset: начало диапазона (inclusive)
+            end_offset: конец диапазона (exclusive)
+            parquet_writer_class: класс ParquetWriter (инъекция для тестов)
+
+        Returns:
+            Path к опубликованному .parquet файлу
+
+        Raises:
+            CommitError: commit не удался (файл удалён, состояние не изменено)
+
+        Примечание: Полная десериализация событий (Frame.payload → dict)
+        откладывается до Stage 2. Сейчас записываются stub-строки для
+        проверки интеграции commit_segment + ParquetWriter + manifest.
+        """
+        from decimal import Decimal
+        from packages.storage.atomic_commit import (
+            CommitError,
+            SegmentPayload,
+            commit_segment,
+        )
+        from packages.storage.parquet_writer import (
+            ParquetWriter,
+            validate_parquet_footer,
+        )
+        from packages.storage.manifest import Manifest
+
+        if parquet_writer_class is None:
+            parquet_writer_class = ParquetWriter
+
+        # 1. Читаем WAL-диапазон
+        frames = self.read_range(start_offset, end_offset)
+        if not frames:
+            raise ValueError(
+                f"Диапазон [{start_offset}, {end_offset}) пуст — "
+                "сегмент без записей не публикуется"
+            )
+
+        # 2. Конвертируем Frame → row (stub для MVP)
+        rows = []
+        for frame in frames:
+            row = {
+                "timestampUs": frame.offset,  # stub: используем offset как timestamp
+                "eventType": "raw_frame",     # stub: реальная десериализация в Stage 2
+                "symbol": self.partition_id,
+                "priceTicks": 0,
+                "qtySteps": 0,
+                "depth": 0,
+                "updateId": 0,
+                "sequence": 0,
+                "levelCount": 0,
+                "coverageBoundaryTicks": 0,
+                "coverageBps": Decimal("0.0000"),
+                "isFeedRangeComplete": False,
+                "connectionEpoch": "stub",
+                "exchangeTimestampMs": 0,
+                "outerTimestampMs": 0,
+                "receiveTimestampMs": 0,
+            }
+            rows.append(row)
+
+        # 3. Подготовка payload для commit_segment
+        segment_id = segment_name(start_offset).replace(".wal", "")
+        payload = SegmentPayload(
+            segment_id=segment_id,
+            schema_version=1,
+            row_count=len(rows),
+            min_event_time_ms=0,  # stub: реальное время из событий в Stage 2
+            max_event_time_ms=0,
+            min_wal_offset=start_offset,
+            max_wal_offset=end_offset,
+            connection_epochs=("stub",),
+        )
+
+        # 4. Writer callback
+        def writer_callback(handle, payload_arg):
+            # handle — BufferedWriter от commit_segment
+            # PyArrow ParquetWriter принимает file-like объект напрямую
+            # НЕ закрываем handle — commit_segment сделает это сам
+
+            # Создаём временный ParquetWriter без инициализации файла
+            # Записываем через PyArrow Table напрямую в handle
+            import pyarrow as pa
+            import pyarrow.parquet as pq
+            from decimal import Decimal
+
+            # Преобразуем rows в PyArrow Table
+            schema = parquet_writer_class.schema if hasattr(parquet_writer_class, 'schema') else None
+            if schema is None:
+                # Fallback: используем BTCUSDT_SCHEMA из parquet_writer
+                from packages.storage.parquet_writer import BTCUSDT_SCHEMA
+                schema = BTCUSDT_SCHEMA
+
+            table = pa.Table.from_pylist(rows, schema=schema)
+
+            # Записываем в handle через PyArrow
+            pq.write_table(
+                table,
+                handle,
+                compression="snappy",
+                use_dictionary=True,
+                write_statistics=True,
+            )
+
+            return b""  # footer stub (реальный footer читается validator)
+
+        # 5. Validator callback
+        def validator_callback(path, payload_arg, footer):
+            meta = validate_parquet_footer(path)
+            if meta["row_count"] != len(rows):
+                raise ValueError(
+                    f"Row count mismatch: ожидалось {len(rows)}, "
+                    f"в footer {meta['row_count']}"
+                )
+
+        # 6. Manifest (stub — реальная интеграция в следующей задаче)
+        manifest = Manifest(self.directory / "manifest.json")
+
+        # 7. Commit
+        def advance_checkpoint_wrapper(offset):
+            # OffsetSet immutable — advance_published возвращает новый объект
+            self._offsets = self._offsets.advance_published(offset)
+
+        try:
+            result = commit_segment(
+                directory=self.directory,
+                payload=payload,
+                writer=writer_callback,
+                manifest=manifest,
+                file_suffix=".parquet",
+                validator=validator_callback,
+                advance_checkpoint=advance_checkpoint_wrapper,
+            )
+        except Exception as exc:
+            raise CommitError(f"Не удалось опубликовать сегмент: {exc}") from exc
+
+        return result.committed_path
+
