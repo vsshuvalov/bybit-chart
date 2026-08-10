@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bybit Chart - Live</title>
+    <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: #131722;
+            color: #d1d4dc;
+        }
+
+        .container {
+            max-width: 1600px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 1px solid #2a2e39;
+        }
+
+        h1 {
+            font-size: 24px;
+            font-weight: 500;
+        }
+
+        .live-indicator {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 12px;
+            background: #1e222d;
+            border-radius: 4px;
+            font-size: 12px;
+            margin-left: 15px;
+        }
+
+        .live-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #ef5350;
+            animation: pulse 2s infinite;
+        }
+
+        .live-dot.connected {
+            background: #26a69a;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .controls {
+            display: flex;
+            gap: 15px;
+            align-items: flex-end;
+        }
+
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+
+        label {
+            font-size: 12px;
+            color: #787b86;
+            text-transform: uppercase;
+        }
+
+        select {
+            background: #1e222d;
+            border: 1px solid #2a2e39;
+            color: #d1d4dc;
+            padding: 8px 12px;
+            border-radius: 4px;
+            font-size: 14px;
+            cursor: pointer;
+        }
+
+        .chart-container {
+            background: #1e222d;
+            border-radius: 6px;
+            border: 1px solid #2a2e39;
+            margin-bottom: 15px;
+        }
+
+        #chart {
+            height: 600px;
+        }
+
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .stat-card {
+            background: #1e222d;
+            padding: 15px;
+            border-radius: 6px;
+            border: 1px solid #2a2e39;
+        }
+
+        .stat-label {
+            font-size: 11px;
+            color: #787b86;
+            text-transform: uppercase;
+            margin-bottom: 5px;
+        }
+
+        .stat-value {
+            font-size: 18px;
+            font-weight: 500;
+        }
+
+        .status {
+            padding: 10px;
+            border-radius: 4px;
+            font-size: 13px;
+            margin-top: 15px;
+        }
+
+        .status.info {
+            background: #2a2e39;
+            border: 1px solid #434651;
+        }
+
+        .status.success {
+            background: #1a472a;
+            border: 1px solid #26a69a;
+        }
+
+        .status.error {
+            background: #4a1a1a;
+            border: 1px solid #ef5350;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div style="display: flex; align-items: center;">
+                <h1 id="pageTitle">Bybit Chart - BTCUSDT</h1>
+                <div class="live-indicator">
+                    <div class="live-dot" id="liveDot"></div>
+                    <span id="liveStatus">Connecting...</span>
+                </div>
+            </div>
+            <div class="controls">
+                <div class="control-group">
+                    <label>Symbol</label>
+                    <select id="symbol">
+                        <option value="BTCUSDT" selected>BTCUSDT</option>
+                        <option value="ETHUSDT">ETHUSDT</option>
+                        <option value="XRPUSDT">XRPUSDT</option>
+                    </select>
+                </div>
+                <div class="control-group">
+                    <label>Interval</label>
+                    <select id="interval">
+                        <option value="1m" selected>1m</option>
+                        <option value="5m">5m</option>
+                        <option value="15m">15m</option>
+                        <option value="1h">1h</option>
+                    </select>
+                </div>
+            </div>
+        </header>
+
+        <div class="stats">
+            <div class="stat-card">
+                <div class="stat-label">Live Trades</div>
+                <div class="stat-value" id="tradeCount">0</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Last Price</div>
+                <div class="stat-value" id="lastPrice">-</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Volume (24h)</div>
+                <div class="stat-value" id="volume24h">-</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">WebSocket</div>
+                <div class="stat-value" id="wsMessages">0</div>
+            </div>
+        </div>
+
+        <div class="chart-container">
+            <div id="chart"></div>
+        </div>
+
+        <div id="status" class="status info">
+            Ready to connect to live feed...
+        </div>
+    </div>
+
+    <script>
+        // Configuration
+        const API_BASE_URL = 'http://127.0.0.1:8000/api/v1';
+        const WS_BASE_URL = 'ws://127.0.0.1:8000';
+
+        const SYMBOL_CONSTANTS = {
+            'BTCUSDT': { PRICE_TICK: 0.01, QTY_STEP: 0.001 },
+            'ETHUSDT': { PRICE_TICK: 0.01, QTY_STEP: 0.01 },
+            'XRPUSDT': { PRICE_TICK: 0.0001, QTY_STEP: 0.1 }
+        };
+
+        // State
+        let chart = null;
+        let candlestickSeries = null;
+        let ws = null;
+        let currentSymbol = 'BTCUSDT';
+        let currentInterval = '1m';
+        let tradeCount = 0;
+        let wsMessageCount = 0;
+        let currentCandle = null;
+        let intervalMs = 60000; // 1m default
+
+        // Initialize chart
+        function initChart() {
+            chart = LightweightCharts.createChart(document.getElementById('chart'), {
+                width: document.getElementById('chart').clientWidth,
+                height: 600,
+                layout: { background: { color: '#1e222d' }, textColor: '#d1d4dc' },
+                grid: { vertLines: { color: '#2a2e39' }, horzLines: { color: '#2a2e39' } },
+                timeScale: { timeVisible: true, secondsVisible: false },
+            });
+
+            candlestickSeries = chart.addCandlestickSeries({
+                upColor: '#26a69a',
+                downColor: '#ef5350',
+                borderVisible: false,
+                wickUpColor: '#26a69a',
+                wickDownColor: '#ef5350',
+            });
+
+            window.addEventListener('resize', () => {
+                chart.applyOptions({ width: document.getElementById('chart').clientWidth });
+            });
+        }
+
+        // Update live indicator
+        function updateLiveStatus(status, message) {
+            const dot = document.getElementById('liveDot');
+            const statusEl = document.getElementById('liveStatus');
+
+            if (status === 'connected') {
+                dot.classList.add('connected');
+                statusEl.textContent = 'Live';
+            } else {
+                dot.classList.remove('connected');
+                statusEl.textContent = message || 'Disconnected';
+            }
+        }
+
+        // Load historical OHLC
+        async function loadHistoricalData() {
+            const endTs = Date.now() * 1000;
+            const startTs = endTs - (24 * 60 * 60 * 1000 * 1000); // 24h
+
+            try {
+                const url = `${API_BASE_URL}/ohlc?symbol=${currentSymbol}&start_ts=${startTs}&end_ts=${endTs}&interval=${currentInterval}`;
+                const response = await fetch(url);
+                const data = await response.json();
+
+                if (!data.candles || data.candles.length === 0) {
+                    showStatus('No historical data available', 'info');
+                    return;
+                }
+
+                const constants = SYMBOL_CONSTANTS[currentSymbol];
+                const chartData = data.candles.map(c => ({
+                    time: Math.floor(c.timestamp_us / 1_000_000),
+                    open: c.open_ticks * constants.PRICE_TICK,
+                    high: c.high_ticks * constants.PRICE_TICK,
+                    low: c.low_ticks * constants.PRICE_TICK,
+                    close: c.close_ticks * constants.PRICE_TICK,
+                }));
+
+                candlestickSeries.setData(chartData);
+                chart.timeScale().fitContent();
+
+                // Initialize current candle from last historical candle
+                if (chartData.length > 0) {
+                    const last = chartData[chartData.length - 1];
+                    currentCandle = {
+                        time: last.time,
+                        open: last.open,
+                        high: last.high,
+                        low: last.low,
+                        close: last.close,
+                    };
+                }
+
+                showStatus(`Loaded ${data.count} candles, connecting to live feed...`, 'info');
+            } catch (error) {
+                console.error('Error loading historical data:', error);
+                showStatus(`Error: ${error.message}`, 'error');
+            }
+        }
+
+        // Connect to WebSocket
+        function connectWebSocket() {
+            if (ws) {
+                ws.close();
+            }
+
+            updateLiveStatus('connecting', 'Connecting...');
+            ws = new WebSocket(`${WS_BASE_URL}/ws/live/${currentSymbol}`);
+
+            ws.onopen = () => {
+                updateLiveStatus('connected', 'Live');
+                showStatus(`Connected to live feed for ${currentSymbol}`, 'success');
+            };
+
+            ws.onmessage = (event) => {
+                const message = JSON.parse(event.data);
+                wsMessageCount++;
+                document.getElementById('wsMessages').textContent = wsMessageCount;
+
+                if (message.type === 'trade') {
+                    handleLiveTrade(message.data);
+                } else if (message.type === 'heartbeat') {
+                    // Heartbeat received
+                } else if (message.type === 'connected') {
+                    console.log('WebSocket connected:', message.message);
+                }
+            };
+
+            ws.onerror = (error) => {
+                console.error('WebSocket error:', error);
+                updateLiveStatus('error', 'Error');
+                showStatus('WebSocket error', 'error');
+            };
+
+            ws.onclose = () => {
+                updateLiveStatus('disconnected', 'Disconnected');
+                showStatus('Disconnected from live feed', 'info');
+
+                // Reconnect after 5s
+                setTimeout(() => {
+                    if (document.visibilityState === 'visible') {
+                        connectWebSocket();
+                    }
+                }, 5000);
+            };
+        }
+
+        // Handle live trade
+        function handleLiveTrade(trade) {
+            tradeCount++;
+            document.getElementById('tradeCount').textContent = tradeCount;
+
+            const constants = SYMBOL_CONSTANTS[currentSymbol];
+            const price = trade.priceTicks * constants.PRICE_TICK;
+            const timestamp = Math.floor(trade.timestampUs / 1_000_000);
+
+            // Update last price
+            document.getElementById('lastPrice').textContent = `$${price.toFixed(constants.PRICE_TICK < 0.01 ? 4 : 2)}`;
+
+            // Update current candle
+            const candleTime = Math.floor(timestamp / (intervalMs / 1000)) * (intervalMs / 1000);
+
+            if (!currentCandle || currentCandle.time !== candleTime) {
+                // New candle
+                currentCandle = {
+                    time: candleTime,
+                    open: price,
+                    high: price,
+                    low: price,
+                    close: price,
+                };
+                candlestickSeries.update(currentCandle);
+            } else {
+                // Update existing candle
+                currentCandle.high = Math.max(currentCandle.high, price);
+                currentCandle.low = Math.min(currentCandle.low, price);
+                currentCandle.close = price;
+                candlestickSeries.update(currentCandle);
+            }
+        }
+
+        // Show status
+        function showStatus(message, type) {
+            const status = document.getElementById('status');
+            status.textContent = message;
+            status.className = `status ${type}`;
+        }
+
+        // Update interval
+        function updateInterval() {
+            const interval = document.getElementById('interval').value;
+            const intervalMap = {
+                '1m': 60000,
+                '5m': 300000,
+                '15m': 900000,
+                '1h': 3600000,
+            };
+            intervalMs = intervalMap[interval] || 60000;
+            currentInterval = interval;
+        }
+
+        // Symbol change
+        document.getElementById('symbol').addEventListener('change', (e) => {
+            currentSymbol = e.target.value;
+            document.getElementById('pageTitle').textContent = `Bybit Chart - ${currentSymbol}`;
+            tradeCount = 0;
+            wsMessageCount = 0;
+            currentCandle = null;
+            loadHistoricalData();
+            connectWebSocket();
+        });
+
+        // Interval change
+        document.getElementById('interval').addEventListener('change', () => {
+            updateInterval();
+            currentCandle = null;
+            loadHistoricalData();
+        });
+
+        // Initialize
+        initChart();
+        updateInterval();
+        loadHistoricalData();
+        connectWebSocket();
+
+        // Reconnect on visibility change
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'visible' && (!ws || ws.readyState !== WebSocket.OPEN)) {
+                connectWebSocket();
+            }
+        });
+    </script>
+</body>
+</html>

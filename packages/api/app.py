@@ -24,6 +24,7 @@ from pydantic import ValidationError
 
 from packages.api.aggregation import aggregate_ohlc, parse_interval
 from packages.api.models import TradesQueryParams, TradesResponse, OHLCQueryParams, OHLCResponse
+from packages.api.websocket import register_websocket_endpoints
 from packages.storage.parquet_reader import ParquetReader
 
 # Конфигурация
@@ -456,6 +457,13 @@ def create_app(data_dir: Path | str | None = None) -> FastAPI:
             raise HTTPException(status_code=404, detail=f"Symbol не найден: {symbol}")
         except Exception as exc:
             raise HTTPException(status_code=500, detail=f"Ошибка: {exc}")
+
+    # ========================================================================
+    # WebSocket Live Feed (Roadmap §2.1)
+    # ========================================================================
+
+    # Регистрируем WebSocket endpoints
+    register_websocket_endpoints(app, reader)
 
     return app
 
