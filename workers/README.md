@@ -17,7 +17,7 @@
 └──────────────────────────────────────────────────┘
 
 ┌──────────────────────────────────────────────────┐
-│  analytics_worker.py (TODO)                      │
+│  analytics_worker.py                             │
 │  Parquet → Analytics (Delta, CVD, VWAP, etc.)    │
 │  Subscribes to IPC events                        │
 └──────────────────────────────────────────────────┘
@@ -69,8 +69,8 @@ Supervisor will:
 # Terminal 1: Start collector worker
 python workers/collector_worker.py data BTCUSDT,ETHUSDT,XRPUSDT
 
-# Terminal 2: Start analytics worker (TODO)
-# python workers/analytics_worker.py
+# Terminal 2: Start analytics worker
+python workers/analytics_worker.py data
 
 # Terminal 3: Start API server (TODO)
 # python workers/api_server.py
@@ -114,6 +114,77 @@ health_msg = IPCMessage(
 response = await client.send_message(health_msg)
 print(response.payload)
 # {"status": "healthy", "process": "collector-worker", "symbols": [...]}
+```
+
+### analytics_worker.py
+
+**Purpose:** Calculate analytics indicators
+
+**Responsibilities:**
+- Read Parquet segments (read-only)
+- Calculate Delta, CVD, VWAP, Volume Profile
+- Handle IPC requests from API
+- Subscribe to IPC events from collector
+- Cache engines per symbol
+
+**Arguments:**
+- `data_dir` — data directory (default: `data/`)
+
+**IPC Messages:**
+- Handles: `health` — health check request
+- Handles: `request` — get_delta, get_vwap, get_volume_profile, get_symbols
+- Handles: `event` — new_segment notification (invalidate cache)
+
+**Request Examples:**
+```python
+# Get Delta
+request = IPCMessage(
+    message_type="request",
+    payload={
+        "type": "get_delta",
+        "symbol": "BTCUSDT",
+        "start_ts": 1234567890000000,
+        "end_ts": 1234567900000000,
+        "interval_us": 60_000_000,  # 1 minute
+    },
+    source="api",
+)
+
+response = await client.send_message(request)
+# {"bars": [...], "count": 10}
+
+# Get VWAP
+request = IPCMessage(
+    message_type="request",
+    payload={
+        "type": "get_vwap",
+        "symbol": "BTCUSDT",
+        "start_ts": 1234567890000000,
+        "end_ts": 1234567900000000,
+        "interval_us": 60_000_000,
+    },
+    source="api",
+)
+
+# Get Volume Profile
+request = IPCMessage(
+    message_type="request",
+    payload={
+        "type": "get_volume_profile",
+        "symbol": "BTCUSDT",
+        "start_ts": 1234567890000000,
+        "end_ts": 1234567900000000,
+        "price_tick": 0.01,
+    },
+    source="api",
+)
+```
+
+**Health Check:**
+```python
+client = UDSClient(Path("/tmp/bybit-analytics.sock"), "test")
+response = await client.send_message(health_msg)
+# {"status": "healthy", "process": "analytics-worker", "cached_engines": {...}}
 ```
 
 ## Benefits (Roadmap §3)

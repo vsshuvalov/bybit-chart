@@ -307,10 +307,22 @@ async def main():
         max_restarts=5,
     ))
 
+    # Add analytics worker
+    supervisor.add_worker(WorkerConfig(
+        name="analytics-worker",
+        command=[
+            sys.executable,
+            "workers/analytics_worker.py",
+            "data",
+        ],
+        restart_policy="on-failure",
+        max_restarts=5,
+    ))
+
     # TODO: Add more workers
     # supervisor.add_worker(WorkerConfig(
-    #     name="analytics-worker",
-    #     command=[sys.executable, "workers/analytics_worker.py"],
+    #     name="api-server",
+    #     command=[sys.executable, "workers/api_server.py"],
     # ))
 
     # Setup signal handlers
