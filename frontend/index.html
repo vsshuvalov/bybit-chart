@@ -162,8 +162,16 @@
 <body>
     <div class="container">
         <header>
-            <h1>Bybit Chart - BTCUSDT</h1>
+            <h1 id="pageTitle">Bybit Chart - BTCUSDT</h1>
             <div class="controls">
+                <div class="control-group">
+                    <label>Symbol</label>
+                    <select id="symbol">
+                        <option value="BTCUSDT" selected>BTCUSDT</option>
+                        <option value="ETHUSDT">ETHUSDT</option>
+                        <option value="XRPUSDT">XRPUSDT</option>
+                    </select>
+                </div>
                 <div class="control-group">
                     <label>Interval</label>
                     <select id="interval">
@@ -220,11 +228,22 @@
     <script>
         // Configuration
         const API_BASE_URL = 'http://127.0.0.1:8000/api/v1';
-        const SYMBOL = 'BTCUSDT';
 
         // Price/qty scaling (from packages/numeric/constants.py)
-        const BTCUSDT_PRICE_TICK = 0.01;
-        const BTCUSDT_QTY_STEP = 0.001;
+        const SYMBOL_CONSTANTS = {
+            'BTCUSDT': {
+                PRICE_TICK: 0.01,
+                QTY_STEP: 0.001
+            },
+            'ETHUSDT': {
+                PRICE_TICK: 0.01,
+                QTY_STEP: 0.01
+            },
+            'XRPUSDT': {
+                PRICE_TICK: 0.0001,
+                QTY_STEP: 0.1
+            }
+        };
 
         // Chart instance
         let chart = null;
@@ -295,7 +314,7 @@
         }
 
         // Update stats
-        function updateStats(candles) {
+        function updateStats(candles, symbol) {
             const candleCount = candles.length;
             const totalVolume = candles.reduce((sum, c) => sum + c.volume_steps, 0);
             const totalTrades = candles.reduce((sum, c) => sum + c.trade_count, 0);
@@ -304,17 +323,23 @@
             const minPrice = Math.min(...prices);
             const maxPrice = Math.max(...prices);
 
+            const constants = SYMBOL_CONSTANTS[symbol];
+
             document.getElementById('candleCount').textContent = candleCount.toLocaleString();
-            document.getElementById('totalVolume').textContent = (totalVolume * BTCUSDT_QTY_STEP).toFixed(3);
+            document.getElementById('totalVolume').textContent = (totalVolume * constants.QTY_STEP).toFixed(3);
             document.getElementById('totalTrades').textContent = totalTrades.toLocaleString();
             document.getElementById('priceRange').textContent =
-                `$${(minPrice * BTCUSDT_PRICE_TICK).toFixed(2)} - $${(maxPrice * BTCUSDT_PRICE_TICK).toFixed(2)}`;
+                `$${(minPrice * constants.PRICE_TICK).toFixed(constants.PRICE_TICK < 0.01 ? 4 : 2)} - $${(maxPrice * constants.PRICE_TICK).toFixed(constants.PRICE_TICK < 0.01 ? 4 : 2)}`;
         }
 
         // Load OHLC data from API
         async function loadData() {
+            const symbol = document.getElementById('symbol').value;
             const interval = document.getElementById('interval').value;
             const rangeHours = parseInt(document.getElementById('range').value);
+
+            // Update page title
+            document.getElementById('pageTitle').textContent = `Bybit Chart - ${symbol}`;
 
             const endTs = Date.now() * 1000; // current time in microseconds
             const startTs = endTs - (rangeHours * 60 * 60 * 1000 * 1000); // range in microseconds
@@ -322,7 +347,7 @@
             showStatus('Loading candles...', 'loading');
 
             try {
-                const url = `${API_BASE_URL}/ohlc?symbol=${SYMBOL}&start_ts=${startTs}&end_ts=${endTs}&interval=${interval}`;
+                const url = `${API_BASE_URL}/ohlc?symbol=${symbol}&start_ts=${startTs}&end_ts=${endTs}&interval=${interval}`;
                 const response = await fetch(url);
 
                 if (!response.ok) {
@@ -337,12 +362,13 @@
                 }
 
                 // Convert ticks → price for TradingView
+                const constants = SYMBOL_CONSTANTS[symbol];
                 const chartData = data.candles.map(candle => ({
                     time: Math.floor(candle.timestamp_us / 1_000_000), // µs → seconds
-                    open: candle.open_ticks * BTCUSDT_PRICE_TICK,
-                    high: candle.high_ticks * BTCUSDT_PRICE_TICK,
-                    low: candle.low_ticks * BTCUSDT_PRICE_TICK,
-                    close: candle.close_ticks * BTCUSDT_PRICE_TICK,
+                    open: candle.open_ticks * constants.PRICE_TICK,
+                    high: candle.high_ticks * constants.PRICE_TICK,
+                    low: candle.low_ticks * constants.PRICE_TICK,
+                    close: candle.close_ticks * constants.PRICE_TICK,
                     volume_steps: candle.volume_steps,
                     trade_count: candle.trade_count,
                 }));
@@ -352,9 +378,9 @@
                 chart.timeScale().fitContent();
 
                 // Update stats
-                updateStats(data.candles);
+                updateStats(data.candles, symbol);
 
-                showStatus(`Loaded ${data.count} candles`, 'success');
+                showStatus(`Loaded ${data.count} candles for ${symbol}`, 'success');
 
             } catch (error) {
                 console.error('Error loading data:', error);
@@ -364,6 +390,9 @@
 
         // Event listeners
         document.getElementById('loadBtn').addEventListener('click', loadData);
+
+        // Auto-reload on symbol change
+        document.getElementById('symbol').addEventListener('change', loadData);
 
         // Initialize
         initChart();
