@@ -8,6 +8,11 @@ Endpoints:
 - GET /health — health check
 - GET /api/v1/symbols — список доступных symbols
 - GET /api/v1/trades — чтение RawTrade/BookCheckpoint из Parquet (P3-S3-003)
+- GET /api/v1/ohlc — OHLC aggregation (P3-S3-004)
+- GET /api/v1/analytics/delta — Delta analytics (Этап 3 / P3-A1)
+- GET /api/v1/analytics/cvd — CVD analytics (Этап 3 / P3-A2)
+- GET /api/v1/analytics/vwap — VWAP analytics (Этап 3 / P3-A3)
+- GET /api/v1/analytics/volume-profile — Volume Profile (Этап 3 / P3-A4)
 """
 
 from pathlib import Path
@@ -271,6 +276,186 @@ def create_app(data_dir: Path | str | None = None) -> FastAPI:
                 status_code=500,
                 detail=f"Ошибка чтения данных: {exc}",
             )
+
+    # ========================================================================
+    # Analytics Endpoints (Этап 3)
+    # ========================================================================
+
+    @app.get("/api/v1/analytics/delta")
+    async def get_delta(
+        symbol: str = Query(..., description="Symbol (BTCUSDT)"),
+        start_ts: int = Query(..., description="Начало диапазона (microseconds)", ge=0),
+        end_ts: int = Query(..., description="Конец диапазона (microseconds)", ge=0),
+        interval: str = Query(..., description="Интервал (1m, 5m, 15m, 1h, 4h, 1d)"),
+    ):
+        """Получить Delta analytics (buy/sell pressure).
+
+        Roadmap §9.2: Delta = buy_volume - sell_volume по временным окнам.
+        """
+        from packages.analytics.delta import aggregate_delta_by_interval
+
+        try:
+            interval_us = parse_interval(interval)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+
+        try:
+            events = reader.read_range(
+                symbol=symbol,
+                start_ts=start_ts,
+                end_ts=end_ts,
+                event_type="RawTrade",
+            )
+
+            delta_bars = aggregate_delta_by_interval(events, interval_us)
+
+            return JSONResponse(
+                status_code=200,
+                content={
+                    "symbol": symbol,
+                    "interval": interval,
+                    "start_ts": start_ts,
+                    "end_ts": end_ts,
+                    "bars": delta_bars,
+                    "count": len(delta_bars),
+                },
+            )
+
+        except FileNotFoundError:
+            raise HTTPException(status_code=404, detail=f"Symbol не найден: {symbol}")
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=f"Ошибка: {exc}")
+
+    @app.get("/api/v1/analytics/cvd")
+    async def get_cvd(
+        symbol: str = Query(..., description="Symbol (BTCUSDT)"),
+        start_ts: int = Query(..., description="Начало диапазона (microseconds)", ge=0),
+        end_ts: int = Query(..., description="Конец диапазона (microseconds)", ge=0),
+        interval: str = Query(..., description="Интервал (1m, 5m, 15m, 1h, 4h, 1d)"),
+    ):
+        """Получить CVD analytics (Cumulative Volume Delta).
+
+        Roadmap §9.2: CVD = cumsum(Delta), показывает накопленное давление.
+        """
+        from packages.analytics.cvd import aggregate_cvd_by_interval
+
+        try:
+            interval_us = parse_interval(interval)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+
+        try:
+            events = reader.read_range(
+                symbol=symbol,
+                start_ts=start_ts,
+                end_ts=end_ts,
+                event_type="RawTrade",
+            )
+
+            cvd_bars = aggregate_cvd_by_interval(events, interval_us)
+
+            return JSONResponse(
+                status_code=200,
+                content={
+                    "symbol": symbol,
+                    "interval": interval,
+                    "start_ts": start_ts,
+                    "end_ts": end_ts,
+                    "bars": cvd_bars,
+                    "count": len(cvd_bars),
+                },
+            )
+
+        except FileNotFoundError:
+            raise HTTPException(status_code=404, detail=f"Symbol не найден: {symbol}")
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=f"Ошибка: {exc}")
+
+    @app.get("/api/v1/analytics/vwap")
+    async def get_vwap(
+        symbol: str = Query(..., description="Symbol (BTCUSDT)"),
+        start_ts: int = Query(..., description="Начало диапазона (microseconds)", ge=0),
+        end_ts: int = Query(..., description="Конец диапазона (microseconds)", ge=0),
+        interval: str = Query(..., description="Интервал (1m, 5m, 15m, 1h, 4h, 1d)"),
+    ):
+        """Получить VWAP analytics (Volume Weighted Average Price).
+
+        Roadmap §9.2: VWAP = Σ(price × volume) / Σ(volume).
+        """
+        from packages.analytics.vwap import aggregate_vwap_by_interval
+
+        try:
+            interval_us = parse_interval(interval)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+
+        try:
+            events = reader.read_range(
+                symbol=symbol,
+                start_ts=start_ts,
+                end_ts=end_ts,
+                event_type="RawTrade",
+            )
+
+            vwap_bars = aggregate_vwap_by_interval(events, interval_us)
+
+            return JSONResponse(
+                status_code=200,
+                content={
+                    "symbol": symbol,
+                    "interval": interval,
+                    "start_ts": start_ts,
+                    "end_ts": end_ts,
+                    "bars": vwap_bars,
+                    "count": len(vwap_bars),
+                },
+            )
+
+        except FileNotFoundError:
+            raise HTTPException(status_code=404, detail=f"Symbol не найден: {symbol}")
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=f"Ошибка: {exc}")
+
+    @app.get("/api/v1/analytics/volume-profile")
+    async def get_volume_profile(
+        symbol: str = Query(..., description="Symbol (BTCUSDT)"),
+        start_ts: int = Query(..., description="Начало диапазона (microseconds)", ge=0),
+        end_ts: int = Query(..., description="Конец диапазона (microseconds)", ge=0),
+        price_bin_ticks: int = Query(100, description="Размер ценового bin (ticks)", ge=1),
+    ):
+        """Получить Volume Profile (распределение объёма по ценам).
+
+        Roadmap §9.2: POC, Value Area, HVN/LVN для определения ключевых уровней.
+        """
+        from packages.analytics.volume_profile import calculate_volume_profile, find_hvn_lvn
+
+        try:
+            events = reader.read_range(
+                symbol=symbol,
+                start_ts=start_ts,
+                end_ts=end_ts,
+                event_type="RawTrade",
+            )
+
+            profile = calculate_volume_profile(events, price_bin_ticks)
+            hvn_lvn = find_hvn_lvn(profile)
+
+            return JSONResponse(
+                status_code=200,
+                content={
+                    "symbol": symbol,
+                    "start_ts": start_ts,
+                    "end_ts": end_ts,
+                    "price_bin_ticks": price_bin_ticks,
+                    "profile": profile,
+                    "hvn_lvn": hvn_lvn,
+                },
+            )
+
+        except FileNotFoundError:
+            raise HTTPException(status_code=404, detail=f"Symbol не найден: {symbol}")
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=f"Ошибка: {exc}")
 
     return app
 

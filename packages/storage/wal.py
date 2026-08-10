@@ -482,6 +482,7 @@ class WalPartition:
                     "symbol": self.partition_id,
                     "priceTicks": 0,
                     "qtySteps": 0,
+                    "takerSide": "",  # stub для RawTrade
                     "depth": 0,
                     "updateId": 0,
                     "sequence": 0,

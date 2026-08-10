@@ -229,6 +229,7 @@ def raw_trade_to_parquet_row(trade: RawTrade) -> dict[str, Any]:
         "symbol": trade.symbol,
         "priceTicks": trade.price_ticks,
         "qtySteps": trade.qty_steps,
+        "takerSide": trade.taker_side.value,  # TakerSide enum → string ("Buy" | "Sell")
         # BookCheckpoint-специфичные поля (stub для RawTrade)
         "depth": 0,
         "updateId": 0,
@@ -273,6 +274,7 @@ def book_checkpoint_to_parquet_row(checkpoint: BookCheckpoint) -> dict[str, Any]
         # RawTrade-специфичные поля (stub для BookCheckpoint)
         "priceTicks": 0,
         "qtySteps": 0,
+        "takerSide": "",  # stub для BookCheckpoint (нет taker side)
         # BookCheckpoint-специфичные поля
         "depth": checkpoint.depth,
         "updateId": checkpoint.update_id,

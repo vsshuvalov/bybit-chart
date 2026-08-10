@@ -41,6 +41,7 @@ _BTCUSDT_SCHEMA_BASE = pa.schema([
     # RawTrade / RawBookEvent
     ("priceTicks", pa.int64()),
     ("qtySteps", pa.int64()),
+    ("takerSide", pa.string()),  # "Buy" | "Sell" (для RawTrade)
     # BookCheckpoint
     ("depth", pa.int64()),
     ("updateId", pa.int64()),
