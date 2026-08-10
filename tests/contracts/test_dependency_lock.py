@@ -135,6 +135,21 @@ def normalize(name: str) -> str:
     return re.sub(r"[-_.]+", "-", name).lower()
 
 
+def direct_requirement_names() -> frozenset[str]:
+    """Прямые зависимости из requirements.in — единственный их источник.
+
+    Хардкод списка ломает тест при каждом штатном добавлении зависимости:
+    это ложное срабатывание, а не защита. Проверять надо соответствие
+    артефактов объявленным прямым зависимостям.
+    """
+    names = set()
+    for raw in REQUIREMENTS_IN.read_text(encoding="utf-8").splitlines():
+        line = raw.split("#", 1)[0].strip()
+        if line:
+            names.add(normalize(line.partition("==")[0].strip()))
+    return frozenset(names)
+
+
 # ===========================================================================
 # Артефакты существуют
 # ===========================================================================
@@ -268,8 +283,7 @@ class TestVerifierDetectsEnvironmentDrift:
 
     def test_transitive_substitution_detected(self, verifier, locked, installed):
         """Подмена транзитивной зависимости обнаруживается так же, как прямой."""
-        direct = {"pydantic", "pytest"}
-        transitive = sorted(set(locked) - direct)
+        transitive = sorted(set(locked) - direct_requirement_names())
         assert transitive, "в наборе нет транзитивных зависимостей"
         name = transitive[0]
         drifted = dict(installed)
@@ -393,7 +407,17 @@ class TestSbom:
         root_ref = sbom["metadata"]["component"]["bom-ref"]
         entry = next(d for d in sbom["dependencies"] if d["ref"] == root_ref)
         names = {ref.removeprefix("pkg:pypi/").split("@")[0] for ref in entry["dependsOn"]}
-        assert names == {"pydantic", "pytest"}
+        assert names == set(direct_requirement_names())
+
+    def test_direct_dependencies_are_read_from_requirements_in(self):
+        """Гард против хардкода: список прямых зависимостей берётся из файла.
+
+        Исторический дефект: тесты сравнивали состав с литералом
+        {pydantic, pytest} и падали при штатном добавлении hypothesis.
+        """
+        names = direct_requirement_names()
+        assert names, "requirements.in не содержит прямых зависимостей"
+        assert "pydantic" in names and "pytest" in names
 
     def test_records_platform(self, sbom):
         """Набор содержит бинарные колёса — платформа обязана быть зафиксирована."""
@@ -955,3 +979,44 @@ class TestGeneratorGuards:
         }
         found = generator.has_platform_specific_wheel(resolved)
         assert len(found) == 1 and "binary" in found[0]
+
+
+# ===========================================================================
+# Гигиена suite: каждый тест размечен маркером
+# ===========================================================================
+
+class TestSuiteHygiene:
+    def test_every_test_module_declares_pytestmark(self) -> None:
+        """Механическая проверка вместо интерпретации exit 5 shell-команды.
+
+        Контракт: модуль `tests/**/test_*.py` обязан объявлять `pytestmark`.
+        Без этого `-m contract` молча пропустит тесты, а мы узнаем об этом
+        только через shell exit code — что не является проверкой, а является
+        интерпретацией поведения pytest. Этот тест проверяет требование
+        механически.
+        """
+        import ast
+        from pathlib import Path
+
+        root = Path(__file__).parent.parent
+        missing = []
+
+        for path in root.rglob("test_*.py"):
+            if path.name == "__init__.py":
+                continue
+            tree = ast.parse(path.read_text(encoding="utf-8"), str(path))
+            has_marker = any(
+                isinstance(node, ast.Assign)
+                and any(
+                    isinstance(t, ast.Name) and t.id == "pytestmark"
+                    for t in node.targets
+                )
+                for node in tree.body
+            )
+            if not has_marker:
+                missing.append(path.relative_to(root))
+
+        assert not missing, (
+            f"модули без pytestmark (игнорируются `-m contract/fault/property`): "
+            f"{', '.join(str(p) for p in missing)}"
+        )

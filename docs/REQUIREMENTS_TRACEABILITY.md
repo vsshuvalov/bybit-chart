@@ -3,8 +3,8 @@
 - **Stage:** 1 (в работе)
 - **Дата:** 2026-08-10
 - **Источник:** BYBIT_MULTIPROCESS_PLATFORM_ROADMAP.md v1.0
-- **Всего требований:** 67 (63 исходных + REQ-064…067, добавлены при закрытии P1-S1-003)
-- **Статус:** REQ-001…063 — NOT_STARTED; статусы REQ-064…067 см. раздел «Зависимости и платформа»
+- **Всего требований:** 68 (63 исходных + REQ-064…067 при закрытии P1-S1-003 + REQ-068 при закрытии P1-S1-005)
+- **Статус:** REQ-001…063 — NOT_STARTED; статусы REQ-064…068 см. раздел «Зависимости и платформа»
 
 ---
 
@@ -166,4 +166,5 @@
 | REQ-064 | §4, §20.1 | Все зависимости зафиксированы lock-файлом с точными версиями и хешами; состав описан SBOM | deploy | `verify_dependencies.py` → exit 0; `pytest tests/contracts/test_dependency_lock.py` | 1 | PARTIAL — development (`darwin-arm64`) готов; production (Linux) — P1-S1-006 |
 | REQ-065 | §4, ADR-012 | Development-артефакт не может быть release artifact; lock не пересекает платформу | deploy | `verify_dependencies.py --release` → exit 1 на development-роли | 1 | DONE |
 | REQ-066 | §4, §18.4, ADR-012 | Платформенно-зависимые гарантии (WAL, fsync, atomic rename, crash recovery, systemd, performance, soak) проверены на Linux | packages/storage, deploy | фактический прогон `pytest -q` и `tests/fault` на Linux; далее crash-matrix на ext4/XFS, systemd-контур, performance, soak | 1+ | **NOT_STARTED** — ни один тест на Linux не выполнялся. Существует только конфигурация `linux-tests` в `.github/workflows/ci.yml`: remote отсутствует, workflow не запускался. Весь объём — P1-S1-007 |
-| REQ-067 | OPEN-005 | Архитектура production-хоста и точная версия Python зафиксированы до ввода PyArrow и PostgreSQL-драйвера | deploy | решение в ADR; каталог `linux-<arch>` создан | 1 | NOT_STARTED — блокирует P1-S1-004, P1-S1-006, ADR-005 |
+| REQ-067 | OPEN-005 | Архитектура production-хоста и точная версия Python зафиксированы до ввода production lock и PostgreSQL-драйвера | deploy | решение в ADR; каталог `linux-<arch>` создан | 1 | NOT_STARTED — блокирует P1-S1-006, production release, ADR-005 |
+| REQ-068 | §4 | Backend tests включают property-based проверки на Hypothesis, а не только example-based | packages/storage, tests | `pytest -m property` → 29 passed; мутационная проверка: 3 внесённых дефекта поймано | 1 | DONE — P1-S1-005 |

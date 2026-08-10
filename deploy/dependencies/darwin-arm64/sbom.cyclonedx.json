@@ -1,10 +1,10 @@
 {
   "bomFormat": "CycloneDX",
   "specVersion": "1.5",
-  "serialNumber": "urn:uuid:76e17988-5d4e-4244-b110-c27cd162ee94",
+  "serialNumber": "urn:uuid:e85958c3-8f2c-4b16-a4b8-3d5e43becfec",
   "version": 1,
   "metadata": {
-    "timestamp": "2026-08-10T10:30:45+00:00",
+    "timestamp": "2026-08-10T11:44:56+00:00",
     "tools": [
       {
         "vendor": "bybit-orderflow-platform",
@@ -101,6 +101,44 @@
         {
           "type": "distribution",
           "url": "https://files.pythonhosted.org/packages/99/91/8acff4f5e50511b911bbccb72b8628a49c68ce14148cd9f6431094859a90/annotated_types-0.8.0-py3-none-any.whl"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/hypothesis@6.165.2",
+      "name": "hypothesis",
+      "version": "6.165.2",
+      "purl": "pkg:pypi/hypothesis@6.165.2",
+      "scope": "required",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "3748153d4f64d347f8c988dd41fbef3513b66819e73e9209b1c501bf0d716a13"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "MPL-2.0"
+          }
+        }
+      ],
+      "properties": [
+        {
+          "name": "bybit:dependency_kind",
+          "value": "direct"
+        },
+        {
+          "name": "bybit:distribution_filename",
+          "value": "hypothesis-6.165.2-cp313-cp313-macosx_11_0_arm64.whl"
+        }
+      ],
+      "description": "The property-based testing library for Python",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://files.pythonhosted.org/packages/8e/4b/df2e4c24d208518a6a3dab7acabad7f5ec6c5bb0f4d0bf1701d2fb7206ce/hypothesis-6.165.2-cp313-cp313-macosx_11_0_arm64.whl"
         }
       ]
     },
@@ -334,6 +372,44 @@
     },
     {
       "type": "library",
+      "bom-ref": "pkg:pypi/sortedcontainers@2.4.0",
+      "name": "sortedcontainers",
+      "version": "2.4.0",
+      "purl": "pkg:pypi/sortedcontainers@2.4.0",
+      "scope": "required",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "a163dcaede0f1c021485e957a39245190e74249897e2ae4b2aa38595db237ee0"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "Apache 2.0"
+          }
+        }
+      ],
+      "properties": [
+        {
+          "name": "bybit:dependency_kind",
+          "value": "transitive"
+        },
+        {
+          "name": "bybit:distribution_filename",
+          "value": "sortedcontainers-2.4.0-py2.py3-none-any.whl"
+        }
+      ],
+      "description": "Sorted Containers -- Sorted List, Sorted Dict, Sorted Set",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://files.pythonhosted.org/packages/32/46/9cb0e58b2deb7f82b84065f37f3bffeb12413f947f9388e4cac22c4621ce/sortedcontainers-2.4.0-py2.py3-none-any.whl"
+        }
+      ]
+    },
+    {
+      "type": "library",
       "bom-ref": "pkg:pypi/typing-extensions@4.16.0",
       "name": "typing-extensions",
       "version": "4.16.0",
@@ -413,6 +489,7 @@
     {
       "ref": "bybit-orderflow-platform",
       "dependsOn": [
+        "pkg:pypi/hypothesis@6.165.2",
         "pkg:pypi/pydantic@2.11.1",
         "pkg:pypi/pytest@8.3.5"
       ]
@@ -420,6 +497,12 @@
     {
       "ref": "pkg:pypi/annotated-types@0.8.0",
       "dependsOn": []
+    },
+    {
+      "ref": "pkg:pypi/hypothesis@6.165.2",
+      "dependsOn": [
+        "pkg:pypi/sortedcontainers@2.4.0"
+      ]
     },
     {
       "ref": "pkg:pypi/iniconfig@2.3.0",
@@ -455,6 +538,10 @@
         "pkg:pypi/packaging@26.3",
         "pkg:pypi/pluggy@1.6.0"
       ]
+    },
+    {
+      "ref": "pkg:pypi/sortedcontainers@2.4.0",
+      "dependsOn": []
     },
     {
       "ref": "pkg:pypi/typing-extensions@4.16.0",

@@ -4,8 +4,8 @@
 - Project state: STAGE 1 IN PROGRESS
 - Roadmap: `docs/specifications/source/BYBIT_MULTIPROCESS_PLATFORM_ROADMAP.md`
 - SHA-256 roadmap: `191e78a88efa5be21343d0ceb25caef0727070a7d5d329cbd537ce46dd399930`
-- Active stage/task: Stage 1 / P1-S1-003 — исправления по ревью внесены, ожидает повторной проверки
-- Commits: `6edc666` Stage 0 → `ea25af6` P1-S1-001 → `c6e0d83` sync → `d479e04` P1-S1-002 → текущий блок не закоммичен
+- Active stage/task: Stage 1 / P1-S1-005 закрыта, исправлена по ревью, не закоммичена
+- Commits: `6edc666` Stage 0 → `ea25af6` P1-S1-001 → `c6e0d83` sync → `d479e04` P1-S1-002 → `29b7a66` P1-S1-003 → текущий блок (P1-S1-005 исправлен по ревью) не закоммичен
 
 ---
 
@@ -29,7 +29,8 @@ Stage 1 «Shared schemas и storage core» (Roadmap §19 Этап 1). Закры
 | State machine | `packages/storage/segment_state.py` | ACTIVE→CLOSED_PENDING→PUBLISHING→COMMITTED→FAILED, lease, quarantine |
 | Manifest | `packages/storage/manifest.py` | atomic replace, published_offset, партиционирование §6.5 |
 | Atomic commit | `packages/storage/atomic_commit.py` | tmp→validate→fsync→rename→fsync(dir)→manifest→checkpoint |
-| Dependency lock | `deploy/dependencies/darwin-arm64/requirements.lock` | 9 пакетов, SHA-256, роль `development` |
+| Property-тесты | `tests/contracts/test_property_frames_and_offsets.py`, `tests/fault/test_property_wal_truncation.py` | Hypothesis: round-trip фрейма, обрезка в любой точке, инварианты offsets; проверены мутациями |
+| Dependency lock | `deploy/dependencies/darwin-arm64/requirements.lock` | 11 пакетов (3 прямых), SHA-256, роль `development` |
 | SBOM | `deploy/dependencies/darwin-arm64/sbom.cyclonedx.json` | CycloneDX 1.5, purl, лицензии, граф связей |
 | Генератор артефактов | `deploy/gen_dependency_artifacts.py` | снятие с окружения, гард против production на Darwin |
 | Верификатор | `deploy/verify_dependencies.py` | offline-проверка, `--strict-platform`, `--release`, `--pending-ok` |
@@ -45,16 +46,21 @@ Production-подключений к Bybit нет. API-ключей нет. Remo
 
 ## Следующее атомарное действие
 
-**Сейчас:** повторная проверка P1-S1-003 и commit. Тимлид зафиксировал: P1-S1-005 берётся только после закрытия и commit P1-S1-003. Новую задачу не начинать.
+**Сейчас:** проверка и commit P1-S1-005 после исправлений по ревью.
 
-Далее, в порядке приоритета:
+**Дальше Stage 1 упирается во внешние решения — незаблокированных задач не осталось:**
 
-1. **P1-S1-005** — property-тесты на Hypothesis. Не блокируется ничем. Рекомендована тимлидом как следующая.
-2. **P1-S1-007** — Linux parity: первый реальный прогон CI, crash-matrix на ext4/XFS, `systemd`, performance, soak. Требует remote и Linux-хоста.
-3. **P1-S1-004** — Parquet writer. Блокируется ADR-004 **и** OPEN-005 (у PyArrow бинарные колёса).
-4. **P1-S1-006** — Linux dependency artifacts. Блокируется OPEN-005.
+1. **P1-S1-004** — Parquet writer. Блокируется ADR-004 (Decimal128 precision/scale); PyArrow development на macOS не блокируется OPEN-005.
+2. **P1-S1-006** — Linux dependency artifacts. Блокируется OPEN-005.
+3. **P1-S1-007** — Linux parity: первый реальный прогон CI, crash-matrix на ext4/XFS, `systemd`, performance, soak. Требует remote и Linux-хоста.
 
-Требуется решение владельца: **OPEN-005** — архитектура production-хоста и точная версия Python. Рекомендованный тимлидом default — Linux x86_64 и CPython 3.13.7; остаётся `OPEN` до подтверждения железа. Без решения не двигаются P1-S1-004, P1-S1-006 и ADR-005.
+Требуется от владельца/тимлида:
+
+- **ADR-004** — Decimal128 precision/scale (таблица полей, диапазоны, overflow policy, schema evolution); без него Arrow schema не зафиксировать. Реальный блокер P1-S1-004.
+- **OPEN-005** — архитектура production-хоста и точная версия Python для production lock и release. Рекомендация: Linux x86_64, CPython 3.13.7. Блокирует P1-S1-006 и production release, не блокирует разработку на macOS.
+- **Remote** — без него CI не выполнится ни разу.
+
+Замечание по Hypothesis: колесо `hypothesis-6.165.2-cp313-cp313-macosx_11_0_arm64.whl` тоже платформенно-зависимо, то есть платформенных колёс в наборе теперь два. Это усиливает довод ADR-012: Linux-lock обязан сниматься на Linux.
 
 ---
 
@@ -115,6 +121,18 @@ Production-подключений к Bybit нет. API-ключей нет. Remo
 2026-08-10T18:18 | P1-S1-003 | Criterion разделён: статическая проверка install→verifier здесь, фактический CI run в P1-S1-007 | OK
 2026-08-10T18:20 | P1-S1-003 | Ложное состояние исправлено: REQ-066 → NOT_STARTED, README Stage 1, TODO Stage 1 IN_PROGRESS, CURRENT.md перезаписан | FIXED
 2026-08-10T18:22 | P1-S1-003 | Полный прогон без активации venv | PASS 264
+2026-08-10T18:28 | P1-S1-003 | Commit 29b7a66, 17 файлов; git ls-files подтвердил lock и SBOM | OK
+2026-08-10T18:35 | P1-S1-005 | hypothesis==6.165.2 в requirements.in, установлен; маркер property в pyproject | OK
+2026-08-10T18:38 | P1-S1-005 | Тесты lock поймали drift окружения (hypothesis, sortedcontainers вне lock) | EXPECTED
+2026-08-10T18:45 | P1-S1-005 | tests/contracts/test_property_frames_and_offsets.py: round-trip, обрезка, повреждения, инварианты offsets | PASS 21
+2026-08-10T18:52 | P1-S1-005 | tests/fault/test_property_wal_truncation.py: обрезка реальных файлов с truncate+fsync | PASS 8
+2026-08-10T18:55 | P1-S1-005 | Артефакты перегенерированы: 11 пакетов, 3 прямых | OK
+2026-08-10T18:56 | P1-S1-005 | hypothesis тоже платформенно-зависим (macosx_11_0_arm64) — платформенных колёс два | NOTED
+2026-08-10T18:58 | P1-S1-005 | Тест падал: список прямых зависимостей захардкожен как {pydantic, pytest} | BUG FIXED
+2026-08-10T19:00 | P1-S1-005 | Прямые зависимости выводятся из requirements.in; добавлен гард от хардкода | OK
+2026-08-10T19:05 | P1-S1-005 | Мутационная проверка: снят CRC / boundary по всему буферу / снят durable<=accepted | 3/3 ПОЙМАНО
+2026-08-10T19:06 | P1-S1-005 | Код восстановлен, git diff packages/ пуст | VERIFIED
+2026-08-10T19:08 | P1-S1-005 | Полный прогон без активации venv и после активации | PASS 294 / 294
 ```
 
 ---
@@ -125,12 +143,21 @@ Production-подключений к Bybit нет. API-ключей нет. Remo
 
 | Команда | Результат | Кол-во | Покрытие |
 |---|---|---|---|
-| `.venv/bin/python -m pytest -q` | PASS | 264 | весь проект (macOS, CPython 3.13.7) |
-| то же после `source .venv/bin/activate` | PASS | 264 | совпадает с прогоном без активации |
+| `.venv/bin/python -m pytest -q` | PASS | 294 | весь проект (macOS, CPython 3.13.7) |
+| то же после `source .venv/bin/activate` | PASS | 294 | совпадает с прогоном без активации |
+| `pytest -m property` | PASS | 29 | property-based (Hypothesis) |
+| `pytest -m contract` / `-m fault` | PASS | 249 / 45 | 249 + 45 = 294, покрытие полное; `property` пересекается с обоими (21 в contract, 8 в fault) |
+| `pytest -m "not contract and not fault and not property"` | 0 отобрано | 0 | тестов без маркера не осталось |
+| `tests/contracts/test_property_frames_and_offsets.py` | PASS | 21 | round-trip, обрезка, повреждения, инварианты offsets |
+| `tests/fault/test_property_wal_truncation.py` | PASS | 8 | обрезка реальных файлов, durable_violation, идемпотентность |
+| Мутация: снят контроль CRC | тест упал | — | property поймал |
+| Мутация: boundary объявлен по всему буферу | тесты упали | — | поймали и буферные, и WAL-тесты |
+| Мутация: снят инвариант `durable<=accepted` | тест упал | — | property поймал |
+| `git diff packages/` после мутаций | пусто | — | рабочий код восстановлен |
 | `pytest tests/contracts/test_contracts_and_numeric.py` | PASS | 55 | схемы событий, числовая модель |
 | `pytest tests/contracts/test_storage_offsets_and_frames.py` | PASS | 30 | инварианты offsets, формат фрейма |
 | `pytest tests/contracts/test_segment_state_and_manifest.py` | PASS | 34 | state machine, lease, manifest |
-| `pytest tests/contracts/test_dependency_lock.py` | PASS | 108 | lock, SBOM, роль, release gate, `--check`, триггеры и контракт CI |
+| `pytest tests/contracts/test_dependency_lock.py` | PASS | 109 | lock, SBOM, роль, release gate, `--check`, триггеры и контракт CI |
 | `pytest tests/fault/test_atomic_commit_crash_matrix.py` | PASS | 16 | 4 точки crash, валидация, идемпотентность |
 | `pytest tests/fault/test_wal_recovery.py` | PASS | 21 | torn/CRC recovery, group commit, live-tail ceiling |
 | `deploy/verify_dependencies.py` | exit 0 | — | «СОГЛАСОВАНО», 9 пакетов, платформа совпадает |
@@ -181,41 +208,35 @@ Stage 0 запрещал установку зависимостей. Stage 1 п
 | CI ни разу не запускался | Конфигурация не проверена на реальном runner | Синтаксис и контракт покрыты тестами, исполнение — нет | Remote + первый прогон |
 | ADR-001…011 не утверждены | Формально Stage 1 идёт без утверждённых ADR | Зафиксированы в `docs/architecture/DECISIONS_PENDING.md` | Утверждение тимлидом |
 | ADR-004 (Decimal128 precision/scale) | Блокирует P1-S1-004 вместе с OPEN-005 | Числовая модель реализована, Arrow schema — нет | Решение по precision/scale |
-| Storage core проверен только на APFS | Гарантии fsync/rename на ext4/XFS не подтверждены замером | Linux CI прогоняет `tests/fault`, но crash-matrix с SIGKILL на ext4/XFS — нет | P1-S1-007 |
-| Нет Hypothesis | Roadmap §4 требует property-тесты | Тесты только example-based | P1-S1-005 |
+| Storage core проверен только на APFS | Гарантии fsync/rename на ext4/XFS не подтверждены замером | Прогон `tests/fault` на Linux только описан в конфигурации CI; фактических прогонов не было | P1-S1-007 |
+| Незаблокированных задач Stage 1 не осталось | Дальнейшее движение зависит от решений владельца и наличия remote | P1-S1-001/002/003/005 закрыты | OPEN-005, ADR-004, remote |
 
 ---
 
 ## Handoff
 
-**Новые файлы этого блока:**
+Предыдущий блок (P1-S1-003) закоммичен: `29b7a66`, 17 файлов.
+
+**Новые файлы этого блока (P1-S1-005):**
 
 ```
-.github/workflows/ci.yml
-docs/adr/ADR-012-development-and-production-hosts.md
-deploy/dependencies/README.md
-deploy/dependencies/darwin-arm64/requirements.lock
-deploy/dependencies/darwin-arm64/sbom.cyclonedx.json
-deploy/gen_dependency_artifacts.py
-deploy/verify_dependencies.py
-requirements.in
-tests/contracts/test_dependency_lock.py
+tests/contracts/test_property_frames_and_offsets.py
+tests/fault/test_property_wal_truncation.py
 ```
 
-**Изменённые:** `.gitignore` (шаблон `*.lock` скрывал lock из git), `TODO.md` (P1-S1-003 → DONE, Stage 1 → IN_PROGRESS, добавлены P1-S1-006 и P1-S1-007, синхронизирован зависший статус P0-S0-004), `README.md` (Stage 0 → Stage 1, снято ложное «нет рабочего кода»), `NEXT.md`, `docs/adr/README.md`, `docs/architecture/DECISIONS_PENDING.md` (CONFLICT-004 → RESOLVED, добавлен OPEN-005), `docs/architecture/CURRENT.md` (перезаписан: было «нет никакого рабочего кода» и «первый commit ещё не создан»), `docs/REQUIREMENTS_TRACEABILITY.md` (REQ-064…067; REQ-066 → NOT_STARTED).
+**Изменённые:** `requirements.in` (+`hypothesis==6.165.2`, снят из списка отложенных), `pyproject.toml` (маркер `property`), `deploy/dependencies/darwin-arm64/requirements.lock` и `sbom.cyclonedx.json` (перегенерированы: 11 пакетов, 3 прямых), `tests/contracts/test_dependency_lock.py` (снят хардкод прямых зависимостей + гард), `TODO.md`, `NEXT.md`, `README.md`, `docs/architecture/CURRENT.md`, `docs/REQUIREMENTS_TRACEABILITY.md` (REQ-068).
 
-**Удалены:** `requirements.lock` и `deploy/sbom.cyclonedx.json` из корня — заменены платформенной раскладкой.
-
-**Точка остановки:** P1-S1-003 — все 6 несоответствий ревью исправлены, тесты зелёные без активации venv, изменения **не закоммичены**. Ожидается повторная проверка тимлида; commit разрешён не был.
+**Точка остановки:** P1-S1-005 закрыта, 294 passed, изменения **не закоммичены** — ожидается проверка.
 
 **Безопасное продолжение:**
 ```bash
 cd /Users/vs/Desktop/bybit-chart
-# без активации venv — именно так ревью нашло дефект с системным python3
-.venv/bin/python -m pytest -q                            # ожидается 264 passed
+# без активации venv — так ревью нашло дефект с системным python3
+.venv/bin/python -m pytest -q                            # ожидается 294 passed
+.venv/bin/python -m pytest -q -m property                # ожидается 29 passed
 .venv/bin/python deploy/verify_dependencies.py           # ожидается exit 0
 .venv/bin/python deploy/verify_dependencies.py --release  # ожидается exit 1
 .venv/bin/python deploy/gen_dependency_artifacts.py --check  # exit 0; нужна сеть
 git diff --check                                         # ожидается чисто
-# затем: commit P1-S1-003 после разрешения, далее P1-S1-005
+# дальше Stage 1 требует решений: OPEN-005, ADR-004, remote
 ```

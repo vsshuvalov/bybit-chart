@@ -148,7 +148,7 @@ Roadmap §6.8 задаёт стартовый target raw retention 30 суток
 
 Roadmap §18.1 требует NTP sync для Bybit authentication window. Конкретный NTP source и допустимое смещение не зафиксированы.
 
-## OPEN-005: Архитектура production-хоста и точная версия Python (REQUIRED до P1-S1-004 и ADR-005)
+## OPEN-005: Архитектура production-хоста и точная версия Python (REQUIRED до P1-S1-006 и production release)
 
 ADR-012 зафиксировал Linux + `systemd` как production-хост, но не архитектуру и не версию Python.
 

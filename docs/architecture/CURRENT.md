@@ -22,8 +22,8 @@
 Документация: `CURRENT.md`, `TARGET.md`, `DECISIONS_PENDING.md`,
 `docs/adr/README.md`, ADR-012, `REQUIREMENTS_TRACEABILITY.md` (67 требований).
 
-Тесты: 264 passed на macOS / Darwin arm64 / CPython 3.13.7. Только backend
-unit/contract/fault.
+Тесты: 294 passed на macOS / Darwin arm64 / CPython 3.13.7. Backend
+unit/contract/fault/property; из них 29 property-based (Hypothesis).
 
 ## Что отсутствует
 

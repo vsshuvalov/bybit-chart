@@ -176,7 +176,9 @@ source .venv/bin/activate
 python3 -m pytest -q
 ```
 
-Текущий результат: **264 passed, 0 failed, 0 skipped** (macOS / Darwin arm64, CPython 3.13.7).
+Текущий результат: **294 passed, 0 failed, 0 skipped** (macOS / Darwin arm64, CPython 3.13.7).
+
+Только property-тесты (Hypothesis): `python3 -m pytest -m property` → 29 passed.
 
 Воспроизвести зафиксированное окружение и проверить его согласованность:
 
@@ -193,8 +195,8 @@ python3 deploy/verify_dependencies.py
 
 1. ADR-001…011 открыты — требуется утверждение тимлидом.
 2. Linux dependency artifacts не сняты — **production release заблокирован** (P1-S1-006). Разработка на macOS не блокируется.
-3. Архитектура production-хоста и точная версия Python не утверждены — OPEN-005. Блокирует ввод PyArrow (P1-S1-004) и PostgreSQL-драйвера (ADR-005): у обоих бинарные колёса.
-4. Формат файла сегмента не зафиксирован: `atomic_commit` принимает writer как callback, реальный Parquet writer — задача P1-S1-004 (блокируется ADR-004).
+3. Архитектура production-хоста и точная версия Python не утверждены — OPEN-005. Блокирует Linux production lock (P1-S1-006) и PostgreSQL-драйвера (ADR-005). Разработка Parquet writer на macOS идёт без ожидания, блокер P1-S1-004 — ADR-004.
+4. Формат файла сегмента не зафиксирован: `atomic_commit` принимает writer как callback, реальный Parquet writer — задача P1-S1-004 (блокируется ADR-004 — precision/scale, overflow policy, schema evolution).
 5. Property-тесты (Hypothesis) не написаны — задача P1-S1-005.
 6. Linux parity не завершён: crash-matrix на ext4/XFS, `systemd`, performance и soak — P1-S1-007.
 7. Bybit client library не выбрана — OPEN-001.

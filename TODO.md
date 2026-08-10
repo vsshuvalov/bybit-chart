@@ -131,7 +131,7 @@
 
 ## Stage 1 — Shared schemas и storage core (IN_PROGRESS)
 
-Закрыто: P1-S1-001, P1-S1-002, P1-S1-003. Открыто: P1-S1-004 (блок ADR-004, OPEN-005), P1-S1-005, P1-S1-006 (блок OPEN-005), P1-S1-007.
+Закрыто: P1-S1-001, P1-S1-002, P1-S1-003, P1-S1-005. Открыто: P1-S1-004 (блок ADR-004, OPEN-005), P1-S1-006 (блок OPEN-005), P1-S1-007.
 
 ### P1-S1-001 | P0 | Stage 1 | DONE
 
@@ -225,7 +225,7 @@
 
 Побочно найден дефект при написании тестов на п.2: `relative_to(REPO_ROOT)` падал с `ValueError` на пути вне репозитория. Введён `display_path` в оба скрипта.
 
-**Evidence:** `.venv/bin/python -m pytest -q` → 258 passed (без активации venv); `deploy/verify_dependencies.py` → exit 0; `--release` → exit 1; `gen_dependency_artifacts.py --check` → exit 0, на подложенном `pytest==8.3.4` → exit 1; `git diff --check` → чисто
+**Evidence:** `.venv/bin/python -m pytest -q` → 258 passed (на момент закрытия; после P1-S1-005 — 316) (без активации venv); `deploy/verify_dependencies.py` → exit 0; `--release` → exit 1; `gen_dependency_artifacts.py --check` → exit 0, на подложенном `pytest==8.3.4` → exit 1; `git diff --check` → чисто
 
 ---
 
@@ -247,20 +247,30 @@
 
 ---
 
-### P1-S1-005 | P1 | Stage 1 | TODO
+### P1-S1-005 | P1 | Stage 1 | DONE
 
 **Тема:** Property-based тесты на Hypothesis
 
-**Owner:** не назначен
+**Owner:** Claude Code
 **Зависимости:** P1-S1-002
-**Scope:** Roadmap §4 фиксирует pytest + Hypothesis. Сейчас Hypothesis не установлен, тесты только example-based.
+**Scope:** Roadmap §4 фиксирует pytest + Hypothesis. До задачи Hypothesis не был установлен, тесты были только example-based.
 
 **Acceptance criteria:**
-- Property: любой набор payload → encode/scan round-trip без потерь
-- Property: произвольная точка обрезки файла → recovery не даёт валидных данных за boundary
-- Property: последовательность advance_* сохраняет инварианты offsets
+- [x] Property: любой набор payload → encode/scan round-trip без потерь — `TestFrameRoundTrip`, 5 свойств
+- [x] Property: произвольная точка обрезки файла → recovery не даёт валидных данных за boundary — `TestArbitraryTruncation` (буфер) и `TestArbitraryTruncationRecovery` (реальные файлы с truncate+fsync)
+- [x] Property: последовательность advance_* сохраняет инварианты offsets — `TestOffsetInvariants`, произвольные последовательности до 24 операций
+- [x] Hypothesis введён в `requirements.in`, артефакты перегенерированы, маркер `property` зарегистрирован
 
-**Evidence:** —
+**Сверх минимума:** повреждение magic/version/CRC, сканирование недоверенного мусора, идемпотентность recovery, `durable_violation` ровно когда boundary ниже объявленного durable, обрезка по границе фрейма, правила откатов consumer checkpoint.
+
+**Проверка качества тестов:** три мутации в рабочем коде (снят контроль CRC; boundary объявлен по всему буферу; снят инвариант `durable<=accepted`) — каждая поймана, код восстановлен, `git diff packages/` пуст.
+
+**Побочно исправлены два дефекта:**
+
+- Тесты P1-S1-003 хардкодили список прямых зависимостей как `{pydantic, pytest}` и падали при штатном добавлении Hypothesis. Теперь список выводится из `requirements.in`; добавлен гард от повторного хардкода.
+- `tests/contracts/test_contracts_and_numeric.py` был единственным файлом без `pytestmark`, из-за чего `pytest -m contract` молча пропускал 55 тестов схем и числовой модели. Маркер добавлен: теперь 249 (contract) + 45 (fault) = 294, файлов без маркера нет.
+
+**Evidence:** `.venv/bin/python -m pytest -q` → 294 passed; `-m property` → 29 passed; `verify_dependencies.py` → exit 0 (11 пакетов, 3 прямых); `--check` → exit 0; `--release` → exit 1
 
 ---
 
@@ -284,6 +294,37 @@
 - `verify_dependencies.py --release` → exit 0
 - CI-джоб `linux-tests` переключился на `pip install --require-hashes`
 - Тест `test_linux_lock_absent_so_production_release_is_blocked` снят или переписан
+
+**Evidence:** —
+
+---
+
+### P1-S1-008 | P0 | Stage 1 | TODO
+
+**Тема:** Подготовка и утверждение ADR-004 (Decimal128 precision/scale для Arrow schema)
+
+**Owner:** не назначен
+**Зависимости:** P1-S1-001
+**Scope:** Таблица полей, диапазоны, precision/scale, overflow policy, правила schema evolution. Без этого Arrow schema не может быть зафиксирован.
+
+**Acceptance criteria:**
+- Таблица полей с Decimal128 precision и scale для каждого
+- Overflow policy: что делать при переполнении (reject/saturate/wrap)
+- Schema evolution rules: допустимые изменения без breaking change
+
+**Evidence:** —
+
+---
+
+### P1-S1-009 | P0 | Stage 1 | BLOCKED (ADR-005)
+
+**Тема:** PostgreSQL migrations
+
+**Owner:** не назначен
+**Зависимости:** ADR-005
+**Scope:** Отмечено тимлидом как пропущенная обязательная задача Stage 1. Реализация миграций для схемы БД.
+
+**Acceptance criteria:** TBD после ADR-005
 
 **Evidence:** —
 

@@ -33,6 +33,10 @@ from packages.numeric.primitives import (
     PRICE_TICKS_MAX, QTY_STEPS_MAX,
 )
 
+# Маркер добавлен в P1-S1-005: файл был единственным без него, из-за чего
+# `pytest -m contract` молча пропускал 55 тестов схем и числовой модели.
+pytestmark = pytest.mark.contract
+
 
 # ===========================================================================
 # packages/numeric — примитивы
