@@ -13,6 +13,7 @@ Endpoints:
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Query
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 
@@ -37,6 +38,15 @@ def create_app(data_dir: Path | str | None = None) -> FastAPI:
         title="Bybit Chart Query API",
         description="REST API для чтения Parquet сегментов с RawTrade/BookCheckpoint",
         version="0.1.0",
+    )
+
+    # CORS middleware для frontend
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],  # В production: указать конкретные origins
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
     )
 
     # Инициализация ParquetReader
