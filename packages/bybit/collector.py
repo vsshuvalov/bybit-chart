@@ -21,7 +21,7 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from contracts.schemas import RawTrade
+from contracts.schemas import RawTrade, BookCheckpoint
 from packages.storage import WalPartition, GroupCommitPolicy
 
 logger = logging.getLogger(__name__)
@@ -89,23 +89,54 @@ class EventCollector:
         Примечание: commit происходит автоматически по GroupCommitPolicy.
         """
         # Сериализация: JSON для MVP (ADR-002 заменит на Protobuf)
-        payload = self._serialize_trade(trade)
+        payload = self._serialize_event(trade)
 
         result = self.wal.append(payload)
         logger.debug(f"Записан trade: offset={result.wal_offset}, id={trade.trade_id}")
 
         return result.wal_offset
 
-    def _serialize_trade(self, trade: RawTrade) -> bytes:
-        """Сериализовать RawTrade → bytes.
+    def append_book_checkpoint(self, checkpoint: BookCheckpoint) -> int:
+        """Добавить BookCheckpoint в WAL.
+
+        Args:
+            checkpoint: десериализованный orderbook snapshot
+
+        Returns:
+            wal_offset записи
+
+        Roadmap §8.2: Только snapshot, delta reconstruction — будущее расширение.
+        """
+        # Сериализация: JSON для MVP
+        payload = self._serialize_event(checkpoint)
+
+        result = self.wal.append(payload)
+        logger.debug(
+            f"Записан book checkpoint: offset={result.wal_offset}, "
+            f"symbol={checkpoint.symbol}, depth={checkpoint.depth}, "
+            f"levelCount={checkpoint.level_count}"
+        )
+
+        return result.wal_offset
+
+    def _serialize_event(self, event: RawTrade | BookCheckpoint) -> bytes:
+        """Сериализовать событие (RawTrade или BookCheckpoint) → bytes.
 
         Roadmap §6: Frame.payload — opaque bytes, интерпретация на стороне reader.
         MVP: JSON (читаемый, отладочный).
         ADR-002: Protobuf (компактный, типизированный).
         """
         # Используем model_dump() для сериализации Pydantic модели
-        data = trade.model_dump(by_alias=False)  # используем Python-имена полей
+        data = event.model_dump(mode='json')  # mode='json' конвертирует Decimal → str
         return json.dumps(data, separators=(",", ":")).encode("utf-8")
+
+    def _serialize_trade(self, trade: RawTrade) -> bytes:
+        """Сериализовать RawTrade → bytes.
+
+        Deprecated: используйте _serialize_event().
+        Оставлен для обратной совместимости.
+        """
+        return self._serialize_event(trade)
 
     def flush(self) -> None:
         """Принудительный commit pending records.
@@ -124,7 +155,7 @@ class EventCollector:
 def deserialize_trade_from_payload(payload: bytes) -> RawTrade:
     """Десериализовать Frame.payload → RawTrade.
 
-    Обратная операция к EventCollector._serialize_trade().
+    Обратная операция к EventCollector._serialize_event().
     Используется в close_and_publish_segment() для конверсии WAL → Parquet rows.
 
     Args:
@@ -141,6 +172,36 @@ def deserialize_trade_from_payload(payload: bytes) -> RawTrade:
         return RawTrade(**data)
     except Exception as exc:
         raise ValueError(f"Не удалось десериализовать RawTrade: {exc}") from exc
+
+
+def deserialize_event_from_payload(payload: bytes) -> RawTrade | BookCheckpoint:
+    """Десериализовать Frame.payload → RawTrade или BookCheckpoint.
+
+    Универсальная десериализация для всех типов событий.
+    Определяет тип по наличию полей в JSON.
+
+    Args:
+        payload: Frame.payload (JSON-encoded event)
+
+    Returns:
+        Десериализованное событие (RawTrade или BookCheckpoint)
+
+    Raises:
+        ValueError: некорректный payload или неизвестный тип события
+    """
+    try:
+        data = json.loads(payload.decode("utf-8"))
+
+        # Определяем тип события по наличию характерных полей
+        if "trade_id" in data:
+            return RawTrade(**data)
+        elif "bids" in data or "asks" in data:
+            return BookCheckpoint(**data)
+        else:
+            raise ValueError(f"Неизвестный тип события: {list(data.keys())}")
+
+    except Exception as exc:
+        raise ValueError(f"Не удалось десериализовать событие: {exc}") from exc
 
 
 def raw_trade_to_parquet_row(trade: RawTrade) -> dict[str, Any]:
@@ -182,3 +243,70 @@ def raw_trade_to_parquet_row(trade: RawTrade) -> dict[str, Any]:
         "outerTimestampMs": trade.outer_timestamp_ms,
         "receiveTimestampMs": trade.receive_timestamp_ms,
     }
+
+
+def book_checkpoint_to_parquet_row(checkpoint: BookCheckpoint) -> dict[str, Any]:
+    """Конвертировать BookCheckpoint → row для Parquet.
+
+    Маппинг:
+    - timestampUs = exchange_timestamp_ms * 1000 (ms → µs)
+    - eventType = "BookCheckpoint"
+    - symbol = checkpoint.symbol
+    - depth, updateId, sequence, levelCount, coverage metrics
+    - priceTicks/qtySteps = 0 (stub для RawTrade-специфичных полей)
+
+    Roadmap §6: bids/asks сохраняются как JSON-encoded строки (MVP).
+    Будущее: struct<price:int64, qty:int64>[] через PyArrow.
+
+    Args:
+        checkpoint: десериализованный BookCheckpoint
+
+    Returns:
+        Словарь для ParquetWriter.write_batch()
+    """
+    import json
+
+    return {
+        "timestampUs": checkpoint.exchange_timestamp_ms * 1000,
+        "eventType": "BookCheckpoint",
+        "symbol": checkpoint.symbol,
+        # RawTrade-специфичные поля (stub для BookCheckpoint)
+        "priceTicks": 0,
+        "qtySteps": 0,
+        # BookCheckpoint-специфичные поля
+        "depth": checkpoint.depth,
+        "updateId": checkpoint.update_id,
+        "sequence": checkpoint.sequence,
+        "levelCount": checkpoint.level_count,
+        "coverageBoundaryTicks": checkpoint.coverage_boundary_ticks,
+        "coverageBps": checkpoint.coverage_bps,
+        "isFeedRangeComplete": checkpoint.is_feed_range_complete,
+        # Метаданные соединения
+        "connectionEpoch": checkpoint.connection_epoch,
+        "exchangeTimestampMs": checkpoint.exchange_timestamp_ms,
+        "outerTimestampMs": checkpoint.outer_timestamp_ms,
+        "receiveTimestampMs": checkpoint.receive_timestamp_ms,
+        # Bids/asks как JSON strings (MVP)
+        # TODO: мигрировать на struct arrays через ADR
+        "bids": json.dumps([{"price": b.price_ticks, "qty": b.qty_steps} for b in checkpoint.bids]),
+        "asks": json.dumps([{"price": a.price_ticks, "qty": a.qty_steps} for a in checkpoint.asks]),
+    }
+
+
+def event_to_parquet_row(event: RawTrade | BookCheckpoint) -> dict[str, Any]:
+    """Конвертировать любое событие → row для Parquet.
+
+    Универсальная конверсия, определяет тип события и вызывает соответствующую функцию.
+
+    Args:
+        event: десериализованное событие (RawTrade или BookCheckpoint)
+
+    Returns:
+        Словарь для ParquetWriter.write_batch()
+    """
+    if isinstance(event, RawTrade):
+        return raw_trade_to_parquet_row(event)
+    elif isinstance(event, BookCheckpoint):
+        return book_checkpoint_to_parquet_row(event)
+    else:
+        raise ValueError(f"Неизвестный тип события: {type(event)}")

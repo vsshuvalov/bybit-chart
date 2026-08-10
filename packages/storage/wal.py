@@ -454,16 +454,16 @@ class WalPartition:
         # 2. Конвертируем Frame → row
         rows = []
         if use_real_deserialization:
-            # Реальная десериализация: Frame.payload → RawTrade → Parquet row
+            # Реальная десериализация: Frame.payload → RawTrade/BookCheckpoint → Parquet row
             from packages.bybit.collector import (
-                deserialize_trade_from_payload,
-                raw_trade_to_parquet_row,
+                deserialize_event_from_payload,
+                event_to_parquet_row,
             )
 
             for frame in frames:
                 try:
-                    trade = deserialize_trade_from_payload(frame.payload)
-                    row = raw_trade_to_parquet_row(trade)
+                    event = deserialize_event_from_payload(frame.payload)
+                    row = event_to_parquet_row(event)
                     rows.append(row)
                 except Exception as exc:
                     # Логируем и пропускаем некорректные записи
@@ -489,6 +489,8 @@ class WalPartition:
                     "coverageBoundaryTicks": 0,
                     "coverageBps": Decimal("0.0000"),
                     "isFeedRangeComplete": False,
+                    "bids": "",  # stub для BookCheckpoint
+                    "asks": "",  # stub для BookCheckpoint
                     "connectionEpoch": "stub",
                     "exchangeTimestampMs": 0,
                     "outerTimestampMs": 0,

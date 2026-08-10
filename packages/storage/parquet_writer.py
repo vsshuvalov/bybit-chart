@@ -31,6 +31,9 @@ SCHEMA_VERSION_MINOR = 0
 
 # ADR-004: Decimal128(precision=18, scale=4) для coverageBps.
 # Поля price/qty остаются int64 — они уже масштабированные целые.
+#
+# Roadmap §6: bids/asks хранятся как JSON strings (MVP).
+# Будущее расширение (через ADR): struct<price:int64, qty:int64>[] arrays.
 _BTCUSDT_SCHEMA_BASE = pa.schema([
     ("timestampUs", pa.int64()),
     ("eventType", pa.string()),
@@ -46,6 +49,9 @@ _BTCUSDT_SCHEMA_BASE = pa.schema([
     ("coverageBoundaryTicks", pa.int64()),
     ("coverageBps", pa.decimal128(18, 4)),  # ADR-004
     ("isFeedRangeComplete", pa.bool_()),
+    # BookCheckpoint: orderbook levels (MVP: JSON strings)
+    ("bids", pa.string()),  # JSON: [{"price": int, "qty": int}, ...]
+    ("asks", pa.string()),  # JSON: [{"price": int, "qty": int}, ...]
     # Метаданные соединения
     ("connectionEpoch", pa.string()),
     ("exchangeTimestampMs", pa.int64()),
