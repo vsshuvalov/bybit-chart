@@ -9,9 +9,9 @@
 #   регенерация: python3 deploy/gen_dependency_artifacts.py
 #   проверка:    python3 deploy/verify_dependencies.py
 #
-# Сгенерирован:      2026-08-10T13:47:56+00:00
-# Прямые зависимости: hypothesis, pyarrow, pydantic, pytest
-# Всего пакетов:      12
+# Сгенерирован:      2026-08-10T14:19:35+00:00
+# Прямые зависимости: hypothesis, pyarrow, pydantic, pytest, pytest-asyncio, websockets
+# Всего пакетов:      15
 #
 # Платформа генерации:
 #   CPython 3.13.7
@@ -34,6 +34,7 @@
 #   hypothesis (hypothesis-6.165.2-cp313-cp313-macosx_11_0_arm64.whl)
 #   pyarrow (pyarrow-19.0.0-cp313-cp313-macosx_12_0_arm64.whl)
 #   pydantic-core (pydantic_core-2.33.0-cp313-cp313-macosx_11_0_arm64.whl)
+#   websockets (websockets-14.1-cp313-cp313-macosx_11_0_arm64.whl)
 # Для другого целевого хоста нужен отдельный lock той платформы.
 # Разделение хостов зафиксировано в ADR-012 (закрывает CONFLICT-004);
 # архитектура production-хоста и точная версия Python — OPEN.
@@ -52,9 +53,17 @@ pyarrow==19.0.0 \
 pydantic==2.11.1 \
     --hash=sha256:5b6c415eee9f8123a14d859be0c84363fec6b1feb6b688d6435801230b56e0b8
 
-#   pytest-8.3.5-py3-none-any.whl
-pytest==8.3.5 \
-    --hash=sha256:c69214aa47deac29fad6c2a4f590b9c4a9fdb16a403176fe154b79c0b4d4d820
+#   pytest-8.4.2-py3-none-any.whl
+pytest==8.4.2 \
+    --hash=sha256:872f880de3fc3a5bdc88a11b39c9710c3497a547cfa9320bc3c5e62fbf272e79
+
+#   pytest_asyncio-0.25.2-py3-none-any.whl
+pytest-asyncio==0.25.2 \
+    --hash=sha256:0d0bb693f7b99da304a0634afc0a4b19e49d5e0de2d670f38dc4bfa5727c5075
+
+#   websockets-14.1-cp313-cp313-macosx_11_0_arm64.whl
+websockets==14.1 \
+    --hash=sha256:5b918d288958dc3fa1c5a0b9aa3256cb2b2b84c54407f4813c45d52267600cd3
 
 # --- Транзитивные зависимости ---
 
@@ -77,6 +86,10 @@ pluggy==1.6.0 \
 #   pydantic_core-2.33.0-cp313-cp313-macosx_11_0_arm64.whl
 pydantic-core==2.33.0 \
     --hash=sha256:1a73be93ecef45786d7d95b0c5e9b294faf35629d03d5b145b09b81258c7cd6d
+
+#   pygments-2.20.0-py3-none-any.whl
+pygments==2.20.0 \
+    --hash=sha256:81a9e26dd42fd28a23a2d169d86d7ac03b46e2f8b59ed4698fb4785f946d0176
 
 #   sortedcontainers-2.4.0-py2.py3-none-any.whl
 sortedcontainers==2.4.0 \

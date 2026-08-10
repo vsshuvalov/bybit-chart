@@ -1,10 +1,10 @@
 {
   "bomFormat": "CycloneDX",
   "specVersion": "1.5",
-  "serialNumber": "urn:uuid:d1a4c336-c9fe-408b-a4c1-ed4ccc60fe48",
+  "serialNumber": "urn:uuid:da2bcb8c-2ac6-4095-91c3-f7d30cea758b",
   "version": 1,
   "metadata": {
-    "timestamp": "2026-08-10T13:47:56+00:00",
+    "timestamp": "2026-08-10T14:19:35+00:00",
     "tools": [
       {
         "vendor": "bybit-orderflow-platform",
@@ -372,15 +372,53 @@
     },
     {
       "type": "library",
-      "bom-ref": "pkg:pypi/pytest@8.3.5",
-      "name": "pytest",
-      "version": "8.3.5",
-      "purl": "pkg:pypi/pytest@8.3.5",
+      "bom-ref": "pkg:pypi/pygments@2.20.0",
+      "name": "pygments",
+      "version": "2.20.0",
+      "purl": "pkg:pypi/pygments@2.20.0",
       "scope": "required",
       "hashes": [
         {
           "alg": "SHA-256",
-          "content": "c69214aa47deac29fad6c2a4f590b9c4a9fdb16a403176fe154b79c0b4d4d820"
+          "content": "81a9e26dd42fd28a23a2d169d86d7ac03b46e2f8b59ed4698fb4785f946d0176"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "BSD-2-Clause"
+          }
+        }
+      ],
+      "properties": [
+        {
+          "name": "bybit:dependency_kind",
+          "value": "transitive"
+        },
+        {
+          "name": "bybit:distribution_filename",
+          "value": "pygments-2.20.0-py3-none-any.whl"
+        }
+      ],
+      "description": "Pygments is a syntax highlighting package written in Python.",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://files.pythonhosted.org/packages/f4/7e/a72dd26f3b0f4f2bf1dd8923c85f7ceb43172af56d63c7383eb62b332364/pygments-2.20.0-py3-none-any.whl"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/pytest@8.4.2",
+      "name": "pytest",
+      "version": "8.4.2",
+      "purl": "pkg:pypi/pytest@8.4.2",
+      "scope": "required",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "872f880de3fc3a5bdc88a11b39c9710c3497a547cfa9320bc3c5e62fbf272e79"
         }
       ],
       "licenses": [
@@ -397,14 +435,52 @@
         },
         {
           "name": "bybit:distribution_filename",
-          "value": "pytest-8.3.5-py3-none-any.whl"
+          "value": "pytest-8.4.2-py3-none-any.whl"
         }
       ],
       "description": "pytest: simple powerful testing with Python",
       "externalReferences": [
         {
           "type": "distribution",
-          "url": "https://files.pythonhosted.org/packages/30/3d/64ad57c803f1fa1e963a7946b6e0fea4a70df53c1a7fed304586539c2bac/pytest-8.3.5-py3-none-any.whl"
+          "url": "https://files.pythonhosted.org/packages/a8/a4/20da314d277121d6534b3a980b29035dcd51e6744bd79075a6ce8fa4eb8d/pytest-8.4.2-py3-none-any.whl"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/pytest-asyncio@0.25.2",
+      "name": "pytest-asyncio",
+      "version": "0.25.2",
+      "purl": "pkg:pypi/pytest-asyncio@0.25.2",
+      "scope": "required",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "0d0bb693f7b99da304a0634afc0a4b19e49d5e0de2d670f38dc4bfa5727c5075"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "Apache 2.0"
+          }
+        }
+      ],
+      "properties": [
+        {
+          "name": "bybit:dependency_kind",
+          "value": "direct"
+        },
+        {
+          "name": "bybit:distribution_filename",
+          "value": "pytest_asyncio-0.25.2-py3-none-any.whl"
+        }
+      ],
+      "description": "Pytest support for asyncio",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://files.pythonhosted.org/packages/61/d8/defa05ae50dcd6019a95527200d3b3980043df5aa445d40cb0ef9f7f98ab/pytest_asyncio-0.25.2-py3-none-any.whl"
         }
       ]
     },
@@ -521,6 +597,44 @@
           "url": "https://files.pythonhosted.org/packages/dc/9b/47798a6c91d8bdb567fe2698fe81e0c6b7cb7ef4d13da4114b41d239f65d/typing_inspection-0.4.2-py3-none-any.whl"
         }
       ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/websockets@14.1",
+      "name": "websockets",
+      "version": "14.1",
+      "purl": "pkg:pypi/websockets@14.1",
+      "scope": "required",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "5b918d288958dc3fa1c5a0b9aa3256cb2b2b84c54407f4813c45d52267600cd3"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "BSD-3-Clause"
+          }
+        }
+      ],
+      "properties": [
+        {
+          "name": "bybit:dependency_kind",
+          "value": "direct"
+        },
+        {
+          "name": "bybit:distribution_filename",
+          "value": "websockets-14.1-cp313-cp313-macosx_11_0_arm64.whl"
+        }
+      ],
+      "description": "An implementation of the WebSocket Protocol (RFC 6455 & 7692)",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://files.pythonhosted.org/packages/f8/47/2a0a3a2fc4965ff5b9ce9324d63220156bd8bedf7f90824ab92a822e65fd/websockets-14.1-cp313-cp313-macosx_11_0_arm64.whl"
+        }
+      ]
     }
   ],
   "dependencies": [
@@ -530,7 +644,9 @@
         "pkg:pypi/hypothesis@6.165.2",
         "pkg:pypi/pyarrow@19.0.0",
         "pkg:pypi/pydantic@2.11.1",
-        "pkg:pypi/pytest@8.3.5"
+        "pkg:pypi/pytest@8.4.2",
+        "pkg:pypi/pytest-asyncio@0.25.2",
+        "pkg:pypi/websockets@14.1"
       ]
     },
     {
@@ -575,11 +691,22 @@
       ]
     },
     {
-      "ref": "pkg:pypi/pytest@8.3.5",
+      "ref": "pkg:pypi/pygments@2.20.0",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:pypi/pytest@8.4.2",
       "dependsOn": [
         "pkg:pypi/iniconfig@2.3.0",
         "pkg:pypi/packaging@26.3",
-        "pkg:pypi/pluggy@1.6.0"
+        "pkg:pypi/pluggy@1.6.0",
+        "pkg:pypi/pygments@2.20.0"
+      ]
+    },
+    {
+      "ref": "pkg:pypi/pytest-asyncio@0.25.2",
+      "dependsOn": [
+        "pkg:pypi/pytest@8.4.2"
       ]
     },
     {
@@ -595,6 +722,10 @@
       "dependsOn": [
         "pkg:pypi/typing-extensions@4.16.0"
       ]
+    },
+    {
+      "ref": "pkg:pypi/websockets@14.1",
+      "dependsOn": []
     }
   ]
 }
