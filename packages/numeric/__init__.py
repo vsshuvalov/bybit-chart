@@ -9,6 +9,8 @@
 # funding     → Decimal
 # VWAP sums   → Decimal
 
+from decimal import Decimal
+
 from packages.numeric.primitives import (
     PriceTicks,
     QtySteps,
@@ -22,6 +24,13 @@ from packages.numeric.primitives import (
     validate_qty_steps,
 )
 
+# Инструмент-специфичные константы (Bybit BTCUSDT Linear Perpetual)
+# Источник: https://bybit-exchange.github.io/docs/v5/market/instrument
+# priceFilter.tickSize = "0.10"
+# lotSizeFilter.qtyStep = "0.001"
+BTCUSDT_PRICE_TICK = Decimal("0.10")  # минимальный шаг цены
+BTCUSDT_QTY_STEP = Decimal("0.001")   # минимальный шаг количества
+
 __all__ = [
     "PriceTicks",
     "QtySteps",
@@ -33,4 +42,6 @@ __all__ = [
     "QTY_STEPS_MAX",
     "validate_price_ticks",
     "validate_qty_steps",
+    "BTCUSDT_PRICE_TICK",
+    "BTCUSDT_QTY_STEP",
 ]
