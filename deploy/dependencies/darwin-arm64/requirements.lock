@@ -9,9 +9,9 @@
 #   регенерация: python3 deploy/gen_dependency_artifacts.py
 #   проверка:    python3 deploy/verify_dependencies.py
 #
-# Сгенерирован:      2026-08-10T14:19:35+00:00
-# Прямые зависимости: hypothesis, pyarrow, pydantic, pytest, pytest-asyncio, websockets
-# Всего пакетов:      15
+# Сгенерирован:      2026-08-10T15:41:37+00:00
+# Прямые зависимости: fastapi, httpx, hypothesis, pyarrow, pydantic, pytest, pytest-asyncio, uvicorn, websockets
+# Всего пакетов:      30
 #
 # Платформа генерации:
 #   CPython 3.13.7
@@ -31,15 +31,27 @@
 # ОГРАНИЧЕНИЕ: набор содержит платформенно-зависимые колёса и
 # действителен только для Darwin arm64 /
 # CPython 3.13.7:
+#   httptools (httptools-0.8.0-cp313-cp313-macosx_11_0_arm64.whl)
 #   hypothesis (hypothesis-6.165.2-cp313-cp313-macosx_11_0_arm64.whl)
 #   pyarrow (pyarrow-19.0.0-cp313-cp313-macosx_12_0_arm64.whl)
 #   pydantic-core (pydantic_core-2.33.0-cp313-cp313-macosx_11_0_arm64.whl)
+#   pyyaml (pyyaml-6.0.3-cp313-cp313-macosx_11_0_arm64.whl)
+#   uvloop (uvloop-0.22.1-cp313-cp313-macosx_10_13_universal2.whl)
+#   watchfiles (watchfiles-1.2.0-cp313-cp313-macosx_11_0_arm64.whl)
 #   websockets (websockets-14.1-cp313-cp313-macosx_11_0_arm64.whl)
 # Для другого целевого хоста нужен отдельный lock той платформы.
 # Разделение хостов зафиксировано в ADR-012 (закрывает CONFLICT-004);
 # архитектура production-хоста и точная версия Python — OPEN.
 
 # --- Прямые зависимости ---
+
+#   fastapi-0.115.6-py3-none-any.whl
+fastapi==0.115.6 \
+    --hash=sha256:e9240b29e36fa8f4bb7290316988e90c381e5092e0cbe84e7818cc3713bcf305
+
+#   httpx-0.28.1-py3-none-any.whl
+httpx==0.28.1 \
+    --hash=sha256:d909fcccc110f8c7faf814ca82a9a4d816bc5a6dbfea25d6591d6985b8ba59ad
 
 #   hypothesis-6.165.2-cp313-cp313-macosx_11_0_arm64.whl
 hypothesis==6.165.2 \
@@ -61,6 +73,10 @@ pytest==8.4.2 \
 pytest-asyncio==0.25.2 \
     --hash=sha256:0d0bb693f7b99da304a0634afc0a4b19e49d5e0de2d670f38dc4bfa5727c5075
 
+#   uvicorn-0.32.1-py3-none-any.whl
+uvicorn==0.32.1 \
+    --hash=sha256:82ad92fd58da0d12af7482ecdb5f2470a04c9c9a53ced65b9bbb4a205377602e
+
 #   websockets-14.1-cp313-cp313-macosx_11_0_arm64.whl
 websockets==14.1 \
     --hash=sha256:5b918d288958dc3fa1c5a0b9aa3256cb2b2b84c54407f4813c45d52267600cd3
@@ -70,6 +86,34 @@ websockets==14.1 \
 #   annotated_types-0.8.0-py3-none-any.whl
 annotated-types==0.8.0 \
     --hash=sha256:f072f4d804ea359e4eaf198b1af7a8b0943881a87f31bb764f8bf219bb9419e0
+
+#   anyio-4.14.2-py3-none-any.whl
+anyio==4.14.2 \
+    --hash=sha256:9f505dda5ac9f0c8309b5e8bd445a8c2bf7246f3ce950121e45ea15bc41d1494
+
+#   certifi-2026.7.22-py3-none-any.whl
+certifi==2026.7.22 \
+    --hash=sha256:62f22742b58a1a33014a2b6b706588a8d7e2a88ae7bd1a6ebe8c992928483775
+
+#   click-8.4.2-py3-none-any.whl
+click==8.4.2 \
+    --hash=sha256:e6f9f66136c816745b9d65817da91d61d957fb16e02e4dcd0552553c5a197b76
+
+#   h11-0.16.0-py3-none-any.whl
+h11==0.16.0 \
+    --hash=sha256:63cf8bbe7522de3bf65932fda1d9c2772064ffb3dae62d55932da54b31cb6c86
+
+#   httpcore-1.0.9-py3-none-any.whl
+httpcore==1.0.9 \
+    --hash=sha256:2d400746a40668fc9dec9810239072b40b4484b640a8c38fd654a024c7a1bf55
+
+#   httptools-0.8.0-cp313-cp313-macosx_11_0_arm64.whl
+httptools==0.8.0 \
+    --hash=sha256:2d689918c15a013c65ef52d9fd495d766893ab831a2c8d89f2ac5940a5df847c
+
+#   idna-3.18-py3-none-any.whl
+idna==3.18 \
+    --hash=sha256:7f952cbe720b688055e3f87de14f5c3e5fdaa8bc3928985c4077ca689de849a2
 
 #   iniconfig-2.3.0-py3-none-any.whl
 iniconfig==2.3.0 \
@@ -91,9 +135,21 @@ pydantic-core==2.33.0 \
 pygments==2.20.0 \
     --hash=sha256:81a9e26dd42fd28a23a2d169d86d7ac03b46e2f8b59ed4698fb4785f946d0176
 
+#   python_dotenv-1.2.2-py3-none-any.whl
+python-dotenv==1.2.2 \
+    --hash=sha256:1d8214789a24de455a8b8bd8ae6fe3c6b69a5e3d64aa8a8e5d68e694bbcb285a
+
+#   pyyaml-6.0.3-cp313-cp313-macosx_11_0_arm64.whl
+pyyaml==6.0.3 \
+    --hash=sha256:2283a07e2c21a2aa78d9c4442724ec1eb15f5e42a723b99cb3d822d48f5f7ad1
+
 #   sortedcontainers-2.4.0-py2.py3-none-any.whl
 sortedcontainers==2.4.0 \
     --hash=sha256:a163dcaede0f1c021485e957a39245190e74249897e2ae4b2aa38595db237ee0
+
+#   starlette-0.41.3-py3-none-any.whl
+starlette==0.41.3 \
+    --hash=sha256:44cedb2b7c77a9de33a8b74b2b90e9f50d11fcf25d8270ea525ad71a25374ff7
 
 #   typing_extensions-4.16.0-py3-none-any.whl
 typing-extensions==4.16.0 \
@@ -102,3 +158,11 @@ typing-extensions==4.16.0 \
 #   typing_inspection-0.4.2-py3-none-any.whl
 typing-inspection==0.4.2 \
     --hash=sha256:4ed1cacbdc298c220f1bd249ed5287caa16f34d44ef4e9c3d0cbad5b521545e7
+
+#   uvloop-0.22.1-cp313-cp313-macosx_10_13_universal2.whl
+uvloop==0.22.1 \
+    --hash=sha256:561577354eb94200d75aca23fbde86ee11be36b00e52a4eaf8f50fb0c86b7705
+
+#   watchfiles-1.2.0-cp313-cp313-macosx_11_0_arm64.whl
+watchfiles==1.2.0 \
+    --hash=sha256:7ba0480b9a74af058f43b337e937a451e109295c420916d68ad24e3dc02f5e44

@@ -45,6 +45,18 @@ pyarrow==19.0.0
 # ADR-001 фиксирует выбор websockets над альтернативами.
 websockets==14.1
 
+# FastAPI — REST API framework для query endpoints (Roadmap §7, §4).
+# Используется в packages/api/app.py для /api/v1/trades, /api/v1/symbols.
+fastapi==0.115.6
+
+# Uvicorn — ASGI server для FastAPI (Roadmap §4).
+# Устанавливаем базовую версию; для production добавить uvloop, httptools отдельно.
+uvicorn==0.32.1
+
+# httpx — HTTP client для FastAPI TestClient (testing).
+# Требуется starlette.testclient для интеграционных тестов API.
+httpx==0.28.1
+
 # Заявлено в Roadmap §4, но ещё не добавлено — каждая позиция вводится
 # своей задачей вместо с использующим её кодом:
 #   FastAPI, Uvicorn  api-gateway                   → Stage 4
