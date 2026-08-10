@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bybit Chart - Analytics</title>
+    <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: #131722;
+            color: #d1d4dc;
+        }
+
+        .container {
+            max-width: 1600px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 1px solid #2a2e39;
+        }
+
+        h1 {
+            font-size: 24px;
+            font-weight: 500;
+        }
+
+        .controls {
+            display: flex;
+            gap: 15px;
+            align-items: flex-end;
+        }
+
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+
+        label {
+            font-size: 12px;
+            color: #787b86;
+            text-transform: uppercase;
+        }
+
+        select, button {
+            background: #1e222d;
+            border: 1px solid #2a2e39;
+            color: #d1d4dc;
+            padding: 8px 12px;
+            border-radius: 4px;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        select:hover, button:hover {
+            background: #2a2e39;
+            border-color: #434651;
+        }
+
+        button.primary {
+            background: #2962ff;
+            border-color: #2962ff;
+        }
+
+        button.primary:hover {
+            background: #1e53e5;
+        }
+
+        .analytics-tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+
+        .tab {
+            padding: 8px 16px;
+            background: #1e222d;
+            border: 1px solid #2a2e39;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 13px;
+        }
+
+        .tab.active {
+            background: #2962ff;
+            border-color: #2962ff;
+        }
+
+        .chart-container {
+            background: #1e222d;
+            border-radius: 6px;
+            border: 1px solid #2a2e39;
+            margin-bottom: 15px;
+        }
+
+        #mainChart {
+            height: 500px;
+        }
+
+        #analyticsChart {
+            height: 250px;
+        }
+
+        .status {
+            margin-top: 15px;
+            padding: 10px;
+            border-radius: 4px;
+            font-size: 13px;
+            display: none;
+        }
+
+        .status.loading {
+            background: #2a2e39;
+            border: 1px solid #434651;
+            display: block;
+        }
+
+        .status.success {
+            background: #1a472a;
+            border: 1px solid #26a69a;
+            display: block;
+        }
+
+        .status.error {
+            background: #4a1a1a;
+            border: 1px solid #ef5350;
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1 id="pageTitle">Bybit Chart - BTCUSDT</h1>
+            <div class="controls">
+                <div class="control-group">
+                    <label>Symbol</label>
+                    <select id="symbol">
+                        <option value="BTCUSDT" selected>BTCUSDT</option>
+                        <option value="ETHUSDT">ETHUSDT</option>
+                        <option value="XRPUSDT">XRPUSDT</option>
+                    </select>
+                </div>
+                <div class="control-group">
+                    <label>Interval</label>
+                    <select id="interval">
+                        <option value="1m">1m</option>
+                        <option value="5m">5m</option>
+                        <option value="15m" selected>15m</option>
+                        <option value="30m">30m</option>
+                        <option value="1h">1h</option>
+                        <option value="4h">4h</option>
+                    </select>
+                </div>
+                <div class="control-group">
+                    <label>Range (hours)</label>
+                    <select id="range">
+                        <option value="1">1h</option>
+                        <option value="6">6h</option>
+                        <option value="24" selected>24h</option>
+                        <option value="72">3d</option>
+                    </select>
+                </div>
+                <div class="control-group">
+                    <label>&nbsp;</label>
+                    <button id="loadBtn" class="primary">Load Data</button>
+                </div>
+            </div>
+        </header>
+
+        <div class="analytics-tabs">
+            <div class="tab active" data-analytics="none">Price Only</div>
+            <div class="tab" data-analytics="delta">+ Delta</div>
+            <div class="tab" data-analytics="cvd">+ CVD</div>
+            <div class="tab" data-analytics="vwap">+ VWAP</div>
+        </div>
+
+        <div class="chart-container">
+            <div id="mainChart"></div>
+        </div>
+
+        <div class="chart-container" id="analyticsContainer" style="display: none;">
+            <div id="analyticsChart"></div>
+        </div>
+
+        <div id="status" class="status"></div>
+    </div>
+
+    <script>
+        // Configuration
+        const API_BASE_URL = 'http://127.0.0.1:8000/api/v1';
+
+        // Symbol constants
+        const SYMBOL_CONSTANTS = {
+            'BTCUSDT': { PRICE_TICK: 0.01, QTY_STEP: 0.001 },
+            'ETHUSDT': { PRICE_TICK: 0.01, QTY_STEP: 0.01 },
+            'XRPUSDT': { PRICE_TICK: 0.0001, QTY_STEP: 0.1 }
+        };
+
+        // Chart instances
+        let mainChart = null;
+        let candlestickSeries = null;
+        let vwapSeries = null;
+        let analyticsChart = null;
+        let analyticsSeries = null;
+        let currentAnalytics = 'none';
+
+        // Initialize charts
+        function initCharts() {
+            mainChart = LightweightCharts.createChart(document.getElementById('mainChart'), {
+                width: document.getElementById('mainChart').clientWidth,
+                height: 500,
+                layout: { background: { color: '#1e222d' }, textColor: '#d1d4dc' },
+                grid: { vertLines: { color: '#2a2e39' }, horzLines: { color: '#2a2e39' } },
+                timeScale: { timeVisible: true, secondsVisible: false },
+            });
+
+            candlestickSeries = mainChart.addCandlestickSeries({
+                upColor: '#26a69a',
+                downColor: '#ef5350',
+                borderVisible: false,
+                wickUpColor: '#26a69a',
+                wickDownColor: '#ef5350',
+            });
+
+            analyticsChart = LightweightCharts.createChart(document.getElementById('analyticsChart'), {
+                width: document.getElementById('analyticsChart').clientWidth,
+                height: 250,
+                layout: { background: { color: '#1e222d' }, textColor: '#d1d4dc' },
+                grid: { vertLines: { color: '#2a2e39' }, horzLines: { color: '#2a2e39' } },
+                timeScale: { timeVisible: true, secondsVisible: false },
+            });
+
+            // Responsive resize
+            window.addEventListener('resize', () => {
+                mainChart.applyOptions({ width: document.getElementById('mainChart').clientWidth });
+                analyticsChart.applyOptions({ width: document.getElementById('analyticsChart').clientWidth });
+            });
+        }
+
+        // Status display
+        function showStatus(message, type = 'loading') {
+            const status = document.getElementById('status');
+            status.textContent = message;
+            status.className = `status ${type}`;
+        }
+
+        // Load OHLC + Analytics
+        async function loadData() {
+            const symbol = document.getElementById('symbol').value;
+            const interval = document.getElementById('interval').value;
+            const rangeHours = parseInt(document.getElementById('range').value);
+
+            document.getElementById('pageTitle').textContent = `Bybit Chart - ${symbol}`;
+
+            const endTs = Date.now() * 1000;
+            const startTs = endTs - (rangeHours * 60 * 60 * 1000 * 1000);
+
+            showStatus('Loading data...', 'loading');
+
+            try {
+                // Load OHLC
+                const ohlcUrl = `${API_BASE_URL}/ohlc?symbol=${symbol}&start_ts=${startTs}&end_ts=${endTs}&interval=${interval}`;
+                const ohlcRes = await fetch(ohlcUrl);
+                if (!ohlcRes.ok) throw new Error(`OHLC: ${ohlcRes.statusText}`);
+                const ohlcData = await ohlcRes.json();
+
+                if (!ohlcData.candles || ohlcData.candles.length === 0) {
+                    showStatus('No data available', 'error');
+                    return;
+                }
+
+                // Convert ticks → price
+                const constants = SYMBOL_CONSTANTS[symbol];
+                const chartData = ohlcData.candles.map(c => ({
+                    time: Math.floor(c.timestamp_us / 1_000_000),
+                    open: c.open_ticks * constants.PRICE_TICK,
+                    high: c.high_ticks * constants.PRICE_TICK,
+                    low: c.low_ticks * constants.PRICE_TICK,
+                    close: c.close_ticks * constants.PRICE_TICK,
+                }));
+
+                candlestickSeries.setData(chartData);
+                mainChart.timeScale().fitContent();
+
+                // Load analytics if needed
+                await loadAnalytics(symbol, startTs, endTs, interval, constants);
+
+                showStatus(`Loaded ${ohlcData.count} candles`, 'success');
+
+            } catch (error) {
+                console.error('Error:', error);
+                showStatus(`Error: ${error.message}`, 'error');
+            }
+        }
+
+        // Load analytics data
+        async function loadAnalytics(symbol, startTs, endTs, interval, constants) {
+            // Clear previous analytics
+            if (vwapSeries) {
+                mainChart.removeSeries(vwapSeries);
+                vwapSeries = null;
+            }
+            if (analyticsSeries) {
+                analyticsChart.removeSeries(analyticsSeries);
+                analyticsSeries = null;
+            }
+
+            if (currentAnalytics === 'none') {
+                document.getElementById('analyticsContainer').style.display = 'none';
+                return;
+            }
+
+            document.getElementById('analyticsContainer').style.display = 'block';
+
+            if (currentAnalytics === 'delta') {
+                const url = `${API_BASE_URL}/analytics/delta?symbol=${symbol}&start_ts=${startTs}&end_ts=${endTs}&interval=${interval}`;
+                const res = await fetch(url);
+                const data = await res.json();
+
+                const deltaData = data.bars.map(b => ({
+                    time: Math.floor(b.timestamp_us / 1_000_000),
+                    value: b.delta,
+                    color: b.delta >= 0 ? '#26a69a' : '#ef5350',
+                }));
+
+                analyticsSeries = analyticsChart.addHistogramSeries({
+                    color: '#26a69a',
+                    priceFormat: { type: 'volume' },
+                });
+                analyticsSeries.setData(deltaData);
+
+            } else if (currentAnalytics === 'cvd') {
+                const url = `${API_BASE_URL}/analytics/cvd?symbol=${symbol}&start_ts=${startTs}&end_ts=${endTs}&interval=${interval}`;
+                const res = await fetch(url);
+                const data = await res.json();
+
+                const cvdData = data.bars.map(b => ({
+                    time: Math.floor(b.timestamp_us / 1_000_000),
+                    value: b.cvd,
+                }));
+
+                analyticsSeries = analyticsChart.addLineSeries({
+                    color: '#2962ff',
+                    lineWidth: 2,
+                });
+                analyticsSeries.setData(cvdData);
+
+            } else if (currentAnalytics === 'vwap') {
+                const url = `${API_BASE_URL}/analytics/vwap?symbol=${symbol}&start_ts=${startTs}&end_ts=${endTs}&interval=${interval}`;
+                const res = await fetch(url);
+                const data = await res.json();
+
+                const vwapData = data.bars.map(b => ({
+                    time: Math.floor(b.timestamp_us / 1_000_000),
+                    value: b.vwap_ticks * constants.PRICE_TICK,
+                }));
+
+                vwapSeries = mainChart.addLineSeries({
+                    color: '#ff9800',
+                    lineWidth: 2,
+                    priceLineVisible: false,
+                });
+                vwapSeries.setData(vwapData);
+
+                document.getElementById('analyticsContainer').style.display = 'none';
+            }
+
+            analyticsChart.timeScale().fitContent();
+        }
+
+        // Event listeners
+        document.getElementById('loadBtn').addEventListener('click', loadData);
+        document.getElementById('symbol').addEventListener('change', loadData);
+
+        // Analytics tabs
+        document.querySelectorAll('.analytics-tabs .tab').forEach(tab => {
+            tab.addEventListener('click', () => {
+                document.querySelectorAll('.analytics-tabs .tab').forEach(t => t.classList.remove('active'));
+                tab.classList.add('active');
+                currentAnalytics = tab.dataset.analytics;
+                loadData();
+            });
+        });
+
+        // Initialize
+        initCharts();
+        loadData();
+    </script>
+</body>
+</html>
