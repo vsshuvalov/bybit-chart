@@ -1,0 +1,89 @@
+version: '3.8'
+
+services:
+  # Redis для pub/sub и caching
+  redis:
+    image: redis:7-alpine
+    container_name: bybit-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # Backend API
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: bybit-api
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/data
+      - ./logs:/logs
+    environment:
+      - DATA_DIR=/data
+      - REDIS_URL=redis://redis:6379/0
+      - LOG_LEVEL=info
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Data collector (Bybit WebSocket)
+  collector:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: bybit-collector
+    restart: unless-stopped
+    volumes:
+      - ./data:/data
+      - ./logs:/logs
+    environment:
+      - DATA_DIR=/data
+      - REDIS_URL=redis://redis:6379/0
+    command: ["python", "examples/multi_symbol_demo.py", "--duration", "86400"]
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  # Nginx reverse proxy
+  nginx:
+    image: nginx:alpine
+    container_name: bybit-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./frontend:/usr/share/nginx/html:ro
+      - ./deploy/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./deploy/ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - api
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+volumes:
+  redis-data:
+    driver: local
+
+networks:
+  default:
+    name: bybit-network

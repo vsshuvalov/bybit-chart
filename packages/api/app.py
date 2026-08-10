@@ -62,18 +62,55 @@ def create_app(data_dir: Path | str | None = None) -> FastAPI:
 
     @app.get("/health")
     async def health_check():
-        """Health check endpoint.
+        """Health check endpoint для monitoring.
 
         Returns:
-            200 OK с статусом приложения
+            {
+                "status": "healthy" | "degraded",
+                "timestamp": int,
+                "version": "1.0.0",
+                "services": {
+                    "redis": "connected" | "disconnected",
+                    "storage": "ready" | "error"
+                }
+            }
         """
+        import time
+        from packages.storage.redis_publisher import get_redis_publisher
+
+        health_status = {
+            "status": "healthy",
+            "service": "bybit-chart-query-api",
+            "timestamp": int(time.time()),
+            "version": "1.0.0",
+            "services": {}
+        }
+
+        # Check Redis connection
+        try:
+            redis_pub = get_redis_publisher()
+            if redis_pub.client:
+                redis_pub.client.ping()
+                health_status["services"]["redis"] = "connected"
+            else:
+                health_status["services"]["redis"] = "disconnected"
+        except:
+            health_status["services"]["redis"] = "disconnected"
+
+        # Check storage
+        try:
+            if reader_data_dir.exists():
+                health_status["services"]["storage"] = "ready"
+            else:
+                health_status["services"]["storage"] = "error"
+                health_status["status"] = "degraded"
+        except:
+            health_status["services"]["storage"] = "error"
+            health_status["status"] = "degraded"
+
         return JSONResponse(
-            status_code=200,
-            content={
-                "status": "healthy",
-                "service": "bybit-chart-query-api",
-                "version": "0.1.0",
-            },
+            status_code=200 if health_status["status"] == "healthy" else 503,
+            content=health_status
         )
 
     @app.get("/api/v1/symbols")
