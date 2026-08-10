@@ -330,6 +330,18 @@ async def main():
         max_restarts=5,
     ))
 
+    # Add maintenance worker
+    supervisor.add_worker(WorkerConfig(
+        name="maintenance-worker",
+        command=[
+            sys.executable,
+            "workers/maintenance_worker.py",
+            "data",
+        ],
+        restart_policy="on-failure",
+        max_restarts=5,
+    ))
+
     # Setup signal handlers
     loop = asyncio.get_running_loop()
 

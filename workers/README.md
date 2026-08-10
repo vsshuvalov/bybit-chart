@@ -29,7 +29,7 @@
 └──────────────────────────────────────────────────┘
 
 ┌──────────────────────────────────────────────────┐
-│  maintenance_worker.py (TODO)                    │
+│  maintenance_worker.py                           │
 │  WAL → Parquet + cleanup                         │
 └──────────────────────────────────────────────────┘
 ```
@@ -74,6 +74,9 @@ python workers/analytics_worker.py data
 
 # Terminal 3: Start API server
 python workers/api_server.py
+
+# Terminal 4: Start maintenance worker
+python workers/maintenance_worker.py data
 ```
 
 ## Worker Details
@@ -237,6 +240,83 @@ curl http://127.0.0.1:8000/api/v1/symbols
 
 # Get Delta
 curl "http://127.0.0.1:8000/api/v1/delta?symbol=BTCUSDT&start_ts=1234567890000000&end_ts=1234567900000000&interval=1m"
+```
+
+### maintenance_worker.py
+
+**Purpose:** Background storage maintenance
+
+**Responsibilities:**
+- WAL → Parquet conversion (scheduled)
+- Old WAL cleanup after successful commit
+- Parquet retention policy (cleanup old segments)
+- Manifest verification
+- Storage health monitoring
+
+**Arguments:**
+- `data_dir` — data directory (default: `data/`)
+
+**Configuration:**
+- `wal_commit_interval` — 300s (5 minutes)
+- `cleanup_interval` — 3600s (1 hour)
+- `retention_days` — 7 days
+
+**Operations:**
+WAL Commit Loop (every 5 min):
+- Scan all symbols
+- Commit WAL → Parquet
+- Update manifest
+- Track stats
+
+Cleanup Loop (every 1 hour):
+- Remove old WAL files (after successful Parquet commit)
+- Remove old Parquet segments (retention policy)
+- Update manifests
+
+**IPC Messages:**
+- Handles: `health` — health check + stats
+- Handles: `request`:
+  - `get_stats` — current stats
+  - `force_commit` — trigger immediate WAL commit
+  - `force_cleanup` — trigger immediate cleanup
+
+**Stats:**
+- `wal_commits` — total WAL commits performed
+- `cleanup_runs` — total cleanup runs
+- `segments_cleaned` — total segments removed
+- `errors` — error count
+
+**Health Check:**
+```python
+client = UDSClient(Path("/tmp/bybit-maintenance.sock"), "test")
+response = await client.send_message(health_msg)
+# {
+#   "status": "healthy",
+#   "process": "maintenance-worker",
+#   "stats": {
+#     "wal_commits": 10,
+#     "cleanup_runs": 2,
+#     "segments_cleaned": 5,
+#     "errors": 0
+#   }
+# }
+```
+
+**Force Operations:**
+```python
+# Force immediate WAL commit
+request = IPCMessage(
+    message_type="request",
+    payload={"type": "force_commit"},
+    source="admin"
+)
+
+# Force immediate cleanup
+request = IPCMessage(
+    message_type="request",
+    payload={"type": "force_cleanup"},
+    source="admin"
+)
 ```
 
 ## Benefits (Roadmap §3)
