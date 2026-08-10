@@ -41,7 +41,7 @@
   - Multi-symbol demo (examples/multi_symbol_demo.py)
   - Frontend selector для BTCUSDT/ETHUSDT/XRPUSDT
 
-### Этап 3: Analytics Modules (5 коммитов)
+### Этап 3: Analytics Modules (6 коммитов)
 - **P3-A1:** Delta Calculation
   - Buy/sell pressure: Delta = buy_volume - sell_volume
   - Aggregation by interval (1m, 5m, 15m, ...)
@@ -57,6 +57,10 @@
   - POC (Point of Control) — max volume level
   - Value Area (70% volume range)
   - HVN/LVN (High/Low Volume Nodes)
+- **P3-A5:** OBI (Order Book Imbalance)
+  - OBI = (Bid Volume - Ask Volume) / Total Volume
+  - Level aggregation: near (top 5), mid (6-20), far (21-50)
+  - Extreme imbalance detection (threshold alerts)
 - **Analytics API:** REST endpoints
   - GET /api/v1/analytics/delta
   - GET /api/v1/analytics/cvd
@@ -72,8 +76,8 @@
 
 ## 📊 Статистика
 
-- **27 коммитов** (Stage 1-4 + Этап 1 + Этап 3 + Analytics)
-- **518 passed, 5 skipped** — все тесты проходят
+- **29 коммитов** (Stage 1-4 + Этап 1 + Этап 3 + Analytics + OBI)
+- **672 passed, 7 skipped** — все тесты проходят
 - **Full production stack** готов к deployment
 
 ---
@@ -85,7 +89,7 @@
 ✅ **Multi-symbol:** BTCUSDT, ETHUSDT, XRPUSDT  
 ✅ **Events:** RawTrade + BookCheckpoint (mixed segments)  
 ✅ **Query API:** OHLC aggregation, Trade history  
-✅ **Analytics:** Delta, CVD, VWAP, Volume Profile  
+✅ **Analytics:** Delta, CVD, VWAP, Volume Profile, OBI  
 ✅ **Frontend:** Interactive charts с analytics visualization  
 ✅ **Live Demo:** Multi-symbol WebSocket collector  
 
