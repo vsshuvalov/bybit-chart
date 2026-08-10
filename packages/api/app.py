@@ -7,14 +7,16 @@ FastAPI приложение для Query API (Stage 3 / P3-S3-002).
 Endpoints:
 - GET /health — health check
 - GET /api/v1/symbols — список доступных symbols
-- GET /api/v1/trades — чтение RawTrade из Parquet (P3-S3-003)
+- GET /api/v1/trades — чтение RawTrade/BookCheckpoint из Parquet (P3-S3-003)
 """
 
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import JSONResponse
+from pydantic import ValidationError
 
+from packages.api.models import TradesQueryParams, TradesResponse
 from packages.storage.parquet_reader import ParquetReader
 
 # Конфигурация
@@ -81,6 +83,87 @@ def create_app(data_dir: Path | str | None = None) -> FastAPI:
             raise HTTPException(
                 status_code=500,
                 detail=f"Ошибка чтения списка symbols: {exc}",
+            )
+
+    @app.get("/api/v1/trades", response_model=TradesResponse)
+    async def get_trades(
+        symbol: str = Query(..., description="Symbol (BTCUSDT)"),
+        start_ts: int = Query(..., description="Начало диапазона (microseconds)", ge=0),
+        end_ts: int = Query(..., description="Конец диапазона (microseconds)", ge=0),
+        limit: int = Query(1000, description="Максимальное количество событий", ge=1, le=10000),
+        event_type: str | None = Query(None, description="Фильтр по eventType"),
+    ):
+        """Получить события (RawTrade/BookCheckpoint) из Parquet.
+
+        Query params:
+            - symbol: идентификатор инструмента (BTCUSDT)
+            - start_ts: начало диапазона (microseconds, inclusive)
+            - end_ts: конец диапазона (microseconds, exclusive)
+            - limit: максимальное количество событий (default 1000, max 10000)
+            - event_type: фильтр по eventType (RawTrade, BookCheckpoint)
+
+        Returns:
+            200 OK: TradesResponse с событиями
+            400 Bad Request: некорректные параметры
+            404 Not Found: symbol не существует
+            500 Internal Server Error: ошибка чтения данных
+
+        Example:
+            GET /api/v1/trades?symbol=BTCUSDT&start_ts=1786372648000000&end_ts=1786372650000000&limit=100
+            Response: {
+                "symbol": "BTCUSDT",
+                "start_ts": 1786372648000000,
+                "end_ts": 1786372650000000,
+                "events": [{...}, {...}],
+                "count": 100,
+                "has_more": true
+            }
+        """
+        # Валидация через Pydantic
+        try:
+            params = TradesQueryParams(
+                symbol=symbol,
+                start_ts=start_ts,
+                end_ts=end_ts,
+                limit=limit,
+                event_type=event_type,
+            )
+        except ValidationError as exc:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Некорректные параметры: {exc.errors()}",
+            )
+
+        # Чтение из Parquet
+        try:
+            events = reader.read_range(
+                symbol=params.symbol,
+                start_ts=params.start_ts,
+                end_ts=params.end_ts,
+                limit=params.limit,
+                event_type=params.event_type,
+            )
+
+            has_more = len(events) == params.limit
+
+            return TradesResponse(
+                symbol=params.symbol,
+                start_ts=params.start_ts,
+                end_ts=params.end_ts,
+                events=events,
+                count=len(events),
+                has_more=has_more,
+            )
+
+        except FileNotFoundError as exc:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Symbol не найден: {params.symbol}",
+            )
+        except Exception as exc:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Ошибка чтения данных: {exc}",
             )
 
     return app
