@@ -70,4 +70,10 @@ grafana_data/
 
 # Системные
 *.pid
-*.lock
+
+# Lock-файлы процессов (runtime), но НЕ dependency lock.
+# Roadmap §4 требует фиксацию зависимостей lock-файлом, §20.1 включает
+# dependency lock в release artifact — значит он обязан быть в git.
+*.runtime.lock
+.lock
+!deploy/dependencies/**/requirements.lock

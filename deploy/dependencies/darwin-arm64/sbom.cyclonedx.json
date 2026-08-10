@@ -1,0 +1,470 @@
+{
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.5",
+  "serialNumber": "urn:uuid:76e17988-5d4e-4244-b110-c27cd162ee94",
+  "version": 1,
+  "metadata": {
+    "timestamp": "2026-08-10T10:30:45+00:00",
+    "tools": [
+      {
+        "vendor": "bybit-orderflow-platform",
+        "name": "bybit-platform-dependency-locker",
+        "version": "1.0"
+      }
+    ],
+    "component": {
+      "type": "application",
+      "bom-ref": "bybit-orderflow-platform",
+      "name": "bybit-orderflow-platform",
+      "version": "0.0.0",
+      "description": "Bybit Order Flow platform. Stage 1: schemas и storage core. Ни один из шести сервисов не реализован, подключений к Bybit нет.",
+      "licenses": [
+        {
+          "license": {
+            "name": "UNLICENSED"
+          }
+        }
+      ]
+    },
+    "properties": [
+      {
+        "name": "bybit:artifact_role",
+        "value": "development"
+      },
+      {
+        "name": "bybit:platform_tag",
+        "value": "darwin-arm64"
+      },
+      {
+        "name": "bybit:python_implementation",
+        "value": "CPython"
+      },
+      {
+        "name": "bybit:python_version",
+        "value": "3.13.7"
+      },
+      {
+        "name": "bybit:platform_system",
+        "value": "Darwin"
+      },
+      {
+        "name": "bybit:platform_machine",
+        "value": "arm64"
+      },
+      {
+        "name": "bybit:source_of_truth",
+        "value": "installed environment (tests green), not fresh dependency resolution"
+      },
+      {
+        "name": "bybit:stage",
+        "value": "1"
+      },
+      {
+        "name": "bybit:release_artifact",
+        "value": "false"
+      }
+    ]
+  },
+  "components": [
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/annotated-types@0.8.0",
+      "name": "annotated-types",
+      "version": "0.8.0",
+      "purl": "pkg:pypi/annotated-types@0.8.0",
+      "scope": "required",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "f072f4d804ea359e4eaf198b1af7a8b0943881a87f31bb764f8bf219bb9419e0"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "MIT"
+          }
+        }
+      ],
+      "properties": [
+        {
+          "name": "bybit:dependency_kind",
+          "value": "transitive"
+        },
+        {
+          "name": "bybit:distribution_filename",
+          "value": "annotated_types-0.8.0-py3-none-any.whl"
+        }
+      ],
+      "description": "Reusable constraint types to use with typing.Annotated",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://files.pythonhosted.org/packages/99/91/8acff4f5e50511b911bbccb72b8628a49c68ce14148cd9f6431094859a90/annotated_types-0.8.0-py3-none-any.whl"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/iniconfig@2.3.0",
+      "name": "iniconfig",
+      "version": "2.3.0",
+      "purl": "pkg:pypi/iniconfig@2.3.0",
+      "scope": "required",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "f631c04d2c48c52b84d0d0549c99ff3859c98df65b3101406327ecc7d53fbf12"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "MIT"
+          }
+        }
+      ],
+      "properties": [
+        {
+          "name": "bybit:dependency_kind",
+          "value": "transitive"
+        },
+        {
+          "name": "bybit:distribution_filename",
+          "value": "iniconfig-2.3.0-py3-none-any.whl"
+        }
+      ],
+      "description": "brain-dead simple config-ini parsing",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://files.pythonhosted.org/packages/cb/b1/3846dd7f199d53cb17f49cba7e651e9ce294d8497c8c150530ed11865bb8/iniconfig-2.3.0-py3-none-any.whl"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/packaging@26.3",
+      "name": "packaging",
+      "version": "26.3",
+      "purl": "pkg:pypi/packaging@26.3",
+      "scope": "required",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "d7193f7c8e4e93f444fde0262bf90af30e16fa0ad0ad44cb553c87339b23cd1c"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "Apache-2.0 OR BSD-2-Clause"
+          }
+        }
+      ],
+      "properties": [
+        {
+          "name": "bybit:dependency_kind",
+          "value": "transitive"
+        },
+        {
+          "name": "bybit:distribution_filename",
+          "value": "packaging-26.3-py3-none-any.whl"
+        }
+      ],
+      "description": "Core utilities for Python packages",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://files.pythonhosted.org/packages/63/34/ba1c580383c9eada3711951fef0795c80b829a078d72188184bcab9dd527/packaging-26.3-py3-none-any.whl"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/pluggy@1.6.0",
+      "name": "pluggy",
+      "version": "1.6.0",
+      "purl": "pkg:pypi/pluggy@1.6.0",
+      "scope": "required",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "e920276dd6813095e9377c0bc5566d94c932c33b27a3e3945d8389c374dd4746"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "MIT"
+          }
+        }
+      ],
+      "properties": [
+        {
+          "name": "bybit:dependency_kind",
+          "value": "transitive"
+        },
+        {
+          "name": "bybit:distribution_filename",
+          "value": "pluggy-1.6.0-py3-none-any.whl"
+        }
+      ],
+      "description": "plugin and hook calling mechanisms for python",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://files.pythonhosted.org/packages/54/20/4d324d65cc6d9205fabedc306948156824eb9f0ee1633355a8f7ec5c66bf/pluggy-1.6.0-py3-none-any.whl"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/pydantic@2.11.1",
+      "name": "pydantic",
+      "version": "2.11.1",
+      "purl": "pkg:pypi/pydantic@2.11.1",
+      "scope": "required",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "5b6c415eee9f8123a14d859be0c84363fec6b1feb6b688d6435801230b56e0b8"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "MIT"
+          }
+        }
+      ],
+      "properties": [
+        {
+          "name": "bybit:dependency_kind",
+          "value": "direct"
+        },
+        {
+          "name": "bybit:distribution_filename",
+          "value": "pydantic-2.11.1-py3-none-any.whl"
+        }
+      ],
+      "description": "Data validation using Python type hints",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://files.pythonhosted.org/packages/cc/12/f9221a949f2419e2e23847303c002476c26fbcfd62dc7f3d25d0bec5ca99/pydantic-2.11.1-py3-none-any.whl"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/pydantic-core@2.33.0",
+      "name": "pydantic-core",
+      "version": "2.33.0",
+      "purl": "pkg:pypi/pydantic-core@2.33.0",
+      "scope": "required",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "1a73be93ecef45786d7d95b0c5e9b294faf35629d03d5b145b09b81258c7cd6d"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "MIT"
+          }
+        }
+      ],
+      "properties": [
+        {
+          "name": "bybit:dependency_kind",
+          "value": "transitive"
+        },
+        {
+          "name": "bybit:distribution_filename",
+          "value": "pydantic_core-2.33.0-cp313-cp313-macosx_11_0_arm64.whl"
+        }
+      ],
+      "description": "Core functionality for Pydantic validation and serialization",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://files.pythonhosted.org/packages/f9/af/6817dfda9aac4958d8b516cbb94af507eb171c997ea66453d4d162ae8948/pydantic_core-2.33.0-cp313-cp313-macosx_11_0_arm64.whl"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/pytest@8.3.5",
+      "name": "pytest",
+      "version": "8.3.5",
+      "purl": "pkg:pypi/pytest@8.3.5",
+      "scope": "required",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "c69214aa47deac29fad6c2a4f590b9c4a9fdb16a403176fe154b79c0b4d4d820"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "MIT"
+          }
+        }
+      ],
+      "properties": [
+        {
+          "name": "bybit:dependency_kind",
+          "value": "direct"
+        },
+        {
+          "name": "bybit:distribution_filename",
+          "value": "pytest-8.3.5-py3-none-any.whl"
+        }
+      ],
+      "description": "pytest: simple powerful testing with Python",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://files.pythonhosted.org/packages/30/3d/64ad57c803f1fa1e963a7946b6e0fea4a70df53c1a7fed304586539c2bac/pytest-8.3.5-py3-none-any.whl"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/typing-extensions@4.16.0",
+      "name": "typing-extensions",
+      "version": "4.16.0",
+      "purl": "pkg:pypi/typing-extensions@4.16.0",
+      "scope": "required",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "481caa481374e813c1b176ada14e97f1f67a4539ce9cfeb3f350d78d6370c2e8"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "PSF-2.0"
+          }
+        }
+      ],
+      "properties": [
+        {
+          "name": "bybit:dependency_kind",
+          "value": "transitive"
+        },
+        {
+          "name": "bybit:distribution_filename",
+          "value": "typing_extensions-4.16.0-py3-none-any.whl"
+        }
+      ],
+      "description": "Backported and Experimental Type Hints for Python 3.9+",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://files.pythonhosted.org/packages/49/d3/b8441a820a491ddfc024b0b0cf0393375b75ea13866d9c66727e54c2fc80/typing_extensions-4.16.0-py3-none-any.whl"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "bom-ref": "pkg:pypi/typing-inspection@0.4.2",
+      "name": "typing-inspection",
+      "version": "0.4.2",
+      "purl": "pkg:pypi/typing-inspection@0.4.2",
+      "scope": "required",
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "4ed1cacbdc298c220f1bd249ed5287caa16f34d44ef4e9c3d0cbad5b521545e7"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "name": "MIT"
+          }
+        }
+      ],
+      "properties": [
+        {
+          "name": "bybit:dependency_kind",
+          "value": "transitive"
+        },
+        {
+          "name": "bybit:distribution_filename",
+          "value": "typing_inspection-0.4.2-py3-none-any.whl"
+        }
+      ],
+      "description": "Runtime typing introspection tools",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://files.pythonhosted.org/packages/dc/9b/47798a6c91d8bdb567fe2698fe81e0c6b7cb7ef4d13da4114b41d239f65d/typing_inspection-0.4.2-py3-none-any.whl"
+        }
+      ]
+    }
+  ],
+  "dependencies": [
+    {
+      "ref": "bybit-orderflow-platform",
+      "dependsOn": [
+        "pkg:pypi/pydantic@2.11.1",
+        "pkg:pypi/pytest@8.3.5"
+      ]
+    },
+    {
+      "ref": "pkg:pypi/annotated-types@0.8.0",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:pypi/iniconfig@2.3.0",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:pypi/packaging@26.3",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:pypi/pluggy@1.6.0",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:pypi/pydantic@2.11.1",
+      "dependsOn": [
+        "pkg:pypi/annotated-types@0.8.0",
+        "pkg:pypi/pydantic-core@2.33.0",
+        "pkg:pypi/typing-extensions@4.16.0",
+        "pkg:pypi/typing-inspection@0.4.2"
+      ]
+    },
+    {
+      "ref": "pkg:pypi/pydantic-core@2.33.0",
+      "dependsOn": [
+        "pkg:pypi/typing-extensions@4.16.0"
+      ]
+    },
+    {
+      "ref": "pkg:pypi/pytest@8.3.5",
+      "dependsOn": [
+        "pkg:pypi/iniconfig@2.3.0",
+        "pkg:pypi/packaging@26.3",
+        "pkg:pypi/pluggy@1.6.0"
+      ]
+    },
+    {
+      "ref": "pkg:pypi/typing-extensions@4.16.0",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:pypi/typing-inspection@0.4.2",
+      "dependsOn": [
+        "pkg:pypi/typing-extensions@4.16.0"
+      ]
+    }
+  ]
+}

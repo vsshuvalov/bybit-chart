@@ -1,6 +1,7 @@
 # TODO — Backlog
 
-Обновлён: 2026-08-10T02:30:00+0700
+- Обновлён: 2026-08-10T18:20:00+0700
+- Stage: 1 (в работе)
 
 ---
 
@@ -94,7 +95,7 @@
 
 ---
 
-### P0-S0-004 | P0 | Stage 0 | IN_PROGRESS
+### P0-S0-004 | P0 | Stage 0 | DONE
 
 **Тема:** Выполнить проверки Stage 0 и подготовить review gate
 
@@ -114,19 +115,23 @@
 **Do-not-touch:** spec source files; никаких commits до подтверждения пользователя
 
 **Acceptance criteria:**
-- [ ] `git status --short` показывает только новые неотслеживаемые файлы
-- [ ] Нет git remote
-- [ ] Нет API-ключей, паролей, production data
-- [ ] Все нормативные файлы ненулевые
-- [ ] Ни один файл не заявляет о реализованных функциях
-- [ ] NEXT.md, TODO.md, README.md согласованы по Stage, версии, дате
-- [ ] SHA-256 повторно проверены
+- [x] `git status --short` показывает только новые неотслеживаемые файлы
+- [x] Нет git remote
+- [x] Нет API-ключей, паролей, production data
+- [x] Все нормативные файлы ненулевые
+- [x] Ни один файл не заявляет о реализованных функциях
+- [x] NEXT.md, TODO.md, README.md согласованы по Stage, версии, дате
+- [x] SHA-256 повторно проверены
 
-**Evidence:** точные команды и вывод в NEXT.md
+**Evidence:** точные команды и вывод в NEXT.md; commit `6edc666`
+
+**Примечание:** статус оставался `IN_PROGRESS` из-за несинхронизированного файла — фактически задача закрыта 2026-08-10T02:42 вместе с первым commit. Исправлено 2026-08-10 при закрытии P1-S1-003.
 
 ---
 
-## Stage 1 — Shared schemas и storage core (NOT_STARTED)
+## Stage 1 — Shared schemas и storage core (IN_PROGRESS)
+
+Закрыто: P1-S1-001, P1-S1-002, P1-S1-003. Открыто: P1-S1-004 (блок ADR-004, OPEN-005), P1-S1-005, P1-S1-006 (блок OPEN-005), P1-S1-007.
 
 ### P1-S1-001 | P0 | Stage 1 | DONE
 
@@ -185,20 +190,42 @@
 
 ---
 
-### P1-S1-003 | P0 | Stage 1 | TODO
+### P1-S1-003 | P0 | Stage 1 | DONE
 
 **Тема:** Dependency lock и SBOM
 
-**Owner:** не назначен
+**Owner:** Claude Code
 **Зависимости:** P1-S1-001
 **Scope:** Roadmap §4 требует фиксацию всех зависимостей lock-файлом и SBOM. Сейчас в `pyproject.toml` версии не залочены, lock-файла нет.
 
 **Acceptance criteria:**
-- Lock-файл с точными версиями и хешами
-- SBOM в согласованном формате
-- CI проверяет соответствие lock-файла окружению
+- [x] Lock-файл с точными версиями и хешами — `deploy/dependencies/darwin-arm64/requirements.lock`, 9 пакетов, SHA-256 у каждого
+- [x] SBOM в согласованном формате — CycloneDX 1.5, purl, лицензии, граф связей
+- [x] CI-конфигурация статически проверяет цепочку install-from-lock → verifier: `.github/workflows/ci.yml` ставит окружение из lock и только затем вызывает верификатор; порядок, триггеры и достижимость release gate закреплены тестами разобранной конфигурации
 
-**Evidence:** —
+Фактический первый CI run в объём этой задачи не входит — он вынесен в P1-S1-007 как отдельный незакрытый criterion (разделение утверждено тимлидом 2026-08-10). Критерий здесь закрыт статической проверкой конфигурации, а не её исполнением.
+- [x] Артефакт не скрыт `.gitignore` (дефект: шаблон `*.lock`)
+- [x] Роль и платформа объявлены в шапке; production-роль недоступна на Darwin (ADR-012)
+- [x] `--check` обнаруживает устаревший lock/SBOM, а не только отсутствие файлов
+- [x] Тесты запускаются тем же интерпретатором (`sys.executable`), а не `python3` из PATH
+- [x] Release gate ставит окружение из lock до проверки — иначе остался бы красным навсегда
+
+**Принято как development-lock** (решение владельца 2026-08-10). Роль `development`, платформа `darwin-arm64`. Не является release artifact. Production-набор — P1-S1-006.
+
+**Ревью тимлида 2026-08-10T17:50:** NO-GO на commit, 6 несоответствий. Все исправлены:
+
+| № | Несоответствие | Исправление |
+|---|---|---|
+| 1 | `1 failed` без активации venv: тест запускал системный `python3` | `sys.executable` в `TestReleaseGateBehaviour._run` |
+| 2 | `--check` проверял только наличие файлов | `compare_artifacts` сравнивает состав; волатильные поля (время, serialNumber) исключены |
+| 3 | Release gate не ставил окружение из lock | `pip install --require-hashes` до верификатора; закреплено тестом |
+| 4 | Ложное утверждение о закоммиченном CI | NEXT.md: workflow untracked и не запускался; прогон → P1-S1-007 |
+| 5 | Trailing whitespace | Убран в NEXT.md, REQUIREMENTS_TRACEABILITY.md, ADR-012; шапки переведены в списки |
+| 6 | Счёт тестов 79 против 91 | Журнал исправлен |
+
+Побочно найден дефект при написании тестов на п.2: `relative_to(REPO_ROOT)` падал с `ValueError` на пути вне репозитория. Введён `display_path` в оба скрипта.
+
+**Evidence:** `.venv/bin/python -m pytest -q` → 258 passed (без активации venv); `deploy/verify_dependencies.py` → exit 0; `--release` → exit 1; `gen_dependency_artifacts.py --check` → exit 0, на подложенном `pytest==8.3.4` → exit 1; `git diff --check` → чисто
 
 ---
 
@@ -234,5 +261,50 @@
 - Property: последовательность advance_* сохраняет инварианты offsets
 
 **Evidence:** —
+
+---
+
+### P1-S1-006 | P0 | Stage 1 | BLOCKED
+
+**Тема:** Linux dependency artifacts (production release artifact)
+
+**Owner:** не назначен
+**Зависимости:** P1-S1-003, OPEN-005 (архитектура production-хоста и точная версия Python)
+**Блокирует:** production release. Разработку на macOS не блокирует (ADR-012).
+
+**Scope:** Снять `deploy/dependencies/linux-<arch>/{requirements.lock,sbom.cyclonedx.json}` с ролью `production` в чистом Linux-окружении утверждённой архитектуры и версии Python. Инструменты готовы: генератор поддерживает `--role production`, верификатор — `--release`, CI-джоб `release-gate` подключён.
+
+**Do-not-touch:** `deploy/dependencies/darwin-arm64/**` — macOS-lock не правится под Linux ни при каких условиях.
+
+**Acceptance criteria:**
+- OPEN-005 закрыт: архитектура и точная версия Python утверждены
+- Linux-окружение поставлено по `requirements.in`, `pytest -q` зелёный на Linux
+- `tests/fault` зелёные на Linux (WAL, fsync, atomic rename, crash recovery)
+- Артефакты сняты генератором с `--role production`, не отредактированы вручную
+- `verify_dependencies.py --release` → exit 0
+- CI-джоб `linux-tests` переключился на `pip install --require-hashes`
+- Тест `test_linux_lock_absent_so_production_release_is_blocked` снят или переписан
+
+**Evidence:** —
+
+---
+
+### P1-S1-007 | P0 | Stage 1+ | TODO
+
+**Тема:** Linux parity для платформенно-зависимых гарантий
+
+**Owner:** не назначен
+**Зависимости:** ADR-012
+**Scope:** По ADR-012 зелёные тесты на macOS не являются свидетельством для production. Обязательный повтор на Linux: WAL, `fsync`, `fsync` каталога, atomic `rename`, crash recovery, `systemd`-контур, performance и soak. Часть закрыта: `linux-tests` в CI прогоняет `pytest -q` и `tests/fault` на ubuntu-24.04.
+
+**Acceptance criteria:**
+- [ ] **Первый реальный прогон CI на runner** (перенесено из P1-S1-003 решением тимлида 2026-08-10; сейчас workflow не запускался ни разу, требуется remote)
+- [ ] `pytest -q` и `tests/fault` фактически зелёные на Linux — не только описаны в workflow
+- [ ] Crash-matrix проверена на ext4/XFS с реальным `SIGKILL`, а не только на APFS
+- [ ] `systemd` unit, health probe и graceful shutdown deadline проверены на Linux (§3, §20.1)
+- [ ] Performance baseline снят на Linux (§19 Этап 1: baseline CPU/RAM/disk/lag)
+- [ ] 72h soak на Linux (§18.4 hard gates)
+
+**Evidence:** — (только конфигурация `.github/workflows/ci.yml`; ни один прогон не выполнялся)
 
 ---

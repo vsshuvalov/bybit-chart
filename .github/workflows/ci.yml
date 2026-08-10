@@ -1,0 +1,156 @@
+name: CI
+
+# Источник требований:
+#   Roadmap §4    — lock-файл и SBOM обязательны; reference env — Linux + systemd
+#   Roadmap §18.4 — release hard gates
+#   Roadmap §20.1 — immutable release artifact содержит dependency lock
+#   ADR-012       — development host macOS/Darwin arm64, production host Linux
+#
+# Development идёт на macOS, production — на Linux. Поэтому платформенно
+# зависимые гарантии storage core (fsync, fsync каталога, атомарность
+# rename, crash recovery) проверяются на Linux, а не только на машине
+# разработчика: на APFS и ext4/XFS поведение различается.
+
+on:
+  push:
+    # tags обязателен отдельно: при указании только branches GitHub не
+    # запускает workflow на tag push, и release-gate (условие
+    # startsWith(github.ref, 'refs/tags/')) не выполнился бы никогда.
+    branches: ["**"]
+    tags: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHONUNBUFFERED: "1"
+
+jobs:
+  # =========================================================================
+  # Linux: обязательный parity-прогон.
+  # Linux-lock ещё не снят (P1-S1-006, блокируется OPEN-005), поэтому
+  # окружение ставится по requirements.in. Это осознанный компромисс:
+  # без него storage core вообще не проверялся бы на Linux. Как только
+  # появится deploy/dependencies/linux-<arch>/requirements.lock, установка
+  # переводится на --require-hashes, а шаг ниже это проверит.
+  # =========================================================================
+  linux-tests:
+    name: Linux tests (parity)
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        # Точная версия production Python не утверждена (OPEN-005).
+        # До решения проверяются обе поддерживаемые минорные версии.
+        python-version: ["3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Report platform
+        run: |
+          python3 -c "import platform, sys; print(platform.system(), platform.machine(), platform.python_version()); print(sys.executable)"
+          echo "filesystem:"; df -T . | tail -1
+
+      - name: Install dependencies
+        run: |
+          ARCH="$(python3 -c 'import platform; print(platform.machine().lower())')"
+          LOCK="deploy/dependencies/linux-${ARCH}/requirements.lock"
+          python3 -m pip install --upgrade pip
+          if [ -f "$LOCK" ]; then
+            echo "Linux-lock найден: $LOCK — установка с проверкой хешей"
+            python3 -m pip install --require-hashes -r "$LOCK"
+          else
+            echo "Linux-lock отсутствует ($LOCK) — установка по requirements.in."
+            echo "Состав не зафиксирован; production release заблокирован (P1-S1-006)."
+            python3 -m pip install -r requirements.in
+          fi
+
+      - name: Full test suite
+        run: python3 -m pytest -q
+
+      - name: Storage core on Linux filesystem
+        # Явный отдельный прогон: именно эти тесты обязаны повторяться на
+        # Linux по ADR-012 (WAL, fsync, atomic rename, crash recovery).
+        run: python3 -m pytest tests/fault -v --tb=short
+
+      - name: Dependency artifacts gate
+        # --pending-ok: отсутствие Linux-lock отмечается как PENDING и не
+        # красит dev-CI, но production release им не пользуется (см. release-gate).
+        run: python3 deploy/verify_dependencies.py --pending-ok
+
+  # =========================================================================
+  # macOS: development-контур. Здесь lock снят, поэтому проверяется строго,
+  # включая установку по хешам.
+  # =========================================================================
+  macos-tests:
+    name: macOS tests (development)
+    runs-on: macos-14  # arm64, соответствует development host из ADR-012
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Report platform
+        run: python3 -c "import platform; print(platform.system(), platform.machine(), platform.python_version())"
+
+      - name: Install from development lock
+        run: |
+          python3 -m pip install --upgrade pip
+          python3 -m pip install --require-hashes \
+            -r deploy/dependencies/darwin-arm64/requirements.lock
+
+      - name: Full test suite
+        run: python3 -m pytest -q
+
+      - name: Dependency artifacts gate
+        # Без --strict-platform: patch-версия Python на runner может не
+        # совпасть с зафиксированной в lock. Состав пакетов при этом
+        # сверяется строго, а расхождение платформы печатается как заметка.
+        run: python3 deploy/verify_dependencies.py
+
+  # =========================================================================
+  # Release gate. Не запускается на push: включается вручную или по тегу.
+  # Падает, пока нет production-lock своей платформы — это и есть
+  # блокировка production release из ADR-012.
+  # =========================================================================
+  release-gate:
+    name: Release gate (production lock required)
+    if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Require production dependency lock
+        # Без --pending-ok. Development-lock и отсутствие lock отвергаются:
+        # macOS-артефакт не может быть Linux release artifact.
+        #
+        # Окружение обязательно ставится ИЗ lock до проверки. Иначе
+        # верификатор сравнивал бы lock с пустым окружением и репортил все
+        # пакеты как отсутствующие — gate остался бы красным навсегда,
+        # даже когда Linux-lock появится, и перестал бы что-либо значить.
+        run: |
+          ARCH="$(python3 -c 'import platform; print(platform.machine().lower())')"
+          LOCK="deploy/dependencies/linux-${ARCH}/requirements.lock"
+          python3 -m pip install --upgrade pip
+          if [ -f "$LOCK" ]; then
+            echo "Production lock найден: $LOCK"
+            python3 -m pip install --require-hashes -r "$LOCK"
+          else
+            echo "Production lock отсутствует: $LOCK"
+            echo "Release gate обязан упасть: release без dependency lock"
+            echo "своей платформы запрещён (Roadmap §20.1, ADR-012). См. P1-S1-006."
+          fi
+          python3 deploy/verify_dependencies.py --release

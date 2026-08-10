@@ -1,19 +1,22 @@
 # Bybit Order Flow Platform
 
-**Статус:** `GREENFIELD / NO IMPLEMENTATION`  
-**Stage:** 0 — Greenfield bootstrap и design lock  
-**Дата создания:** 2026-08-10
+- **Статус:** `STAGE 1 IN PROGRESS` — реализованы схемы, storage core и dependency-контур; ни один сервис не работает
+- **Stage:** 1 — Shared schemas и storage core
+- **Дата создания:** 2026-08-10
+- **Обновлён:** 2026-08-10
 
 ---
 
 ## ⚠️ ВАЖНО
 
-Этот репозиторий создаётся с нуля. В нём **нет** рабочего кода, запускаемых сервисов или production-данных.
+В репозитории есть библиотечный код (схемы событий, числовая модель, storage core, dependency-контур), но **нет ни одного запускаемого сервиса и ни одного подключения к Bybit**.
 
 Отсутствует:
-- работающий collector, API, UI, trading engine и AI;
-- любые подключения к Bybit;
-- production-хранилище и API-ключи.
+- работающий collector, API, UI, trading engine и AI — `services/*` пусты;
+- любые подключения к Bybit, API-ключи, production-хранилище;
+- Parquet writer, PostgreSQL, frontend, simulator, стратегии.
+
+Есть и покрыто тестами: `contracts/`, `packages/numeric`, `packages/storage`, `deploy/` (lock, SBOM, верификатор). Запуск: `.venv/bin/python -m pytest -q`.
 
 ---
 
@@ -130,8 +133,39 @@ Stage 0 завершён: структура репозитория, source arti
 | `packages/numeric` | PriceTicks/QtySteps/Decimal128; binary float запрещён в persistent данных |
 | `contracts` | RawTrade, RawBookEvent, RawRpiBookEvent, BookCheckpoint, RawLiquidation, GapMarker, RawEventEnvelope |
 | `packages/storage` | WAL с group commit и torn-frame recovery, offsets и их инварианты, state machine сегментов с lease/fencing, manifest, atomic commit protocol |
+| `deploy/` | dependency lock и CycloneDX SBOM по платформам, генератор и offline-верификатор, release gate |
+| `.github/workflows` | CI-конфигурация: тесты на Linux и macOS, dependency gate, release gate. Ни разу не запускалась — remote отсутствует (P1-S1-007) |
 
 **Не реализовано:** ни один из шести сервисов (`services/*` пусты), Parquet writer, PostgreSQL, frontend, simulator, execution, стратегии, AI. Подключений к Bybit нет.
+
+---
+
+## Платформы
+
+Источник: `docs/adr/ADR-012-development-and-production-hosts.md` (закрывает CONFLICT-004).
+
+| Роль | Платформа | Статус |
+|---|---|---|
+| Development host | macOS / Darwin arm64 | DECIDED |
+| Production host | Linux + `systemd` | DECIDED |
+| Production architecture (x86_64 / arm64) | — | OPEN-005 |
+| Production Python version | — | OPEN-005 |
+
+Dependency artifacts раскладываются по платформам, у каждого объявлена роль:
+
+```
+deploy/dependencies/darwin-arm64/    РОЛЬ development   ← снят
+deploy/dependencies/linux-<arch>/    РОЛЬ production    ← НЕ снят (P1-S1-006)
+```
+
+macOS-lock не является Linux release artifact: генератор не выпускает
+`--role production` на Darwin, а `verify_dependencies.py --release`
+отвергает роль `development`. Правила и команды —
+`deploy/dependencies/README.md`.
+
+Платформенно-зависимые гарантии storage core (`fsync`, atomic `rename`,
+crash recovery) повторяются на Linux в CI. Оставшийся parity-объём
+(crash-matrix на ext4/XFS, `systemd`, performance, soak) — задача P1-S1-007.
 
 ---
 
@@ -142,21 +176,31 @@ source .venv/bin/activate
 python3 -m pytest -q
 ```
 
-Текущий результат: **156 passed, 0 failed, 0 skipped**.
+Текущий результат: **264 passed, 0 failed, 0 skipped** (macOS / Darwin arm64, CPython 3.13.7).
 
-Только backend unit/contract/fault тесты. Frontend (Vitest/Playwright), integration, soak, performance и demo/testnet тесты появятся на соответствующих этапах.
+Воспроизвести зафиксированное окружение и проверить его согласованность:
+
+```bash
+pip install --require-hashes -r deploy/dependencies/darwin-arm64/requirements.lock
+python3 deploy/verify_dependencies.py
+```
+
+Только backend unit/contract/fault тесты. Frontend (Vitest/Playwright), integration, soak, performance и demo/testnet тесты появятся на соответствующих этапах. На Linux те же тесты прогоняются в CI; окружение там пока ставится по `requirements.in`, потому что Linux-lock не снят.
 
 ---
 
 ## Известные ограничения и открытые решения
 
 1. ADR-001…011 открыты — требуется утверждение тимлидом.
-2. Нет lock-файла и SBOM — нарушение Roadmap §4, задача P1-S1-003.
-3. Формат файла сегмента не зафиксирован: `atomic_commit` принимает writer как callback, реальный Parquet writer — задача P1-S1-004 (блокируется ADR-004).
-4. Property-тесты (Hypothesis) не написаны — задача P1-S1-005.
-5. Целевой хост (macOS vs Linux) не подтверждён — CONFLICT-004.
-6. Bybit client library не выбрана — OPEN-001.
-7. Full Orderbook: DEFERRED — availability mainnet не проверена.
-8. Все BTC-absolute thresholds — `UNCALIBRATED` до замеров.
+2. Linux dependency artifacts не сняты — **production release заблокирован** (P1-S1-006). Разработка на macOS не блокируется.
+3. Архитектура production-хоста и точная версия Python не утверждены — OPEN-005. Блокирует ввод PyArrow (P1-S1-004) и PostgreSQL-драйвера (ADR-005): у обоих бинарные колёса.
+4. Формат файла сегмента не зафиксирован: `atomic_commit` принимает writer как callback, реальный Parquet writer — задача P1-S1-004 (блокируется ADR-004).
+5. Property-тесты (Hypothesis) не написаны — задача P1-S1-005.
+6. Linux parity не завершён: crash-matrix на ext4/XFS, `systemd`, performance и soak — P1-S1-007.
+7. Bybit client library не выбрана — OPEN-001.
+8. Full Orderbook: DEFERRED — availability mainnet не проверена.
+9. Все BTC-absolute thresholds — `UNCALIBRATED` до замеров.
+
+Снято: CONFLICT-004 (целевой хост) — решение в ADR-012. Нарушение Roadmap §4 об отсутствии lock и SBOM закрыто для development-платформы (P1-S1-003).
 
 Подробно: `docs/architecture/DECISIONS_PENDING.md`.

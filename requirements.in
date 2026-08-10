@@ -1,0 +1,36 @@
+# Прямые зависимости проекта.
+#
+# Источник: Roadmap §4 «Рекомендуемый реальный технологический стек».
+# Все зависимости фиксируются lock-файлом и SBOM (§4), release artifact
+# содержит dependency lock (§20.1).
+#
+# Здесь перечислены ТОЛЬКО прямые зависимости с обоснованием. Файл общий
+# для всех платформ (ADR-012): по платформам расходятся лишь разрешённый
+# состав транзитивных зависимостей и хеши колёс.
+#
+# Полный граф с точными версиями, SHA-256 и SBOM — по платформам:
+#   deploy/dependencies/darwin-arm64/   РОЛЬ development (macOS, разработка)
+#   deploy/dependencies/linux-<arch>/   РОЛЬ production  (НЕ СНЯТ, P1-S1-006)
+#   deploy/dependencies/README.md       правила и команды
+#
+# Регенерация после любого изменения этого файла (на своей платформе):
+#   python3 deploy/gen_dependency_artifacts.py
+# Проверка соответствия окружения (offline, CI и целевой хост):
+#   python3 deploy/verify_dependencies.py
+
+# Pydantic — схемы событий контракта (Roadmap §4: «Backend | Python, FastAPI,
+# Uvicorn, Pydantic»). Используется в contracts/schemas.py.
+pydantic==2.11.1
+
+# pytest — backend unit/property/invariant/fault tests (Roadmap §4:
+# «Backend tests | pytest + Hypothesis»).
+pytest==8.3.5
+
+# Заявлено в Roadmap §4, но ещё не добавлено — каждая позиция вводится
+# своей задачей вместе с использующим её кодом:
+#   Hypothesis        property-тесты                → P1-S1-005
+#   PyArrow           Parquet writer/validator      → P1-S1-004 (блок: ADR-004)
+#   FastAPI, Uvicorn  api-gateway                   → Stage 4
+#   grpcio, protobuf  IPC между процессами          → блок: ADR-002
+#   httpx, websockets Bybit public/private adapter  → блок: ADR-001 (выбор пути)
+#   psycopg/alembic   PostgreSQL migrations         → блок: ADR-005

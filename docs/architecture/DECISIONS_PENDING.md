@@ -111,7 +111,16 @@ Roadmap требует immutable artifact, canary и restore drill (§18.5, §20
 
 **Roadmap §4 (явное):** «если целевой 24/7-хост остаётся macOS, тимлид отдельным ADR заменяет unit/runbook на `launchd`, сохраняя те же process boundaries, health и immutable release».
 
-**Статус:** OPEN. Тимлид должен подтвердить целевой хост и при macOS создать ADR.
+**Статус: RESOLVED** решением владельца 2026-08-10, зафиксировано в `docs/adr/ADR-012-development-and-production-hosts.md`.
+
+| Роль | Платформа |
+|---|---|
+| Development host | macOS / Darwin arm64 |
+| Production host | Linux + `systemd` |
+
+Ветка `launchd` не применяется: целевой 24/7-хост — Linux, то есть reference environment §4.
+
+**Остаётся OPEN (перенесено в OPEN-005):** архитектура production-хоста (x86_64 vs arm64) и точная версия Python.
 
 ## CONFLICT-005: BTC-specific thresholds в Heatmap spec vs instrument-neutral roadmap
 
@@ -138,3 +147,15 @@ Roadmap §6.8 задаёт стартовый target raw retention 30 суток
 ## OPEN-004: NTP и clock sync
 
 Roadmap §18.1 требует NTP sync для Bybit authentication window. Конкретный NTP source и допустимое смещение не зафиксированы.
+
+## OPEN-005: Архитектура production-хоста и точная версия Python (REQUIRED до P1-S1-004 и ADR-005)
+
+ADR-012 зафиксировал Linux + `systemd` как production-хост, но не архитектуру и не версию Python.
+
+Нужно утвердить:
+- архитектуру: x86_64 или arm64 (`linux-x86_64` vs `linux-aarch64` в каталоге артефактов);
+- точную версию Python (например 3.13.7), а не `>=3.12`.
+
+**Рекомендованный default (тимлид, 2026-08-10):** Linux x86_64 и CPython 3.13.7. Статус — рекомендация, не решение: остаётся `OPEN` до подтверждения фактического железа. Каталог артефактов при этом варианте — `deploy/dependencies/linux-x86_64/`.
+
+**Почему блокирует:** PyArrow (P1-S1-004) и PostgreSQL-драйвер (ADR-005) поставляются бинарными колёсами, привязанными к архитектуре и `cp3xx`. Ввод их в зависимости без этого решения означает фиксацию состава для неизвестной платформы. До решения Linux-lock (P1-S1-006) не может быть снят.
