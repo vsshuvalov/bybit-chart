@@ -148,6 +148,91 @@
 - Backward-compatibility fixture
 - Нет `float` в persistent schemas
 
-**Evidence:** `pytest contracts/ packages/numeric/`
+**Evidence:** `pytest tests/contracts/test_contracts_and_numeric.py` → 55 passed
+
+---
+
+### P1-S1-002 | P0 | Stage 1 | DONE
+
+**Тема:** `packages/storage`: WAL, offsets, state machine сегментов, atomic commit, manifest
+
+**Owner:** Claude Code
+**Зависимости:** P1-S1-001
+**Scope:**
+- `offsets.py` — accepted/durable/closed/published/consumer + инварианты (§6.2)
+- `frames.py` — формат фрейма length+CRC32, torn/corrupt detection (§6.2)
+- `wal.py` — append, bounded group commit, recovery, read_range (§5.1, §6.2)
+- `segment_state.py` — ACTIVE→CLOSED_PENDING→PUBLISHING→COMMITTED→FAILED, lease, quarantine (§6.3)
+- `manifest.py` — atomic replace, published_offset, партиционирование (§6.4, §6.5)
+- `atomic_commit.py` — tmp→validate→fsync→rename→fsync(dir)→manifest→checkpoint (§6.4)
+
+**Do-not-touch:** source specs; удаление сегментов не реализуется в этой задаче
+
+**Acceptance criteria:**
+- [x] Инварианты offsets: durable≤accepted, closed≤durable, published≤closed
+- [x] live publish ceiling = durableOffset (speculative tail запрещён)
+- [x] torn frame отбрасывается до последнего валидного boundary
+- [x] durable_violation репортится как incident
+- [x] crash-matrix: 4 точки аварии не публикуют историю и не двигают checkpoint
+- [x] orphan после rename не усыновляется автоматически
+- [x] lease: только holder коммитит; просроченный не перезахватывает старым generation
+- [x] quarantine: corrupt/incomplete/legacy/schemaMismatch — разные состояния
+- [x] удаление только COMMITTED + retention_ok
+- [x] gap в манифесте останавливает published_offset
+- [x] duplicate replay не удваивает записи
+
+**Evidence:** `pytest -q` → 156 passed (55 contracts+numeric, 30 offsets+frames, 34 segment+manifest, 16 crash-matrix, 21 WAL recovery)
+
+---
+
+### P1-S1-003 | P0 | Stage 1 | TODO
+
+**Тема:** Dependency lock и SBOM
+
+**Owner:** не назначен
+**Зависимости:** P1-S1-001
+**Scope:** Roadmap §4 требует фиксацию всех зависимостей lock-файлом и SBOM. Сейчас в `pyproject.toml` версии не залочены, lock-файла нет.
+
+**Acceptance criteria:**
+- Lock-файл с точными версиями и хешами
+- SBOM в согласованном формате
+- CI проверяет соответствие lock-файла окружению
+
+**Evidence:** —
+
+---
+
+### P1-S1-004 | P0 | Stage 1 | TODO
+
+**Тема:** Parquet writer/validator поверх `atomic_commit`
+
+**Owner:** не назначен
+**Зависимости:** P1-S1-002, ADR-004 (Decimal128 precision/scale)
+**Scope:** Реальный PyArrow writer и footer-валидатор через существующий контракт `SegmentWriter` / `validator`. Сейчас формат файла не зафиксирован намеренно — PyArrow не является зависимостью Stage 1.
+
+**Acceptance criteria:**
+- Arrow schema для RawTrade/RawBookEvent/RawLiquidation с Decimal128
+- Валидация footer/schemaVersion/rowCount реального Parquet
+- `iter_batches` вместо `to_pylist()` (§6.4 запрещает полный to_pylist в live-процессе)
+- Crash-matrix проходит с реальным writer
+
+**Evidence:** —
+
+---
+
+### P1-S1-005 | P1 | Stage 1 | TODO
+
+**Тема:** Property-based тесты на Hypothesis
+
+**Owner:** не назначен
+**Зависимости:** P1-S1-002
+**Scope:** Roadmap §4 фиксирует pytest + Hypothesis. Сейчас Hypothesis не установлен, тесты только example-based.
+
+**Acceptance criteria:**
+- Property: любой набор payload → encode/scan round-trip без потерь
+- Property: произвольная точка обрезки файла → recovery не даёт валидных данных за boundary
+- Property: последовательность advance_* сохраняет инварианты offsets
+
+**Evidence:** —
 
 ---

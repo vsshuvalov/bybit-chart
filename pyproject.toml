@@ -1,0 +1,14 @@
+[project]
+name = "bybit-orderflow-platform"
+version = "0.0.0"
+description = "Bybit Order Flow platform (Stage 1: schemas and storage core)"
+requires-python = ">=3.12"
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+addopts = "-ra --strict-markers"
+markers = [
+    "fault: fault-injection и crash-consistency тесты",
+    "contract: контрактные тесты схем и хранилища",
+]

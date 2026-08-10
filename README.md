@@ -119,32 +119,44 @@ docs/
 
 ## Текущий этап реализации
 
-**Stage 0 — Greenfield bootstrap и design lock**
+**Stage 1 — Shared schemas и storage core** (в работе)
 
-Что создано:
-- структура репозитория;
-- нормативные документы (source artifacts);
-- архитектурный baseline (`TARGET.md`, `DECISIONS_PENDING.md`);
-- трассировка требований (63 REQ);
-- ADR реестр (11 открытых ADR);
-- журналы `NEXT.md`, `TODO.md`, `README.md`.
+Stage 0 завершён: структура репозитория, source artifacts, архитектурный baseline, трассировка 63 требований, реестр 11 открытых ADR.
 
-Что не создано: никакого рабочего кода. Первый commit ожидает подтверждения.
+Реализовано в Stage 1:
+
+| Модуль | Что есть |
+|---|---|
+| `packages/numeric` | PriceTicks/QtySteps/Decimal128; binary float запрещён в persistent данных |
+| `contracts` | RawTrade, RawBookEvent, RawRpiBookEvent, BookCheckpoint, RawLiquidation, GapMarker, RawEventEnvelope |
+| `packages/storage` | WAL с group commit и torn-frame recovery, offsets и их инварианты, state machine сегментов с lease/fencing, manifest, atomic commit protocol |
+
+**Не реализовано:** ни один из шести сервисов (`services/*` пусты), Parquet writer, PostgreSQL, frontend, simulator, execution, стратегии, AI. Подключений к Bybit нет.
 
 ---
 
 ## Запуск тестов
 
-Test harness появится в Stage 1. До этого команды запуска не публикуются — здесь нечего запускать.
+```bash
+source .venv/bin/activate
+python3 -m pytest -q
+```
+
+Текущий результат: **156 passed, 0 failed, 0 skipped**.
+
+Только backend unit/contract/fault тесты. Frontend (Vitest/Playwright), integration, soak, performance и demo/testnet тесты появятся на соответствующих этапах.
 
 ---
 
 ## Известные ограничения и открытые решения
 
-1. ADR-001…011 открыты — требуется утверждение тимлидом до начала реализации.
-2. Целевой хост (macOS vs Linux) не подтверждён — CONFLICT-004.
-3. Bybit client library не выбрана — OPEN-001.
-4. Full Orderbook: DEFERRED — availability mainnet не проверена.
-5. Все BTC-absolute thresholds в конфигурациях — `UNCALIBRATED` до замеров.
+1. ADR-001…011 открыты — требуется утверждение тимлидом.
+2. Нет lock-файла и SBOM — нарушение Roadmap §4, задача P1-S1-003.
+3. Формат файла сегмента не зафиксирован: `atomic_commit` принимает writer как callback, реальный Parquet writer — задача P1-S1-004 (блокируется ADR-004).
+4. Property-тесты (Hypothesis) не написаны — задача P1-S1-005.
+5. Целевой хост (macOS vs Linux) не подтверждён — CONFLICT-004.
+6. Bybit client library не выбрана — OPEN-001.
+7. Full Orderbook: DEFERRED — availability mainnet не проверена.
+8. Все BTC-absolute thresholds — `UNCALIBRATED` до замеров.
 
 Подробно: `docs/architecture/DECISIONS_PENDING.md`.
