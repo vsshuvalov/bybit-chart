@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bybit Chart - Footprint & Order Flow</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: #131722;
+            color: #d1d4dc;
+        }
+
+        .container {
+            max-width: 1800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 1px solid #2a2e39;
+        }
+
+        h1 {
+            font-size: 24px;
+            font-weight: 500;
+        }
+
+        .controls {
+            display: flex;
+            gap: 15px;
+            align-items: flex-end;
+        }
+
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+
+        label {
+            font-size: 12px;
+            color: #787b86;
+            text-transform: uppercase;
+        }
+
+        select, input {
+            background: #1e222d;
+            border: 1px solid #2a2e39;
+            color: #d1d4dc;
+            padding: 8px 12px;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+
+        button {
+            background: #2962ff;
+            border: none;
+            color: white;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+
+        button:hover {
+            background: #1e53e5;
+        }
+
+        .grid-2col {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+
+        .panel {
+            background: #1e222d;
+            border-radius: 6px;
+            border: 1px solid #2a2e39;
+            padding: 15px;
+        }
+
+        .panel-header {
+            font-size: 14px;
+            font-weight: 600;
+            color: #787b86;
+            text-transform: uppercase;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #2a2e39;
+        }
+
+        /* Footprint Chart */
+        #footprintChart {
+            height: 500px;
+            overflow-x: auto;
+            overflow-y: auto;
+        }
+
+        .footprint-grid {
+            display: inline-block;
+            border-collapse: collapse;
+        }
+
+        .footprint-cell {
+            min-width: 80px;
+            height: 40px;
+            border: 1px solid #2a2e39;
+            padding: 5px;
+            text-align: center;
+            font-size: 11px;
+            position: relative;
+        }
+
+        .footprint-cell-buy {
+            background: rgba(38, 166, 154, 0.2);
+        }
+
+        .footprint-cell-sell {
+            background: rgba(239, 83, 80, 0.2);
+        }
+
+        .footprint-cell-balanced {
+            background: rgba(120, 123, 134, 0.1);
+        }
+
+        .footprint-poc {
+            border: 2px solid #fdd835 !important;
+            font-weight: bold;
+        }
+
+        .footprint-volume {
+            font-size: 10px;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .footprint-buy-vol {
+            color: #26a69a;
+        }
+
+        .footprint-sell-vol {
+            color: #ef5350;
+        }
+
+        .footprint-delta {
+            font-size: 12px;
+            font-weight: 600;
+            margin-top: 2px;
+        }
+
+        /* Time & Sales Tape */
+        #tapeFeed {
+            height: 500px;
+            overflow-y: auto;
+        }
+
+        .tape-row {
+            display: grid;
+            grid-template-columns: 80px 100px 80px 80px;
+            gap: 10px;
+            padding: 6px 10px;
+            border-bottom: 1px solid #2a2e39;
+            font-size: 12px;
+            font-family: 'Courier New', monospace;
+        }
+
+        .tape-row:hover {
+            background: #2a2e39;
+        }
+
+        .tape-time {
+            color: #787b86;
+        }
+
+        .tape-price {
+            font-weight: 600;
+        }
+
+        .tape-price-buy {
+            color: #26a69a;
+        }
+
+        .tape-price-sell {
+            color: #ef5350;
+        }
+
+        .tape-quantity {
+            color: #d1d4dc;
+        }
+
+        .tape-large {
+            background: rgba(253, 216, 53, 0.1);
+            border-left: 2px solid #fdd835;
+        }
+
+        .tape-side {
+            font-weight: 600;
+            text-align: right;
+        }
+
+        .status {
+            padding: 10px;
+            border-radius: 4px;
+            font-size: 13px;
+            margin-top: 15px;
+        }
+
+        .status.info {
+            background: #2a2e39;
+            border: 1px solid #434651;
+        }
+
+        .status.success {
+            background: #1a472a;
+            border: 1px solid #26a69a;
+        }
+
+        .status.error {
+            background: #4a1a1a;
+            border: 1px solid #ef5350;
+        }
+
+        /* Scrollbar styling */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: #1e222d;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #2a2e39;
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: #434651;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Bybit Chart - Footprint & Order Flow</h1>
+            <div class="controls">
+                <div class="control-group">
+                    <label>Symbol</label>
+                    <select id="symbol">
+                        <option value="BTCUSDT" selected>BTCUSDT</option>
+                        <option value="ETHUSDT">ETHUSDT</option>
+                        <option value="XRPUSDT">XRPUSDT</option>
+                    </select>
+                </div>
+                <div class="control-group">
+                    <label>Interval</label>
+                    <select id="interval">
+                        <option value="1m" selected>1m</option>
+                        <option value="5m">5m</option>
+                        <option value="15m">15m</option>
+                        <option value="1h">1h</option>
+                    </select>
+                </div>
+                <div class="control-group">
+                    <label>&nbsp;</label>
+                    <button id="loadBtn">Load Data</button>
+                </div>
+            </div>
+        </header>
+
+        <div class="grid-2col">
+            <!-- Footprint Chart -->
+            <div class="panel">
+                <div class="panel-header">Footprint Chart - Volume Distribution</div>
+                <div id="footprintChart"></div>
+            </div>
+
+            <!-- Time & Sales Tape -->
+            <div class="panel">
+                <div class="panel-header">Time & Sales - Trade Stream</div>
+                <div id="tapeFeed"></div>
+            </div>
+        </div>
+
+        <div id="status" class="status info">
+            Ready to load order flow data...
+        </div>
+    </div>
+
+    <script>
+        // Configuration
+        const API_BASE_URL = 'http://127.0.0.1:8000/api/v1';
+
+        const SYMBOL_CONSTANTS = {
+            'BTCUSDT': { PRICE_TICK: 0.01, QTY_STEP: 0.001 },
+            'ETHUSDT': { PRICE_TICK: 0.01, QTY_STEP: 0.01 },
+            'XRPUSDT': { PRICE_TICK: 0.0001, QTY_STEP: 0.1 }
+        };
+
+        // State
+        let currentSymbol = 'BTCUSDT';
+        let currentInterval = '1m';
+
+        // Render Footprint Chart
+        function renderFootprint(candles) {
+            const container = document.getElementById('footprintChart');
+            container.innerHTML = '';
+
+            if (!candles || candles.length === 0) {
+                container.innerHTML = '<p style="color: #787b86; text-align: center; padding: 50px;">No footprint data available</p>';
+                return;
+            }
+
+            const table = document.createElement('table');
+            table.className = 'footprint-grid';
+
+            // Get all unique price levels across all candles
+            const allPrices = new Set();
+            candles.forEach(candle => {
+                candle.cells.forEach(cell => allPrices.add(cell.price_ticks));
+            });
+
+            const sortedPrices = Array.from(allPrices).sort((a, b) => b - a);
+
+            // Build grid: rows = price levels, cols = time bins
+            sortedPrices.forEach(priceTicks => {
+                const row = document.createElement('tr');
+
+                candles.forEach(candle => {
+                    const cell = candle.cells.find(c => c.price_ticks === priceTicks);
+                    const td = document.createElement('td');
+                    td.className = 'footprint-cell';
+
+                    if (cell) {
+                        // Determine color based on imbalance
+                        if (cell.imbalance > 0.2) {
+                            td.classList.add('footprint-cell-buy');
+                        } else if (cell.imbalance < -0.2) {
+                            td.classList.add('footprint-cell-sell');
+                        } else {
+                            td.classList.add('footprint-cell-balanced');
+                        }
+
+                        // POC marker
+                        if (priceTicks === candle.poc_price) {
+                            td.classList.add('footprint-poc');
+                        }
+
+                        // Cell content
+                        const constants = SYMBOL_CONSTANTS[currentSymbol];
+                        const price = (priceTicks * constants.PRICE_TICK).toFixed(constants.PRICE_TICK < 0.01 ? 4 : 2);
+
+                        td.innerHTML = `
+                            <div class="footprint-volume">
+                                <span class="footprint-buy-vol">${cell.buy_volume}</span>
+                                <span class="footprint-sell-vol">${cell.sell_volume}</span>
+                            </div>
+                            <div class="footprint-delta" style="color: ${cell.delta > 0 ? '#26a69a' : '#ef5350'}">
+                                Δ${cell.delta > 0 ? '+' : ''}${cell.delta}
+                            </div>
+                        `;
+                    }
+
+                    row.appendChild(td);
+                });
+
+                table.appendChild(row);
+            });
+
+            container.appendChild(table);
+        }
+
+        // Render Time & Sales Tape
+        function renderTape(tapeData) {
+            const container = document.getElementById('tapeFeed');
+            container.innerHTML = '';
+
+            if (!tapeData || tapeData.length === 0) {
+                container.innerHTML = '<p style="color: #787b86; text-align: center; padding: 50px;">No tape data available</p>';
+                return;
+            }
+
+            const constants = SYMBOL_CONSTANTS[currentSymbol];
+
+            // Calculate avg volume for large trade detection
+            const avgVolume = tapeData.reduce((sum, t) => sum + t.qty_steps, 0) / tapeData.length;
+            const largeThreshold = avgVolume * 3;
+
+            tapeData.forEach(trade => {
+                const row = document.createElement('div');
+                row.className = 'tape-row';
+
+                if (trade.qty_steps >= largeThreshold) {
+                    row.classList.add('tape-large');
+                }
+
+                const time = new Date(trade.timestamp_us / 1000).toLocaleTimeString();
+                const price = (trade.price_ticks * constants.PRICE_TICK).toFixed(constants.PRICE_TICK < 0.01 ? 4 : 2);
+                const quantity = (trade.qty_steps * constants.QTY_STEP).toFixed(3);
+                const side = trade.aggressor_side;
+
+                row.innerHTML = `
+                    <div class="tape-time">${time}</div>
+                    <div class="tape-price tape-price-${side.toLowerCase()}">${price}</div>
+                    <div class="tape-quantity">${quantity}</div>
+                    <div class="tape-side tape-price-${side.toLowerCase()}">${side}</div>
+                `;
+
+                container.appendChild(row);
+            });
+        }
+
+        // Load Data
+        async function loadData() {
+            const symbol = document.getElementById('symbol').value;
+            const interval = document.getElementById('interval').value;
+
+            currentSymbol = symbol;
+            currentInterval = interval;
+
+            showStatus('Loading data...', 'info');
+
+            try {
+                const endTs = Date.now() * 1000;
+                const startTs = endTs - (60 * 60 * 1000 * 1000); // 1h
+
+                // Load Footprint
+                const footprintUrl = `${API_BASE_URL}/footprint/${symbol}?start_ts=${startTs}&end_ts=${endTs}&interval=${interval}`;
+                const footprintRes = await fetch(footprintUrl);
+                const footprintData = await footprintRes.json();
+
+                renderFootprint(footprintData.candles);
+
+                // Load Tape
+                const tapeUrl = `${API_BASE_URL}/tape/${symbol}?start_ts=${startTs}&end_ts=${endTs}&limit=100`;
+                const tapeRes = await fetch(tapeUrl);
+                const tapeData = await tapeRes.json();
+
+                renderTape(tapeData.tape);
+
+                showStatus(`Loaded ${footprintData.count} footprint candles, ${tapeData.count} trades`, 'success');
+            } catch (error) {
+                console.error('Error loading data:', error);
+                showStatus(`Error: ${error.message}`, 'error');
+            }
+        }
+
+        // Show Status
+        function showStatus(message, type) {
+            const status = document.getElementById('status');
+            status.textContent = message;
+            status.className = `status ${type}`;
+        }
+
+        // Event listeners
+        document.getElementById('loadBtn').addEventListener('click', loadData);
+
+        // Initial load
+        loadData();
+    </script>
+</body>
+</html>

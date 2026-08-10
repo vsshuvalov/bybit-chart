@@ -1,0 +1,520 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bybit Chart - Alert Management</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: #131722;
+            color: #d1d4dc;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        header {
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 1px solid #2a2e39;
+        }
+
+        h1 {
+            font-size: 24px;
+            font-weight: 500;
+        }
+
+        .grid-2col {
+            display: grid;
+            grid-template-columns: 400px 1fr;
+            gap: 20px;
+        }
+
+        .panel {
+            background: #1e222d;
+            border-radius: 6px;
+            border: 1px solid #2a2e39;
+            padding: 20px;
+        }
+
+        .panel-header {
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #2a2e39;
+        }
+
+        .form-group {
+            margin-bottom: 15px;
+        }
+
+        label {
+            display: block;
+            font-size: 12px;
+            color: #787b86;
+            text-transform: uppercase;
+            margin-bottom: 5px;
+        }
+
+        select, input {
+            width: 100%;
+            background: #131722;
+            border: 1px solid #2a2e39;
+            color: #d1d4dc;
+            padding: 10px;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+
+        button {
+            width: 100%;
+            background: #2962ff;
+            border: none;
+            color: white;
+            padding: 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            margin-top: 10px;
+        }
+
+        button:hover {
+            background: #1e53e5;
+        }
+
+        .alert-list {
+            max-height: 600px;
+            overflow-y: auto;
+        }
+
+        .alert-card {
+            background: #131722;
+            border: 1px solid #2a2e39;
+            border-radius: 4px;
+            padding: 15px;
+            margin-bottom: 10px;
+        }
+
+        .alert-card.triggered {
+            border-left: 3px solid #fdd835;
+            background: rgba(253, 216, 53, 0.05);
+        }
+
+        .alert-card.active {
+            border-left: 3px solid #2962ff;
+        }
+
+        .alert-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .alert-type {
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+            color: #2962ff;
+        }
+
+        .alert-status {
+            font-size: 11px;
+            padding: 3px 8px;
+            border-radius: 3px;
+            text-transform: uppercase;
+        }
+
+        .alert-status.active {
+            background: rgba(41, 98, 255, 0.2);
+            color: #2962ff;
+        }
+
+        .alert-status.triggered {
+            background: rgba(253, 216, 53, 0.2);
+            color: #fdd835;
+        }
+
+        .alert-symbol {
+            font-size: 14px;
+            font-weight: 600;
+            margin-bottom: 5px;
+        }
+
+        .alert-condition {
+            font-size: 13px;
+            color: #787b86;
+            margin-bottom: 10px;
+        }
+
+        .alert-message {
+            font-size: 12px;
+            color: #26a69a;
+            padding: 8px;
+            background: rgba(38, 166, 154, 0.1);
+            border-radius: 3px;
+            margin-top: 10px;
+        }
+
+        .alert-actions {
+            display: flex;
+            gap: 10px;
+            margin-top: 10px;
+        }
+
+        .btn-small {
+            width: auto;
+            padding: 6px 12px;
+            font-size: 12px;
+            margin-top: 0;
+        }
+
+        .btn-delete {
+            background: #ef5350;
+        }
+
+        .btn-delete:hover {
+            background: #e53935;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 50px;
+            color: #787b86;
+        }
+
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .stat-card {
+            background: #131722;
+            padding: 15px;
+            border-radius: 4px;
+            border: 1px solid #2a2e39;
+        }
+
+        .stat-label {
+            font-size: 11px;
+            color: #787b86;
+            text-transform: uppercase;
+            margin-bottom: 5px;
+        }
+
+        .stat-value {
+            font-size: 24px;
+            font-weight: 600;
+        }
+
+        .notification {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: #1e222d;
+            border: 1px solid #fdd835;
+            border-radius: 4px;
+            padding: 15px 20px;
+            min-width: 300px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            animation: slideIn 0.3s ease;
+            z-index: 1000;
+        }
+
+        @keyframes slideIn {
+            from {
+                transform: translateX(400px);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+
+        .notification-header {
+            font-weight: 600;
+            color: #fdd835;
+            margin-bottom: 5px;
+        }
+
+        .notification-body {
+            font-size: 13px;
+            color: #d1d4dc;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Alert Management</h1>
+        </header>
+
+        <div class="stats">
+            <div class="stat-card">
+                <div class="stat-label">Active Alerts</div>
+                <div class="stat-value" id="activeCount">0</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Triggered Today</div>
+                <div class="stat-value" id="triggeredCount">0</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Total Alerts</div>
+                <div class="stat-value" id="totalCount">0</div>
+            </div>
+        </div>
+
+        <div class="grid-2col">
+            <!-- Create Alert Form -->
+            <div class="panel">
+                <div class="panel-header">Create New Alert</div>
+
+                <form id="alertForm">
+                    <div class="form-group">
+                        <label>Symbol</label>
+                        <select id="alertSymbol" required>
+                            <option value="BTCUSDT">BTCUSDT</option>
+                            <option value="ETHUSDT">ETHUSDT</option>
+                            <option value="XRPUSDT">XRPUSDT</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Alert Type</label>
+                        <select id="alertType" required>
+                            <option value="price_above">Price Above</option>
+                            <option value="price_below">Price Below</option>
+                            <option value="volume_spike">Volume Spike (Nx avg)</option>
+                            <option value="delta_positive">Delta Positive (buying pressure)</option>
+                            <option value="delta_negative">Delta Negative (selling pressure)</option>
+                            <option value="imbalance_bullish">Orderbook Imbalance (bullish)</option>
+                            <option value="imbalance_bearish">Orderbook Imbalance (bearish)</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Threshold</label>
+                        <input type="number" id="alertThreshold" step="0.01" required placeholder="e.g., 65000 for price, 3.0 for volume multiplier">
+                    </div>
+
+                    <button type="submit">Create Alert</button>
+                </form>
+            </div>
+
+            <!-- Alert List -->
+            <div class="panel">
+                <div class="panel-header">Your Alerts</div>
+                <div id="alertList" class="alert-list"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Mock Alert Engine (in production, connect to backend API)
+        class MockAlertEngine {
+            constructor() {
+                this.alerts = [];
+                this.alertIdCounter = 0;
+                this.loadFromStorage();
+            }
+
+            createAlert(symbol, alertType, threshold) {
+                const alert = {
+                    id: `alert_${++this.alertIdCounter}`,
+                    symbol,
+                    alert_type: alertType,
+                    threshold,
+                    status: 'active',
+                    created_at: new Date().toISOString(),
+                    triggered_at: null,
+                    message: null,
+                };
+
+                this.alerts.push(alert);
+                this.saveToStorage();
+                return alert;
+            }
+
+            deleteAlert(alertId) {
+                this.alerts = this.alerts.filter(a => a.id !== alertId);
+                this.saveToStorage();
+            }
+
+            getActiveAlerts() {
+                return this.alerts.filter(a => a.status === 'active');
+            }
+
+            getTriggeredAlerts() {
+                return this.alerts.filter(a => a.status === 'triggered');
+            }
+
+            // Mock trigger (simulated)
+            simulateTrigger(alertId) {
+                const alert = this.alerts.find(a => a.id === alertId);
+                if (alert && alert.status === 'active') {
+                    alert.status = 'triggered';
+                    alert.triggered_at = new Date().toISOString();
+                    alert.message = this.generateMessage(alert);
+                    this.saveToStorage();
+                    return alert;
+                }
+                return null;
+            }
+
+            generateMessage(alert) {
+                const typeMessages = {
+                    'price_above': `Price reached ${alert.threshold}`,
+                    'price_below': `Price dropped below ${alert.threshold}`,
+                    'volume_spike': `Volume spike detected: ${alert.threshold}x average`,
+                    'delta_positive': `Strong buying pressure: Delta = ${alert.threshold}`,
+                    'delta_negative': `Strong selling pressure: Delta = -${alert.threshold}`,
+                    'imbalance_bullish': `Bullish orderbook imbalance: ${alert.threshold}`,
+                    'imbalance_bearish': `Bearish orderbook imbalance: ${alert.threshold}`,
+                };
+                return typeMessages[alert.alert_type] || 'Alert triggered';
+            }
+
+            saveToStorage() {
+                localStorage.setItem('bybit_alerts', JSON.stringify(this.alerts));
+            }
+
+            loadFromStorage() {
+                const stored = localStorage.getItem('bybit_alerts');
+                if (stored) {
+                    this.alerts = JSON.parse(stored);
+                    this.alertIdCounter = this.alerts.length;
+                }
+            }
+        }
+
+        // Initialize
+        const alertEngine = new MockAlertEngine();
+
+        // Render Alerts
+        function renderAlerts() {
+            const container = document.getElementById('alertList');
+            const alerts = alertEngine.alerts;
+
+            if (alerts.length === 0) {
+                container.innerHTML = '<div class="empty-state">No alerts created yet</div>';
+                updateStats();
+                return;
+            }
+
+            container.innerHTML = '';
+
+            // Sort: active first, then triggered
+            const sortedAlerts = [...alerts].sort((a, b) => {
+                if (a.status === 'active' && b.status !== 'active') return -1;
+                if (a.status !== 'active' && b.status === 'active') return 1;
+                return new Date(b.created_at) - new Date(a.created_at);
+            });
+
+            sortedAlerts.forEach(alert => {
+                const card = document.createElement('div');
+                card.className = `alert-card ${alert.status}`;
+
+                const typeLabel = alert.alert_type.replace('_', ' ').toUpperCase();
+
+                card.innerHTML = `
+                    <div class="alert-header">
+                        <div class="alert-type">${typeLabel}</div>
+                        <div class="alert-status ${alert.status}">${alert.status}</div>
+                    </div>
+                    <div class="alert-symbol">${alert.symbol}</div>
+                    <div class="alert-condition">
+                        Threshold: ${alert.threshold}
+                    </div>
+                    ${alert.message ? `<div class="alert-message">${alert.message}</div>` : ''}
+                    <div class="alert-actions">
+                        ${alert.status === 'active' ? `<button class="btn-small" onclick="testTrigger('${alert.id}')">Test Trigger</button>` : ''}
+                        <button class="btn-small btn-delete" onclick="deleteAlert('${alert.id}')">Delete</button>
+                    </div>
+                `;
+
+                container.appendChild(card);
+            });
+
+            updateStats();
+        }
+
+        // Update Stats
+        function updateStats() {
+            const active = alertEngine.getActiveAlerts().length;
+            const triggered = alertEngine.getTriggeredAlerts().length;
+            const total = alertEngine.alerts.length;
+
+            document.getElementById('activeCount').textContent = active;
+            document.getElementById('triggeredCount').textContent = triggered;
+            document.getElementById('totalCount').textContent = total;
+        }
+
+        // Show Notification
+        function showNotification(alert) {
+            const notification = document.createElement('div');
+            notification.className = 'notification';
+            notification.innerHTML = `
+                <div class="notification-header">🔔 Alert Triggered: ${alert.symbol}</div>
+                <div class="notification-body">${alert.message}</div>
+            `;
+
+            document.body.appendChild(notification);
+
+            setTimeout(() => {
+                notification.remove();
+            }, 5000);
+        }
+
+        // Create Alert
+        document.getElementById('alertForm').addEventListener('submit', (e) => {
+            e.preventDefault();
+
+            const symbol = document.getElementById('alertSymbol').value;
+            const alertType = document.getElementById('alertType').value;
+            const threshold = parseFloat(document.getElementById('alertThreshold').value);
+
+            const alert = alertEngine.createAlert(symbol, alertType, threshold);
+
+            renderAlerts();
+
+            // Reset form
+            document.getElementById('alertThreshold').value = '';
+        });
+
+        // Delete Alert
+        window.deleteAlert = function(alertId) {
+            if (confirm('Delete this alert?')) {
+                alertEngine.deleteAlert(alertId);
+                renderAlerts();
+            }
+        };
+
+        // Test Trigger
+        window.testTrigger = function(alertId) {
+            const alert = alertEngine.simulateTrigger(alertId);
+            if (alert) {
+                renderAlerts();
+                showNotification(alert);
+            }
+        };
+
+        // Initial render
+        renderAlerts();
+    </script>
+</body>
+</html>
