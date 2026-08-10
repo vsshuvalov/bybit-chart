@@ -405,6 +405,7 @@ class WalPartition:
         end_offset: int,
         *,
         parquet_writer_class=None,
+        use_real_deserialization: bool = False,
     ) -> Path:
         """Закрыть WAL-диапазон и опубликовать как Parquet-сегмент.
 
@@ -414,6 +415,8 @@ class WalPartition:
             start_offset: начало диапазона (inclusive)
             end_offset: конец диапазона (exclusive)
             parquet_writer_class: класс ParquetWriter (инъекция для тестов)
+            use_real_deserialization: использовать реальную десериализацию событий
+                (True для production, False для stub-тестов)
 
         Returns:
             Path к опубликованному .parquet файлу
@@ -422,8 +425,8 @@ class WalPartition:
             CommitError: commit не удался (файл удалён, состояние не изменено)
 
         Примечание: Полная десериализация событий (Frame.payload → dict)
-        откладывается до Stage 2. Сейчас записываются stub-строки для
-        проверки интеграции commit_segment + ParquetWriter + manifest.
+        доступна через use_real_deserialization=True (P2-S2-004).
+        Stub-режим (False) используется в тестах WAL → Parquet интеграции.
         """
         from decimal import Decimal
         from packages.storage.atomic_commit import (
@@ -448,28 +451,50 @@ class WalPartition:
                 "сегмент без записей не публикуется"
             )
 
-        # 2. Конвертируем Frame → row (stub для MVP)
+        # 2. Конвертируем Frame → row
         rows = []
-        for frame in frames:
-            row = {
-                "timestampUs": frame.offset,  # stub: используем offset как timestamp
-                "eventType": "raw_frame",     # stub: реальная десериализация в Stage 2
-                "symbol": self.partition_id,
-                "priceTicks": 0,
-                "qtySteps": 0,
-                "depth": 0,
-                "updateId": 0,
-                "sequence": 0,
-                "levelCount": 0,
-                "coverageBoundaryTicks": 0,
-                "coverageBps": Decimal("0.0000"),
-                "isFeedRangeComplete": False,
-                "connectionEpoch": "stub",
-                "exchangeTimestampMs": 0,
-                "outerTimestampMs": 0,
-                "receiveTimestampMs": 0,
-            }
-            rows.append(row)
+        if use_real_deserialization:
+            # Реальная десериализация: Frame.payload → RawTrade → Parquet row
+            from packages.bybit.collector import (
+                deserialize_trade_from_payload,
+                raw_trade_to_parquet_row,
+            )
+
+            for frame in frames:
+                try:
+                    trade = deserialize_trade_from_payload(frame.payload)
+                    row = raw_trade_to_parquet_row(trade)
+                    rows.append(row)
+                except Exception as exc:
+                    # Логируем и пропускаем некорректные записи
+                    # (Roadmap §6: torn write protection на уровне фреймов)
+                    import logging
+                    logger = logging.getLogger(__name__)
+                    logger.warning(
+                        f"Пропущена некорректная запись на offset {frame.offset}: {exc}"
+                    )
+        else:
+            # Stub для тестов (P1-S1-004 compatibility)
+            for frame in frames:
+                row = {
+                    "timestampUs": frame.offset,  # stub: используем offset как timestamp
+                    "eventType": "raw_frame",     # stub: реальная десериализация в Stage 2
+                    "symbol": self.partition_id,
+                    "priceTicks": 0,
+                    "qtySteps": 0,
+                    "depth": 0,
+                    "updateId": 0,
+                    "sequence": 0,
+                    "levelCount": 0,
+                    "coverageBoundaryTicks": 0,
+                    "coverageBps": Decimal("0.0000"),
+                    "isFeedRangeComplete": False,
+                    "connectionEpoch": "stub",
+                    "exchangeTimestampMs": 0,
+                    "outerTimestampMs": 0,
+                    "receiveTimestampMs": 0,
+                }
+                rows.append(row)
 
         # 3. Подготовка payload для commit_segment
         segment_id = segment_name(start_offset).replace(".wal", "")
