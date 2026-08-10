@@ -1,0 +1,73 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+.eggs/
+*.egg
+.venv/
+venv/
+env/
+.env
+.env.*
+
+# Secrets — никогда в git
+secrets/
+*.secret
+api_keys.*
+*.pem
+*.key
+credentials.*
+
+# Runtime и production data — никогда в git
+data/
+*.wal
+*.parquet
+*.tmp
+*.log
+*.db
+
+# PostgreSQL
+*.sql.bak
+pg_data/
+
+# Node / Frontend
+node_modules/
+dist/
+.vite/
+*.local
+
+# Тесты / coverage
+.pytest_cache/
+.coverage
+htmlcov/
+.hypothesis/
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Editors
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Research artifacts (большие — в отдельном volume)
+research/artifacts/
+research/datasets/
+research/models/
+
+# Prometheus / Grafana runtime
+prometheus_data/
+grafana_data/
+
+# Системные
+*.pid
+*.lock
