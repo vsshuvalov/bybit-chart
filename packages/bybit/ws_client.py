@@ -66,7 +66,7 @@ class BybitWebSocketClient:
             await client.subscribe("publicTrade", "BTCUSDT")
             await client.subscribe("orderbook.200", "BTCUSDT")
         """
-        if self.ws is None or self.ws.closed:
+        if self.ws is None:
             raise RuntimeError("WebSocket не подключен — вызовите connect() сначала")
 
         topic = f"{channel}.{symbol}"
@@ -81,7 +81,7 @@ class BybitWebSocketClient:
 
     async def _send_ping(self) -> None:
         """Отправить ping для keepalive (каждые 20s)."""
-        while self.running and self.ws and not self.ws.closed:
+        while self.running and self.ws:
             try:
                 await self.ws.send(json.dumps({"op": "ping"}))
                 logger.debug("Отправлен ping")
@@ -112,7 +112,7 @@ class BybitWebSocketClient:
 
         while self.running:
             try:
-                if self.ws is None or self.ws.closed:
+                if self.ws is None:
                     logger.info("Переподключение...")
                     await self.connect()
                     # Восстанавливаем подписки
@@ -142,7 +142,7 @@ class BybitWebSocketClient:
                             continue
 
                         # Передача в callback
-                        on_message(message)
+                        await on_message(message)
 
                     except json.JSONDecodeError as exc:
                         logger.warning(f"Некорректный JSON: {exc}")
@@ -166,6 +166,6 @@ class BybitWebSocketClient:
         self.running = False
         if self._ping_task and not self._ping_task.done():
             self._ping_task.cancel()
-        if self.ws and not self.ws.closed:
+        if self.ws:
             await self.ws.close()
             logger.info("WebSocket закрыт")
