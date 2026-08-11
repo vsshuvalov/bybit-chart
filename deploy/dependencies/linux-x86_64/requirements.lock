@@ -1,0 +1,137 @@
+# requirements.lock — полный граф зависимостей с точными версиями и SHA-256.
+#
+# Источник: Roadmap §4 (lock-файл и SBOM обязательны), §20.1 (release artifact).
+# СГЕНЕРИРОВАН АВТОМАТИЧЕСКИ. Не редактировать вручную.
+#
+# РОЛЬ:      production
+# ПЛАТФОРМА: linux-x86_64
+#
+#   регенерация: python3 deploy/gen_dependency_artifacts.py
+#   проверка:    python3 deploy/verify_dependencies.py
+#
+# Сгенерирован:      2026-08-11T01:05:32+00:00
+# Прямые зависимости: fastapi, httpx, hypothesis, pyarrow, pydantic, pytest, pytest-asyncio, uvicorn, websockets
+# Всего пакетов:      25
+#
+# Платформа генерации:
+#   CPython 3.12.3
+#   Linux x86_64
+#
+# Состав снят с установленного окружения, на котором прошли тесты,
+# а не с нового разрешения зависимостей: у транзитивных пакетов
+# верхние границы открыты, и свежее разрешение даёт другой состав.
+#
+# ОГРАНИЧЕНИЕ: набор содержит платформенно-зависимые колёса и
+# действителен только для Linux x86_64 /
+# CPython 3.12.3:
+#   hypothesis (hypothesis-6.165.2-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl)
+#   pyarrow (pyarrow-19.0.0-cp312-cp312-manylinux_2_28_x86_64.whl)
+#   pydantic-core (pydantic_core-2.33.0-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl)
+#   websockets (websockets-14.1-cp312-cp312-manylinux_2_5_x86_64.manylinux1_x86_64.manylinux_2_17_x86_64.manylinux2014_x86_64.whl)
+# Для другого целевого хоста нужен отдельный lock той платформы.
+# Разделение хостов зафиксировано в ADR-012 (закрывает CONFLICT-004);
+# архитектура production-хоста и точная версия Python — OPEN.
+
+# --- Прямые зависимости ---
+
+#   fastapi-0.115.6-py3-none-any.whl
+fastapi==0.115.6 \
+    --hash=sha256:e9240b29e36fa8f4bb7290316988e90c381e5092e0cbe84e7818cc3713bcf305
+
+#   httpx-0.28.1-py3-none-any.whl
+httpx==0.28.1 \
+    --hash=sha256:d909fcccc110f8c7faf814ca82a9a4d816bc5a6dbfea25d6591d6985b8ba59ad
+
+#   hypothesis-6.165.2-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
+hypothesis==6.165.2 \
+    --hash=sha256:d726513b32cc6407667ac0812fa3517408f933b89b16b6b84f296335eec18432
+
+#   pyarrow-19.0.0-cp312-cp312-manylinux_2_28_x86_64.whl
+pyarrow==19.0.0 \
+    --hash=sha256:f43f5aef2a13d4d56adadae5720d1fed4c1356c993eda8b59dace4b5983843c1
+
+#   pydantic-2.11.1-py3-none-any.whl
+pydantic==2.11.1 \
+    --hash=sha256:5b6c415eee9f8123a14d859be0c84363fec6b1feb6b688d6435801230b56e0b8
+
+#   pytest-8.4.2-py3-none-any.whl
+pytest==8.4.2 \
+    --hash=sha256:872f880de3fc3a5bdc88a11b39c9710c3497a547cfa9320bc3c5e62fbf272e79
+
+#   pytest_asyncio-0.25.2-py3-none-any.whl
+pytest-asyncio==0.25.2 \
+    --hash=sha256:0d0bb693f7b99da304a0634afc0a4b19e49d5e0de2d670f38dc4bfa5727c5075
+
+#   uvicorn-0.32.1-py3-none-any.whl
+uvicorn==0.32.1 \
+    --hash=sha256:82ad92fd58da0d12af7482ecdb5f2470a04c9c9a53ced65b9bbb4a205377602e
+
+#   websockets-14.1-cp312-cp312-manylinux_2_5_x86_64.manylinux1_x86_64.manylinux_2_17_x86_64.manylinux2014_x86_64.whl
+websockets==14.1 \
+    --hash=sha256:a3dfff83ca578cada2d19e665e9c8368e1598d4e787422a460ec70e531dbdd58
+
+# --- Транзитивные зависимости ---
+
+#   annotated_types-0.8.0-py3-none-any.whl
+annotated-types==0.8.0 \
+    --hash=sha256:f072f4d804ea359e4eaf198b1af7a8b0943881a87f31bb764f8bf219bb9419e0
+
+#   anyio-4.14.2-py3-none-any.whl
+anyio==4.14.2 \
+    --hash=sha256:9f505dda5ac9f0c8309b5e8bd445a8c2bf7246f3ce950121e45ea15bc41d1494
+
+#   certifi-2026.7.22-py3-none-any.whl
+certifi==2026.7.22 \
+    --hash=sha256:62f22742b58a1a33014a2b6b706588a8d7e2a88ae7bd1a6ebe8c992928483775
+
+#   click-8.4.2-py3-none-any.whl
+click==8.4.2 \
+    --hash=sha256:e6f9f66136c816745b9d65817da91d61d957fb16e02e4dcd0552553c5a197b76
+
+#   h11-0.16.0-py3-none-any.whl
+h11==0.16.0 \
+    --hash=sha256:63cf8bbe7522de3bf65932fda1d9c2772064ffb3dae62d55932da54b31cb6c86
+
+#   httpcore-1.0.9-py3-none-any.whl
+httpcore==1.0.9 \
+    --hash=sha256:2d400746a40668fc9dec9810239072b40b4484b640a8c38fd654a024c7a1bf55
+
+#   idna-3.18-py3-none-any.whl
+idna==3.18 \
+    --hash=sha256:7f952cbe720b688055e3f87de14f5c3e5fdaa8bc3928985c4077ca689de849a2
+
+#   iniconfig-2.3.0-py3-none-any.whl
+iniconfig==2.3.0 \
+    --hash=sha256:f631c04d2c48c52b84d0d0549c99ff3859c98df65b3101406327ecc7d53fbf12
+
+#   packaging-26.3-py3-none-any.whl
+packaging==26.3 \
+    --hash=sha256:d7193f7c8e4e93f444fde0262bf90af30e16fa0ad0ad44cb553c87339b23cd1c
+
+#   pluggy-1.6.0-py3-none-any.whl
+pluggy==1.6.0 \
+    --hash=sha256:e920276dd6813095e9377c0bc5566d94c932c33b27a3e3945d8389c374dd4746
+
+#   pydantic_core-2.33.0-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
+pydantic-core==2.33.0 \
+    --hash=sha256:ecc6d02d69b54a2eb83ebcc6f29df04957f734bcf309d346b4f83354d8376862
+
+#   pygments-2.20.0-py3-none-any.whl
+pygments==2.20.0 \
+    --hash=sha256:81a9e26dd42fd28a23a2d169d86d7ac03b46e2f8b59ed4698fb4785f946d0176
+
+#   sortedcontainers-2.4.0-py2.py3-none-any.whl
+sortedcontainers==2.4.0 \
+    --hash=sha256:a163dcaede0f1c021485e957a39245190e74249897e2ae4b2aa38595db237ee0
+
+#   starlette-0.41.3-py3-none-any.whl
+starlette==0.41.3 \
+    --hash=sha256:44cedb2b7c77a9de33a8b74b2b90e9f50d11fcf25d8270ea525ad71a25374ff7
+
+#   typing_extensions-4.16.0-py3-none-any.whl
+typing-extensions==4.16.0 \
+    --hash=sha256:481caa481374e813c1b176ada14e97f1f67a4539ce9cfeb3f350d78d6370c2e8
+
+#   typing_inspection-0.4.3-py3-none-any.whl
+typing-inspection==0.4.3 \
+    --hash=sha256:5f42b23858a91e0b4ef521f5418f03a0da3c9216fd2995ef5e73463100e676cd
