@@ -1,6 +1,18 @@
 # NEXT: Текущий статус проекта
 
-## ✅ Завершено
+**Обновлено:** 2026-08-11  
+**Статус:** Development + Server Deployment Ready
+
+---
+
+## 🎯 Текущая цель
+
+**Развернуть collector на production-сервере** для начала круглосуточного сбора невосполнимых рыночных данных.
+
+**Сервер:** firstbyte.ru, 8 vCPU, 8 GB RAM, Ubuntu 24.04 LTS  
+**Руководство:** `deploy/QUICKSTART.md` (30 минут)
+
+---
 
 ### Stage 1: Storage Core (4 коммита)
 - WAL (Write-Ahead Log) с atomic commit
@@ -76,9 +88,9 @@
 
 ## 📊 Статистика
 
-- **29 коммитов** (Stage 1-4 + Этап 1 + Этап 3 + Analytics + OBI)
+- **31 коммитов** (Stage 1-4 + Этап 1 + Этап 3 + Analytics + OBI + Deployment)
 - **672 passed, 7 skipped** — все тесты проходят
-- **Full production stack** готов к deployment
+- **Server deployment ready** — systemd unit + PostgreSQL setup + capacity script
 
 ---
 
@@ -132,12 +144,44 @@ bybit-chart/
 
 ---
 
-## 🔥 Next Steps (Optional)
+## 🔥 Next Steps
 
-- **Deployment:** Docker, systemd service, monitoring
-- **Advanced Analytics:** Footprint chart, Time & Sales
-- **Strategies:** Automated trading logic (Roadmap §14)
-- **ML Integration:** Feature extraction, model training (Roadmap §16)
+### Immediate (сейчас)
+
+1. **Развернуть collector на сервере** — следовать `deploy/QUICKSTART.md`
+   - Закроет OPEN-005 (архитектура: x86_64, Ubuntu 24.04)
+   - Закроет P1-S1-006 (Linux lock после pytest)
+   - Начнёт сбор невосполнимых данных
+
+2. **Через 72 часа** — запустить `measure_capacity.sh`
+   - Получить bytes/hour baseline (Roadmap §6.8)
+   - Принять Capacity ADR
+   - Оценить необходимость апгрейда диска
+
+### Short-term (1-2 недели)
+
+3. **PostgreSQL migrations** (P1-S1-009)
+   - Реализовать initial schema
+   - Закрыть ADR-005
+
+4. **Roadmap Этап 2** — изолированный collector
+   - Writer lease / fencing token
+   - UDS/gRPC publish к analytics
+   - Cutover/rollback protocol
+
+5. **Расширить feed scope**
+   - L50/L1000, ticker, allLiquidation
+   - RPI on/off capacity test
+
+### Medium-term (1-2 месяца)
+
+6. **Roadmap Этап 4** — изоляция процессов
+   - orderflow-worker как отдельный процесс
+   - api-gateway без analytics logic
+
+7. **Roadmap Этап 5-6** — Analytics modules
+   - Footprint, Sweep detector
+   - Heatmap tiles, Attribution, Walls
 
 ---
 
