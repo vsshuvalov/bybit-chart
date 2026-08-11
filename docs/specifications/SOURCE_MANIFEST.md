@@ -14,6 +14,15 @@ Stage: 0 — Greenfield bootstrap
 | Bybit_Order_Flow_Heatmap_Specification.docx | `9186e5c03af9696f60a1baaabd989f0fc5e4d50b195e427d5a9f0fee4fc7fa50` | 74499 | 2026-08-04T11:06:25+0700 | P5 — вычислительная и визуальная спецификация |
 | BTCUSDT_Bybit_Intraday_Strategies.md | `a7b848424f6fabfe6455666193526532e27803c058c991906dd7c16042bd401c` | 50856 | 2026-08-08T07:57:13+0700 | P6 — стартовые стратегии |
 
+## Версионированные редакции
+
+Исходный snapshot v1.0 выше остаётся неизменным. Рабочая редакция roadmap
+после утверждённого архитектурного дополнения сохранена отдельным artifact.
+
+| Документ | SHA-256 | Размер (байт) | Создан | Заменяет |
+|---|---|---:|---|---|
+| BYBIT_MULTIPROCESS_PLATFORM_ROADMAP.v1.1.md | `859c11f203cb891739de6f9bd1446d7f130140de189c97887c60993988b0794a` | 181761 | 2026-08-11T20:08:05+0700 | BYBIT_MULTIPROCESS_PLATFORM_ROADMAP.md v1.0 |
+
 ## Источник
 
 Все файлы скопированы из `/Users/vs/Claude/Projects/indicator/`.

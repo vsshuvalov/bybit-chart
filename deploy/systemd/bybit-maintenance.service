@@ -1,0 +1,88 @@
+# Bybit Maintenance Worker — systemd unit
+# Roadmap §3 (Этап 2): изолированный maintenance процесс
+#
+# Responsibilities:
+#   - WAL → Parquet conversion (scheduled)
+#   - Old WAL cleanup после successful commit
+#   - Parquet retention policy (cleanup old segments)
+#   - Manifest verification и recovery
+#
+# Fencing:
+#   - Захватывает WriterLease перед любой write-операцией (ADR-013)
+#   - При конфликте с collector — пропускает операцию
+#
+# Установка:
+#   sudo cp bybit-maintenance.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable bybit-maintenance
+#   sudo systemctl start bybit-maintenance
+#
+# Проверка:
+#   sudo systemctl status bybit-maintenance
+#   sudo journalctl -u bybit-maintenance -f
+
+[Unit]
+Description=Bybit Market Data Maintenance Worker
+Documentation=file:///opt/bybit-chart/docs/adr/ADR-013-writer-lease-fencing-token.md
+After=network.target bybit-collector.service
+Wants=bybit-collector.service
+
+# Maintenance worker менее критичен чем collector
+# Если упал — перезапускаем, но не так агрессивно
+StartLimitIntervalSec=600
+StartLimitBurst=3
+
+[Service]
+Type=exec
+User=bybit
+Group=bybit
+WorkingDirectory=/opt/bybit-chart
+
+Environment="PATH=/opt/bybit-chart/.venv/bin:/usr/local/bin:/usr/bin:/bin"
+Environment="PYTHONUNBUFFERED=1"
+Environment="DATA_DIR=/opt/bybit-chart/data"
+
+ExecStart=/opt/bybit-chart/.venv/bin/python workers/maintenance_worker.py ${DATA_DIR}
+
+# Graceful shutdown: SIGTERM → 60s → SIGKILL
+# Maintenance может быть в середине commit операции — даём больше времени
+TimeoutStopSec=60
+KillMode=mixed
+KillSignal=SIGTERM
+
+# Restart policy (менее агрессивный чем у collector)
+Restart=on-failure
+RestartSec=30
+
+# Resource limits — меньше чем у collector
+# Maintenance не time-critical, даём меньше приоритета
+CPUWeight=200
+IOWeight=200
+MemoryMax=512M
+MemoryHigh=384M
+
+# IO: maintenance не должен конкурировать с collector
+IOSchedulingClass=best-effort
+IOSchedulingPriority=4
+
+# Security hardening (аналогично collector)
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/bybit-chart/data /opt/bybit-chart/logs /tmp
+
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+
+RestrictRealtime=true
+RestrictSUIDSGID=true
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=bybit-maintenance
+
+[Install]
+WantedBy=multi-user.target

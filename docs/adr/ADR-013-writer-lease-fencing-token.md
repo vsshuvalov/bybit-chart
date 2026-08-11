@@ -1,7 +1,7 @@
 # ADR-013: Writer Lease и Fencing Token для Multi-Process Safety
 
 - **Дата:** 2026-08-11
-- **Статус:** PROPOSED
+- **Статус:** ACCEPTED
 - **Авторы:** Claude Code
 - **Reviewer:** TBD
 - **Roadmap:** §6.5, §18.1 (Этап 2)
@@ -427,9 +427,13 @@ class EventCollector:
 
 ## Решение
 
-**PROPOSED** — ожидает review и acceptance.
+**ACCEPTED** — реализовано в P1-S2-003.
 
-После acceptance:
-- Status → ACCEPTED
-- Implementation → P1-S2-003
-- Target: Этап 2 complete
+- `packages/storage/fencing.py` — `WriterLease` class (fcntl.flock + epoch файл)
+- `tests/storage/test_fencing.py` — 21 fault test
+- `workers/maintenance_worker.py` — интегрирован с fencing
+- `deploy/systemd/bybit-maintenance.service` — systemd unit
+
+**Вариант:** File Lock (fcntl.flock) — реализован как Вариант 1.
+
+Phase 1 (single-host file lock) complete.

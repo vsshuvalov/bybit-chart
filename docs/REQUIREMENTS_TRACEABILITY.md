@@ -2,9 +2,9 @@
 
 - **Stage:** 1 (в работе)
 - **Дата:** 2026-08-10
-- **Источник:** BYBIT_MULTIPROCESS_PLATFORM_ROADMAP.md v1.0
-- **Всего требований:** 68 (63 исходных + REQ-064…067 при закрытии P1-S1-003 + REQ-068 при закрытии P1-S1-005)
-- **Статус:** REQ-001…063 — NOT_STARTED; статусы REQ-064…068 см. раздел «Зависимости и платформа»
+- **Источник:** BYBIT_MULTIPROCESS_PLATFORM_ROADMAP.md v1.1
+- **Всего требований:** 72 (63 исходных + REQ-064…068 Stage 1 + REQ-069…072 AI governance v1.1)
+- **Статус:** REQ-001…063 и REQ-069…072 — NOT_STARTED; статусы REQ-064…068 см. раздел «Зависимости и платформа»
 
 ---
 
@@ -144,6 +144,10 @@
 | REQ-058 | §16.1 | LLM Assistant, Optimizer, Strategy runtime — три независимые системы | research, strategy-worker | isolation test | 11 | NOT_STARTED |
 | REQ-059 | §16.5 | AI не имеет доступа к API keys и не вызывает Bybit напрямую | research | permission gate test | 11 | NOT_STARTED |
 | REQ-060 | §16.4 | Model registry lifecycle: DRAFT→…→APPROVED_LIVE; promotion только человеком | research | promotion gate test | 11 | NOT_STARTED |
+| REQ-069 | §16.1.1 | LLM providers скрыты за единым versioned contract; provider-specific payload не выходит за adapter | research | adapter conformance + project eval suite | 11 | NOT_STARTED |
+| REQ-070 | §16.3.1 | Strategy Research Sandbox принимает typed DSL, не имеет secrets/Bybit/execution/outbound network и не меняет active config | research | permission, network-deny, resource-limit и sandbox-escape tests | 11 | NOT_STARTED |
+| REQ-071 | §16.3.1 | Каждый research run воспроизводим и хранит immutable JobSpec, data/code/config lineage и все trials | research | replay by run ID + registry integrity test | 11 | NOT_STARTED |
+| REQ-072 | §16.5.1, §18.1 | Bybit и LLM credentials разделены; неоднозначный auth mode fail-closed; secrets не попадают в prompt/log/artifact | research, deploy | secret-scan + auth configuration contract tests | 11–12 | NOT_STARTED |
 
 ---
 

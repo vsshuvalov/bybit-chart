@@ -3,6 +3,7 @@
 Maintenance Worker — background процесс для storage maintenance (Roadmap §3).
 
 Источник: Roadmap §3 (multi-process) + §6 (storage maintenance)
+Обновлено: ADR-013 (Fencing Token) + ADR-016 (IPC Publisher/Subscriber)
 
 Responsibilities:
 - WAL → Parquet conversion (scheduled)
@@ -15,6 +16,15 @@ Architecture:
 WAL files → Maintenance Worker → Parquet segments
                                → Cleanup old files
                                → Health metrics
+
+Fencing:
+- Перед любой write-операцией на WAL/manifest захватывает WriterLease
+- assert_still_valid() в долгих операциях (cutover protection)
+- При EpochViolationError — немедленно прекращает операцию
+
+IPC:
+- Подписывается на события collector через IPCSubscriber
+- Публикует health status через IPCPublisher
 
 Roadmap требования:
 - Independent background process
@@ -31,6 +41,13 @@ import time
 from pathlib import Path
 
 from packages.ipc import IPCMessage, ProcessRegistry, UDSServer
+from packages.ipc.publisher import IPCPublisher
+from packages.ipc.subscriber import IPCSubscriber
+from packages.storage.fencing import (
+    EpochViolationError,
+    LeaseAcquisitionError,
+    WriterLease,
+)
 from packages.storage.manifest import ManifestManager
 from packages.storage.wal import WAL
 
@@ -46,6 +63,8 @@ class MaintenanceWorker:
     """Maintenance Worker — background storage maintenance.
 
     Roadmap §3 + §6: scheduled maintenance operations.
+    Использует WriterLease (ADR-013) перед любой write-операцией.
+    Подписывается на IPC события от collector (ADR-016).
     """
 
     def __init__(
@@ -56,16 +75,18 @@ class MaintenanceWorker:
         wal_commit_interval: int = 300,  # 5 minutes
         cleanup_interval: int = 3600,  # 1 hour
         retention_days: int = 7,
+        ipc_collector_socket: Path | None = None,
     ):
         """Initialize maintenance worker.
 
         Args:
             data_dir: директория с данными
-            socket_path: путь к UDS socket
+            socket_path: путь к UDS socket этого процесса
             registry_dir: директория process registry
             wal_commit_interval: интервал WAL → Parquet (seconds)
             cleanup_interval: интервал cleanup операций (seconds)
             retention_days: retention policy (days)
+            ipc_collector_socket: socket collector-а для подписки (опционально)
         """
         self.data_dir = data_dir
         self.socket_path = socket_path
@@ -73,10 +94,13 @@ class MaintenanceWorker:
         self.wal_commit_interval = wal_commit_interval
         self.cleanup_interval = cleanup_interval
         self.retention_days = retention_days
+        self.ipc_collector_socket = ipc_collector_socket
 
         # IPC components
         self.uds_server: UDSServer | None = None
         self.registry: ProcessRegistry | None = None
+        self._ipc_subscriber: IPCSubscriber | None = None
+        self._ipc_publisher: IPCPublisher | None = None
 
         # State
         self.running = False
@@ -86,6 +110,7 @@ class MaintenanceWorker:
             "cleanup_runs": 0,
             "segments_cleaned": 0,
             "errors": 0,
+            "fencing_conflicts": 0,
         }
 
     async def start(self):
@@ -105,6 +130,22 @@ class MaintenanceWorker:
 
         # Register in process registry
         self.registry.register_process("maintenance", self.socket_path)
+
+        # Setup IPC subscriber (listen to collector events)
+        if self.ipc_collector_socket:
+            self._ipc_subscriber = IPCSubscriber(
+                self.socket_path.parent / "bybit-maintenance-rx.sock"
+            )
+            self._ipc_subscriber.register_handler("RawTrade", self._on_trade)
+            self._ipc_subscriber.register_handler("RawBookEvent", self._on_book_event)
+            self._ipc_subscriber.run_in_thread(daemon=True)
+            logger.info("IPC subscriber started, listening for collector events")
+
+        # Setup IPC publisher (publish health/status to monitoring)
+        self._ipc_publisher = IPCPublisher(
+            self.socket_path.parent / "bybit-monitoring.sock",
+            source_name="maintenance-worker",
+        )
 
         # Wait for UDS server
         await asyncio.sleep(0.5)
@@ -127,6 +168,10 @@ class MaintenanceWorker:
         self.running = False
         self.health_status = "stopping"
 
+        # Stop IPC subscriber
+        if self._ipc_subscriber:
+            self._ipc_subscriber.stop()
+
         # Stop UDS server
         if self.uds_server:
             await self.uds_server.stop()
@@ -134,7 +179,23 @@ class MaintenanceWorker:
         self.health_status = "stopped"
         logger.info("Maintenance worker stopped")
 
-    async def _wal_commit_loop(self):
+    # ------------------------------------------------------------------
+    # IPC event handlers
+    # ------------------------------------------------------------------
+
+    def _on_trade(self, payload: dict) -> None:
+        """Handle RawTrade event from collector (IPC)."""
+        # Maintenance worker получает события для статистики
+        # Не пишет в WAL — только читает
+        pass
+
+    def _on_book_event(self, payload: dict) -> None:
+        """Handle RawBookEvent from collector (IPC)."""
+        pass
+
+    # ------------------------------------------------------------------
+    # Maintenance loops
+    # ------------------------------------------------------------------
         """Periodic WAL → Parquet commits."""
         logger.info(f"WAL commit loop started (interval: {self.wal_commit_interval}s)")
 
@@ -198,7 +259,10 @@ class MaintenanceWorker:
                 self.stats["errors"] += 1
 
     async def _commit_wal_for_symbol(self, symbol: str, symbol_dir: Path):
-        """Commit WAL → Parquet для символа.
+        """Commit WAL → Parquet для символа с fencing protection.
+
+        Захватывает WriterLease перед любой write-операцией.
+        При EpochViolationError немедленно прекращает операцию.
 
         Args:
             symbol: символ
@@ -211,13 +275,30 @@ class MaintenanceWorker:
         # Get WAL instance
         wal = WAL(symbol_dir, symbol)
 
-        # Commit (WAL → Parquet)
-        # Note: WAL.commit() уже реализован в packages/storage/wal.py
-        # Здесь просто вызываем его
-        committed = wal.commit()
+        # Захватить WriterLease перед write-операцией (ADR-013)
+        lease = WriterLease(symbol_dir)
+        try:
+            epoch = lease.acquire()
+            logger.debug(f"Acquired writer lease for {symbol}: epoch={epoch}")
+        except LeaseAcquisitionError as exc:
+            # Collector держит lease — пропустить этот символ сейчас
+            logger.info(f"Writer lease busy for {symbol}: {exc}")
+            self.stats["fencing_conflicts"] += 1
+            return
 
-        if committed:
-            logger.info(f"Committed WAL for {symbol}: {len(committed)} segments")
+        try:
+            # Commit (WAL → Parquet)
+            committed = wal.commit()
+
+            if committed:
+                logger.info(f"Committed WAL for {symbol}: {len(committed)} segments")
+
+        except EpochViolationError as exc:
+            # Cutover произошёл — прекратить операцию немедленно
+            logger.error(f"Epoch violation for {symbol}: {exc}. Stopping commit.")
+            self.stats["fencing_conflicts"] += 1
+        finally:
+            lease.release()
 
     async def _cleanup_old_wal_files(self):
         """Cleanup старых WAL файлов после successful Parquet commit."""

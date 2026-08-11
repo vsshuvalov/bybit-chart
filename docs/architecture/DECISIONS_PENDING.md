@@ -65,6 +65,23 @@ Roadmap описывает три сценария (optimistic / base / conserva
 
 ## ADR-010: Жизненный цикл ML-модели и запрет прямого доступа ИИ к бирже (REQUIRED до Stage 11)
 
+Roadmap §16 фиксирует обязательные инварианты: provider-neutral `LLMProvider`,
+typed `StrategyCandidate`, изолированный Research Sandbox, полный provenance и
+только human promotion. До Stage 11 ADR-010 должен выбрать и зафиксировать:
+
+- primary и A/B/backup provider по проектному eval suite, включая политику
+  явного fallback;
+- versioned request/result/tool/schema contracts и provider adapter boundary;
+- границы `StrategyCandidate` DSL и запрет arbitrary generated code в v1;
+- sandbox threat model, read-only datasets, network deny, quotas,
+  cancellation/admission control и sandbox-escape tests;
+- trial ledger, sealed OOS, experiment/model registry и promotion roles;
+- data-egress policy и разделение Bybit/LLM credentials до первого hosted API
+  call.
+
+**Статус:** OPEN. Ни provider/model, ни production credential topology пока не
+утверждены; ADR-011 остаётся общесистемным решением о secrets/rotation.
+
 ## ADR-011: Release, rollback, backup, RPO/RTO и secrets (REQUIRED до Stage 12)
 
 Roadmap требует immutable artifact, canary и restore drill (§18.5, §20). RPO/RTO не зафиксированы числами.

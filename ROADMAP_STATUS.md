@@ -55,19 +55,26 @@
 
 ### ⏳ Этап 2. Изолированный collector с IPC
 
-**Статус:** NOT STARTED (0%)
+**Статус:** PARTIAL (75%)
 
 Требования:
-- ❌ Writer lease / fencing token
-- ❌ UDS/gRPC publish к analytics (non-blocking)
-- ❌ Separate maintenance worker
-- ❌ Shadow/cutover/rollback protocol
-- ❌ Liquidation reconnect с bounded gap
-- ❌ 24-72h soak с full IPC
+- ✅ Writer lease / fencing token — DONE (ADR-013, packages/storage/fencing.py)
+- ✅ IPC Publisher (non-blocking UDS) — DONE (packages/ipc/publisher.py)
+- ✅ IPC Subscriber (event loop) — DONE (packages/ipc/subscriber.py)
+- ✅ Maintenance worker (отдельный процесс) — DONE (workers/maintenance_worker.py)
+- ✅ systemd unit для maintenance — DONE (deploy/systemd/bybit-maintenance.service)
+- ❌ Shadow/cutover/rollback production test — NOT STARTED
+- ❌ 24-72h soak с full IPC — NOT STARTED
 
 **Блокеры:**
-- Этап 1 soak ещё не завершён (через 72h)
-- Capacity measurement не выполнен
+- Capacity measurement ещё не завершён (2026-08-12 00:55 UTC)
+- Production deployment не выполнен
+
+**Evidence:**
+- `packages/storage/fencing.py` — WriterLease, 21 fault test
+- `packages/ipc/publisher.py` + `subscriber.py` — 17 integration tests
+- `workers/maintenance_worker.py` — интегрирован с fencing + IPC
+- ADR-013 ACCEPTED, ADR-016 PROPOSED
 
 ---
 
