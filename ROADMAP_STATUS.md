@@ -73,7 +73,7 @@
 
 ### ⏳ Этап 3. Базовые live-роли и расширение scope
 
-**Статус:** PARTIAL (70%)
+**Статус:** PARTIAL (85%)
 
 Требования:
 - ✅ Collector (работает)
@@ -83,20 +83,22 @@
 - ✅ ETH добавлен + acceptance
 - ✅ XRP добавлен + acceptance
 - ✅ Orderbook feeds (snapshot-only, delta требует §8.2)
+- ✅ RPI feed с feature flag (kline.1.{SYMBOL})
 - ❌ Scheduled OI, funding, market history
-- ❌ RPI feed за feature flag
-- ❌ Disk/load A/B soak с RPI on/off
+- ⏳ Disk/load A/B soak с RPI on/off (требует 24-72h)
 
 **Evidence:**
 - 3 символа работают 24/7 (publicTrade only на production)
 - Analytics modules: Delta, CVD, VWAP, Volume Profile, OBI
 - API endpoints: /trades, /ohlc, /symbols
 - `collector_with_book.py` готов (orderbook.200 snapshot)
+- `rpi_collector.py` готов (kline.1 с feature flag RPI_ENABLED)
 
 **Gaps:**
 - Orderbook delta reconstruction (Roadmap §8.2)
-- RPI/liquidation feeds не подключены
+- Scheduled OI/funding feeds не подключены
 - Maintenance tasks не изолированы
+- A/B capacity soak не выполнен (требует deployment)
 
 ---
 
