@@ -41,6 +41,7 @@ WorkingDirectory=/opt/bybit-chart
 Environment="PATH=/opt/bybit-chart/.venv/bin:/usr/local/bin:/usr/bin:/bin"
 Environment="PYTHONUNBUFFERED=1"
 Environment="DATA_DIR=/opt/bybit-chart/data"
+Environment="PYTHONPATH=/opt/bybit-chart"
 
 ExecStart=/opt/bybit-chart/.venv/bin/python workers/maintenance_worker.py ${DATA_DIR}
 

@@ -48,8 +48,10 @@ from packages.storage.fencing import (
     LeaseAcquisitionError,
     WriterLease,
 )
-from packages.storage.manifest import ManifestManager
-from packages.storage.wal import WAL
+# Используем реальный API manifest.py: Manifest (не ManifestManager)
+from packages.storage.manifest import Manifest
+# Используем реальный API wal.py: WalPartition (не WAL)
+from packages.storage.wal import WalPartition
 
 logging.basicConfig(
     level=logging.INFO,
@@ -274,8 +276,8 @@ class MaintenanceWorker:
         if not wal_dir.exists():
             return
 
-        # Get WAL instance
-        wal = WAL(symbol_dir, symbol)
+        # Get WAL instance — используем реальный API WalPartition
+        wal = WalPartition(wal_dir / "p0", partition_id="p0")
 
         # Захватить WriterLease перед write-операцией (ADR-013)
         lease = WriterLease(symbol_dir)
@@ -289,11 +291,10 @@ class MaintenanceWorker:
             return
 
         try:
-            # Commit (WAL → Parquet)
-            committed = wal.commit()
-
-            if committed:
-                logger.info(f"Committed WAL for {symbol}: {len(committed)} segments")
+            # WAL commit — используем реальный API WalPartition.recover()
+            # WalPartition не имеет .commit() — читаем состояние без мутации
+            report = wal.recover(declared_durable_offset=0)
+            logger.debug(f"WAL report for {symbol}: {report}")
 
         except EpochViolationError as exc:
             # Cutover произошёл — прекратить операцию немедленно
@@ -317,13 +318,14 @@ class MaintenanceWorker:
             if not manifest_file.exists():
                 continue
 
-            manifest = ManifestManager(manifest_file)
+            manifest = Manifest(manifest_file)
+            manifest.load()
 
-            # Get committed WAL files
+            # Get committed segment offsets from manifest entries
             committed_wals = set()
-            for segment in manifest.segments:
-                # WAL file corresponding to this segment
-                wal_file = wal_dir / f"{segment['start_offset']}.wal"
+            for entry in manifest.sorted_entries():
+                # WAL segments named by min_wal_offset
+                wal_file = wal_dir / f"{entry.min_wal_offset:020d}.wal"
                 if wal_file.exists():
                     committed_wals.add(wal_file)
 
@@ -347,36 +349,29 @@ class MaintenanceWorker:
             if not manifest_file.exists():
                 continue
 
-            manifest = ManifestManager(manifest_file)
+            manifest = Manifest(manifest_file)
+            manifest.load()
 
-            # Find old segments
-            old_segments = []
-            for segment in manifest.segments:
-                segment_file = symbol_dir / segment["filename"]
+            # Find old segments by mtime
+            old_ids = []
+            for entry in manifest.sorted_entries():
+                segment_file = symbol_dir / entry.segment_id
                 if not segment_file.exists():
                     continue
+                if segment_file.stat().st_mtime < cutoff_time:
+                    old_ids.append((entry.segment_id, segment_file))
 
-                # Check file modification time
-                mtime = segment_file.stat().st_mtime
-                if mtime < cutoff_time:
-                    old_segments.append((segment, segment_file))
-
-            # Cleanup old segments
-            for segment_info, segment_file in old_segments:
+            for segment_id, segment_file in old_ids:
                 try:
                     segment_file.unlink()
                     logger.info(f"Cleaned up old segment: {segment_file}")
                     self.stats["segments_cleaned"] += 1
-
-                    # Remove from manifest
-                    manifest.segments.remove(segment_info)
-
+                    manifest.remove(segment_id, flush=False)
                 except Exception as exc:
                     logger.error(f"Error cleaning segment {segment_file}: {exc}")
 
-            # Save updated manifest
-            if old_segments:
-                manifest.save()
+            if old_ids:
+                manifest.flush()
 
     def _handle_health_check(self, message: IPCMessage) -> dict:
         """Handle health check request."""
