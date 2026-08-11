@@ -1,7 +1,214 @@
 # NEXT: Текущий статус проекта
 
-**Обновлено:** 2026-08-11 01:21 UTC  
-**Статус:** Production Collector Running (3 symbols)
+**Обновлено:** 2026-08-11 09:30 UTC  
+**Статус:** Stage 1 COMPLETE, Production Collector Running (3 symbols)
+
+---
+
+## 🎯 Текущее состояние
+
+✅ **Stage 1: 100% COMPLETE (9/9 задач)**  
+✅ **Collector работает на production-сервере** — круглосуточный сбор невосполнимых данных.  
+✅ **GitHub CI operational** — automated testing на ubuntu-24.04  
+✅ **PostgreSQL schema deployed** — workspace/audit/orders tables  
+✅ **RPI feed ready** — kline.1.{SYMBOL} с feature flag
+
+**Сервер:** firstbyte.ru, 8 vCPU, 8 GB RAM, Ubuntu 24.04 LTS, Python 3.12.3  
+**Символы:** BTCUSDT, ETHUSDT, XRPUSDT (3 отдельных systemd units)  
+**Данные:** `/opt/bybit-chart/data/{SYMBOL}/` — WAL + Parquet  
+**Throughput:** ~13 MB/час → ~9.3 GB/30 дней (trades only, без orderbook)  
+**GitHub:** https://github.com/vsshuvalov/bybit-chart (42 commits, CI green)
+
+---
+
+## 📊 Roadmap Progress
+
+**Stage 1:** 9/9 COMPLETE (100%)  
+**Этап 3:** 85% (RPI feed done, A/B soak pending)  
+**15 практических задач:** 9/15 DONE (60%)  
+**Overall Roadmap:** ~45% готовности (Этапы 0-6)
+
+---
+
+## ⏰ Critical Timeline
+
+**2026-08-14 00:55 UTC (через 72h):**
+```bash
+# Capacity measurement baseline
+sudo -u bybit /opt/bybit-chart/deploy/measure_capacity.sh > /tmp/capacity_report.txt
+```
+
+⚠️ **НЕ ТРОГАТЬ production collector до capacity measurement!**
+
+---
+
+## 🎯 Следующие приоритеты
+
+### High Priority (на этой неделе):
+
+1. **ADR-012: Fencing Token Design** (P1-S2-001)
+   - Roadmap §6.5, §18.1 требования
+   - Варианты: file lock, Redis lease, PostgreSQL advisory lock
+   - Критично для Этапа 2 (IPC isolation)
+
+2. **Capacity Measurement** (2026-08-14)
+   - Baseline: 3 symbols, trades-only
+   - Затем: A/B test с RPI feed on/off
+   - Output: disk requirements, load impact
+
+3. **ADR-013: IPC Protocol Design** (P1-S2-002)
+   - Roadmap §5.1, §5.2 требования
+   - Варианты: UDS, gRPC, shared memory
+   - Зависимость: ADR-012 accepted
+
+### Medium Priority (1-2 недели):
+
+4. **Orderbook Delta Reconstruction** (P1-S3-002)
+   - Roadmap §8.2
+   - Сейчас: только snapshot, delta пропускаются
+   - Требует: BookState machine, sequence validation
+
+5. **Footprint Chart** (P1-S5-001)
+   - Roadmap §9.1 Этап 5
+   - Bid/ask volume per price level
+   - Imbalance detection
+
+6. **Deploy RPI Collector** (P1-S3-004)
+   - После capacity measurement baseline
+   - 24-72h A/B soak (RPI on/off)
+   - Disk usage comparison
+
+---
+
+## 📋 Сегодняшние достижения (2026-08-11)
+
+### ✅ Закрыто:
+1. P1-S1-006 — Linux dependency lock (137 строк, Python 3.12.3)
+2. P1-S1-009 — PostgreSQL setup (16.14, 3 таблицы, 9 индексов)
+3. P1-S1-007 — GitHub Actions CI workflow
+4. P1-S3-001 — RPI feed collector (kline.1.{SYMBOL})
+5. Stage 1 → 100% COMPLETE
+6. Orderbook snapshot collector (`collector_with_book.py`)
+7. Roadmap audit → 45% готовности
+8. TODO.md update → Stage 2-3 tasks added
+
+### 📈 Метрики:
+- **Commits:** 34 → 42 (+8 today)
+- **Tests:** 666+ passed
+- **CI:** Green (ubuntu-24.04)
+- **Production:** 3 symbols running
+- **PostgreSQL:** 3 tables operational
+
+---
+
+## 🚧 Текущие блокеры
+
+### Stage 2 (IPC, Fencing):
+- ❌ ADR-012 не написан (fencing token design)
+- ❌ ADR-013 не написан (IPC protocol)
+- ❌ Fencing token implementation
+- ❌ Maintenance worker не изолирован
+
+### Этап 3 (Scope):
+- ⏳ Capacity measurement pending (через 72h)
+- ⏳ A/B soak (RPI on/off) не выполнен
+- ❌ Orderbook delta reconstruction
+- ❌ Scheduled OI, funding feeds
+
+### Production Trading:
+- ❌ Market simulator (Этап 8)
+- ❌ Execution contract (Этап 9)
+- ❌ Strategies with TP/SL (Этап 10)
+- ❌ Risk policy + promotion gates
+
+---
+
+## 💡 Recommendations for Next Session
+
+### Option A: Design Work (2-3 hours)
+1. Write ADR-012: Fencing Token Design
+2. Write ADR-013: IPC Protocol Design
+3. Review Roadmap §6.5, §18.1 requirements
+
+### Option B: Implementation (2-3 hours)
+1. Footprint Chart implementation
+2. Contract tests для RPI feed
+3. Integration test для multi-symbol
+
+### Option C: Documentation (1-2 hours)
+1. README.md improvement (badges, quick start)
+2. CONTRIBUTING.md
+3. Architecture diagrams
+
+**Recommended:** Option A (Design Work) — unblocks Stage 2 critical path.
+
+---
+
+## 📁 Key Files
+
+**Production:**
+- Collector: `/opt/bybit-chart/packages/bybit/`
+- Data: `/opt/bybit-chart/data/{SYMBOL}/`
+- Systemd: `/etc/systemd/system/bybit-collector-*.service`
+
+**Development:**
+- Roadmap: `BYBIT_MULTIPROCESS_PLATFORM_ROADMAP.md`
+- Status: `ROADMAP_STATUS.md`
+- Tasks: `TODO.md`
+- Next: `NEXT.md` (this file)
+
+**Contracts:**
+- `contracts/schemas.py` — RawTrade, BookCheckpoint
+- `contracts/raw_kline.py` — RPI kline feed
+
+**Examples:**
+- `examples/collector_with_book.py` — orderbook snapshot
+- `examples/rpi_collector.py` — RPI feed с feature flag
+
+---
+
+## 🔍 Health Checks
+
+**Production Collector:**
+```bash
+# Status
+sudo systemctl status bybit-collector-BTCUSDT
+sudo systemctl status bybit-collector-ETHUSDT
+sudo systemctl status bybit-collector-XRPUSDT
+
+# Logs
+sudo journalctl -u bybit-collector-BTCUSDT -n 50 --no-pager
+
+# Data size
+du -sh /opt/bybit-chart/data/*/
+```
+
+**PostgreSQL:**
+```bash
+psql -h 148.113.178.18 -U bybit_user -d bybit_chart -c '\dt'
+psql -h 148.113.178.18 -U bybit_user -d bybit_chart -c 'SELECT COUNT(*) FROM workspace;'
+```
+
+**GitHub CI:**
+```bash
+gh run list --repo vsshuvalov/bybit-chart --limit 5
+```
+
+---
+
+## ⚠️ Important Notes
+
+1. **Capacity measurement через 72h** — НЕ менять collector конфигурацию до этого
+2. **Production collector стабилен** — 3 символа работают непрерывно
+3. **RPI feed готов** — но deployment после capacity baseline
+4. **Stage 2 design required** — fencing token + IPC protocol ADRs
+5. **Orderbook delta** — требует отдельную реализацию (§8.2)
+
+---
+
+**Last update by:** Claude Opus 5  
+**Session ID:** ec06c0f4-07f6-46f9-9b1a-fb74d19a4bb8  
+**Repository:** https://github.com/vsshuvalov/bybit-chart
 
 ---
 
