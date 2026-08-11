@@ -196,6 +196,8 @@ class MaintenanceWorker:
     # ------------------------------------------------------------------
     # Maintenance loops
     # ------------------------------------------------------------------
+
+    async def _wal_commit_loop(self):
         """Periodic WAL → Parquet commits."""
         logger.info(f"WAL commit loop started (interval: {self.wal_commit_interval}s)")
 
