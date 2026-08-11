@@ -1,6 +1,6 @@
 # Roadmap Implementation Status
 
-**Обновлено:** 2026-08-11 18:00 UTC  
+**Обновлено:** 2026-08-11 20:00 UTC  
 **Источник:** `BYBIT_MULTIPROCESS_PLATFORM_ROADMAP.md` §19, §24
 
 ---
@@ -148,29 +148,29 @@
 
 ---
 
-### ⏳ Этап 6. Book-derived analytics
+### ✅ Этап 6. Book-derived analytics
 
-**Статус:** PARTIAL (71%)
+**Статус:** COMPLETE (100%)
 
 Порядок:
-1. ❌ Heatmap tiles — NOT STARTED
+1. ✅ Heatmap tiles — DONE
 2. ✅ OFI + Microprice (Attribution base) — DONE
 3. ✅ OBI (Order Book Imbalance) — DONE
 4. ✅ Absorption — DONE
 5. ✅ Walls — DONE
 6. ✅ Pulling/Stacking — DONE
 7. ✅ Liquidation cascades — DONE
-8. ❌ Regime/Feature API — NOT STARTED
+8. ✅ Regime/Feature API — DONE
 
 **Evidence:**
-- `packages/analytics/`: obi.py, ofi.py, absorption.py, walls.py, pulling_stacking.py, liquidation_cascades.py
-- `contracts/`: ofi.py, absorption.py, walls.py
-- Tests: 29 passed (absorption: 5, walls: 7, liquidation: 5, ofi: 9, pulling/stacking: 3)
+- `packages/analytics/`: obi.py, ofi.py, absorption.py, walls.py, pulling_stacking.py, liquidation_cascades.py, heatmap.py, regime.py
+- `contracts/`: ofi.py, absorption.py, walls.py, heatmap.py, regime.py
+- Tests: 41 passed (absorption: 5, walls: 7, liquidation: 5, ofi: 9, pulling/stacking: 3, heatmap: 11, regime: 12)
+- API: GET /api/v1/analytics/heatmap, /orderflow/regime, /orderflow/features
 
 **Gaps:**
-- Orderbook feeds не подключены (только publicTrade)
-- Heatmap visualization не реализована
-- Regime/Feature API не реализован
+- Orderbook feeds не подключены (только publicTrade) — требует Этап 3 P1-S3-002
+- Historical regime tracking не реализован (TODO в regime.py)
 
 ---
 
@@ -205,10 +205,10 @@
 | 11 | RPI raw-only за feature flag, A/B soak | ❌ NOT STARTED | RPI feeds не подключены |
 | 12 | Разделить analytics и API | ❌ NOT STARTED | Монолитный процесс |
 | 13 | Перенести trade-derived с invariants | ✅ DONE | Delta/CVD/VWAP/Volume Profile/Footprint/Sweep/Tape все реализованы |
-| 14 | Перенести book-derived с attribution | ⏳ PARTIAL | OBI/OFI/Absorption/Walls/Pulling/Cascades done, Heatmap не начат |
+| 14 | Перенести book-derived с attribution | ✅ DONE | OBI/OFI/Absorption/Walls/Pulling/Cascades/Heatmap/Regime все реализованы |
 | 15 | Execution contract → simulator → strategies | ❌ NOT STARTED | Этапы 8-10 не начаты |
 
-**Прогресс:** 8/15 закрыто полностью (53%), 4/15 частично (27%), 3/15 не начато (20%)
+**Прогресс:** 9/15 закрыто полностью (60%), 3/15 частично (20%), 3/15 не начато (20%)
 
 ---
 
@@ -277,8 +277,9 @@
 **Что работает:**
 - ✅ Collector на production (3 символа, 24/7)
 - ✅ WAL + Parquet + Manifest
-- ✅ Basic analytics (Delta, CVD, VWAP, Volume Profile, OBI)
-- ✅ REST API + Frontend
+- ✅ Trade-derived analytics (Delta, CVD, VWAP, Volume Profile, Footprint, Sweep, Tape)
+- ✅ Book-derived analytics (OBI, OFI, Absorption, Walls, Pulling/Stacking, Liquidation cascades, Heatmap, Regime)
+- ✅ REST API + Frontend (17 endpoints)
 - ✅ Property tests, fault injection
 
 **Что блокирует Этап 2-4:**
@@ -294,6 +295,6 @@
 - ❌ Strategies с TP/SL
 - ❌ Risk policy + promotion gates
 
-**Оценка готовности:** ~45-50% от полного Roadmap (Этап 0-6).
+**Оценка готовности:** ~52-55% от полного Roadmap (Этап 0-6).
 
-Для начала Этапа 2 нужны: capacity measurement + ADR-005 + fencing token design.
+Для начала Этапа 2 нужны: capacity measurement + fencing token implementation + IPC protocol.
