@@ -73,7 +73,7 @@
 
 ### ⏳ Этап 3. Базовые live-роли и расширение scope
 
-**Статус:** PARTIAL (60%)
+**Статус:** PARTIAL (70%)
 
 Требования:
 - ✅ Collector (работает)
@@ -82,18 +82,20 @@
 - ✅ BTC добавлен + acceptance
 - ✅ ETH добавлен + acceptance
 - ✅ XRP добавлен + acceptance
+- ✅ Orderbook feeds (snapshot-only, delta требует §8.2)
 - ❌ Scheduled OI, funding, market history
 - ❌ RPI feed за feature flag
 - ❌ Disk/load A/B soak с RPI on/off
 
 **Evidence:**
-- 3 символа работают 24/7
+- 3 символа работают 24/7 (publicTrade only на production)
 - Analytics modules: Delta, CVD, VWAP, Volume Profile, OBI
 - API endpoints: /trades, /ohlc, /symbols
+- `collector_with_book.py` готов (orderbook.200 snapshot)
 
 **Gaps:**
-- Нет orderbook feeds (только publicTrade)
-- Нет RPI/liquidation feeds
+- Orderbook delta reconstruction (Roadmap §8.2)
+- RPI/liquidation feeds не подключены
 - Maintenance tasks не изолированы
 
 ---
@@ -208,7 +210,7 @@
 
 ### High Priority (блокируют Этап 2-4)
 
-1. **Capacity measurement** (через 72h)
+1. **Capacity measurement** (через 72h — 2026-08-14 00:55 UTC)
    - Roadmap §6.8
    - Блокирует: Capacity ADR, решение про disk size
    - Команда: `deploy/measure_capacity.sh`
@@ -223,15 +225,15 @@
    - Блокирует: изоляция процессов
    - Задача: P1-S2-xxx (не создана)
 
-4. **Orderbook feeds** (Этап 3)
-   - Roadmap §8.2: orderbook.200, L50, L1000
-   - Блокирует: Heatmap, Attribution, Walls
-   - Задача: P1-S3-xxx (не создана)
+4. ~~**Orderbook feeds**~~ ✅ PARTIAL (Этап 3)
+   - Roadmap §8.2: orderbook.200 snapshot работает
+   - Delta reconstruction требует отдельной реализации (§8.2)
+   - Скрипт: `examples/collector_with_book.py`
 
-5. **PostgreSQL migrations** (Stage 1)
+5. ~~**PostgreSQL migrations**~~ ✅ DONE (Stage 1)
    - ADR-005, Roadmap §6.6
-   - Блокирует: workspace/audit/execution metadata
-   - Задача: P1-S1-009 (OPEN)
+   - PostgreSQL 16.14 на production
+   - Задача: P1-S1-009 CLOSED
 
 ### Medium Priority (нужны для Этап 5-6)
 
