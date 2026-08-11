@@ -77,3 +77,4 @@ grafana_data/
 *.runtime.lock
 .lock
 !deploy/dependencies/**/requirements.lock
+*.tar.gz
