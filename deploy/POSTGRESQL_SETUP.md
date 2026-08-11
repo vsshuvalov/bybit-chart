@@ -1,6 +1,23 @@
 # PostgreSQL setup for Bybit platform
-# Roadmap ADR-005: PostgreSQL для транзакционных и пользовательских данных
-# Блокирует: P1-S1-009 (PostgreSQL migrations)
+
+**Roadmap ADR-005:** PostgreSQL для транзакционных и пользовательских данных  
+**Блокирует:** P1-S1-009 (PostgreSQL migrations)  
+**Статус:** ✅ **DEPLOYED** на production (2026-08-11 01:45 UTC)
+
+---
+
+## ✅ Production Status
+
+**Сервер:** firstbyte.ru (Ubuntu 24.04, 8 GB RAM)  
+**PostgreSQL:** 16.14  
+**База:** `bybit_platform` (7.8 MB)  
+**Пользователь:** `bybit`  
+**Таблицы:** workspace (1 row), audit_log (0 rows), orders (0 rows)  
+**Индексы:** 9 total
+
+---
+
+# ~~Блокирует: P1-S1-009 (PostgreSQL migrations)~~
 
 ## Scope
 
