@@ -1,16 +1,18 @@
 # NEXT: Текущий статус проекта
 
-**Обновлено:** 2026-08-11  
-**Статус:** Development + Server Deployment Ready
+**Обновлено:** 2026-08-11 01:21 UTC  
+**Статус:** Production Collector Running (3 symbols)
 
 ---
 
-## 🎯 Текущая цель
+## 🎯 Текущее состояние
 
-**Развернуть collector на production-сервере** для начала круглосуточного сбора невосполнимых рыночных данных.
+✅ **Collector работает на production-сервере** — круглосуточный сбор невосполнимых данных.
 
-**Сервер:** firstbyte.ru, 8 vCPU, 8 GB RAM, Ubuntu 24.04 LTS  
-**Руководство:** `deploy/QUICKSTART.md` (30 минут)
+**Сервер:** firstbyte.ru, 8 vCPU, 8 GB RAM, Ubuntu 24.04 LTS, Python 3.12.3  
+**Символы:** BTCUSDT, ETHUSDT, XRPUSDT (3 отдельных systemd units)  
+**Данные:** `/opt/bybit-chart/data/{SYMBOL}/` — WAL + Parquet  
+**Throughput:** ~13 MB/час → ~9.3 GB/30 дней (trades only, без orderbook)
 
 ---
 
@@ -88,9 +90,9 @@
 
 ## 📊 Статистика
 
-- **31 коммитов** (Stage 1-4 + Этап 1 + Этап 3 + Analytics + OBI + Deployment)
-- **672 passed, 7 skipped** — все тесты проходят
-- **Server deployment ready** — systemd unit + PostgreSQL setup + capacity script
+- **34 коммита** (Stage 0-4 + Этап 1-3 + Analytics + OBI + Deployment + Linux lock)
+- **658 passed, 8 skipped** — все тесты проходят (macOS + Linux)
+- **Production collector running** — 3 символа, 5.6 MB за 25 минут (~4.9M trades)
 
 ---
 
@@ -146,42 +148,48 @@ bybit-chart/
 
 ## 🔥 Next Steps
 
-### Immediate (сейчас)
+### Immediate (через 72 часа — 2026-08-14 00:55 UTC)
 
-1. **Развернуть collector на сервере** — следовать `deploy/QUICKSTART.md`
-   - Закроет OPEN-005 (архитектура: x86_64, Ubuntu 24.04)
-   - Закроет P1-S1-006 (Linux lock после pytest)
-   - Начнёт сбор невосполнимых данных
-
-2. **Через 72 часа** — запустить `measure_capacity.sh`
-   - Получить bytes/hour baseline (Roadmap §6.8)
-   - Принять Capacity ADR
-   - Оценить необходимость апгрейда диска
+**Capacity measurement** (Roadmap §6.8):
+```bash
+# На сервере
+sudo -u bybit /opt/bybit-chart/deploy/measure_capacity.sh > /tmp/capacity_report.txt
+```
+Результат → Capacity ADR → решение про disk size и retention policy.
 
 ### Short-term (1-2 недели)
 
-3. **PostgreSQL migrations** (P1-S1-009)
-   - Реализовать initial schema
-   - Закрыть ADR-005
+1. **PostgreSQL migrations** (P1-S1-009)
+   - Установить PostgreSQL 16 на сервере
+   - Реализовать initial schema (workspace/audit/orders)
+   - Интегрировать в application startup
+
+2. **Расширить feed scope**
+   - Добавить orderbook.200 (сейчас только publicTrade)
+   - L50/L1000 feeds (capacity test перед включением)
+   - ticker, allLiquidation
+
+3. **GitHub remote + CI** (P1-S1-007)
+   - Создать GitHub repository
+   - Push main branch
+   - GitHub Actions workflow для pytest на Linux
+
+### Medium-term (1-2 месяца)
 
 4. **Roadmap Этап 2** — изолированный collector
    - Writer lease / fencing token
    - UDS/gRPC publish к analytics
    - Cutover/rollback protocol
 
-5. **Расширить feed scope**
-   - L50/L1000, ticker, allLiquidation
-   - RPI on/off capacity test
-
-### Medium-term (1-2 месяца)
-
-6. **Roadmap Этап 4** — изоляция процессов
+5. **Roadmap Этап 4** — multi-process architecture
    - orderflow-worker как отдельный процесс
    - api-gateway без analytics logic
+   - maintenance-worker для compaction
 
-7. **Roadmap Этап 5-6** — Analytics modules
-   - Footprint, Sweep detector
-   - Heatmap tiles, Attribution, Walls
+6. **Roadmap Этап 5-6** — Analytics modules
+   - Footprint chart, Sweep detector
+   - Heatmap tiles, Attribution snapshot
+   - Walls, Absorption, Liquidation cascades
 
 ---
 
