@@ -14,6 +14,8 @@ Endpoints:
 - GET /api/v1/analytics/vwap — VWAP analytics (Этап 3 / P3-A3)
 - GET /api/v1/analytics/volume-profile — Volume Profile (Этап 3 / P3-A4)
 - GET /api/v1/analytics/heatmap — Orderbook Heatmap (Этап 6 / P3-A5)
+- GET /api/v1/analytics/orderflow/regime — Market Regime (Этап 6 / P3-A6)
+- GET /api/v1/analytics/orderflow/features — Active Features (Этап 6 / P3-A7)
 """
 
 from pathlib import Path
@@ -858,6 +860,155 @@ def create_app(data_dir: Path | str | None = None) -> FastAPI:
             raise HTTPException(
                 status_code=500,
                 detail=f"Ошибка вычисления heatmap: {exc}"
+            )
+
+    # ========================================================================
+    # Orderflow Regime & Features API (Roadmap §9.1 Этап 6)
+    # ========================================================================
+
+    @app.get("/api/v1/analytics/orderflow/regime")
+    async def get_orderflow_regime(
+        symbol: str = Query(..., description="Symbol (BTCUSDT)"),
+        window_ms: int = Query(300000, description="Analysis window (ms)", ge=60000),
+    ):
+        """Получить текущий market regime на основе orderflow features (Roadmap §9.1 Этап 6).
+
+        Анализирует все book-derived features и классифицирует текущий режим рынка.
+
+        Query params:
+            - symbol: торговая пара (BTCUSDT)
+            - window_ms: размер временного окна для анализа (default: 300000 = 5 minutes)
+
+        Returns:
+            200 OK: {
+                "state": RegimeState,
+                "feature_importance": [FeatureImportance, ...],
+            }
+            404 Not Found: недостаточно данных для анализа
+
+        Regime types:
+            - MARKUP: восходящий тренд, buying pressure
+            - MARKDOWN: нисходящий тренд, selling pressure
+            - ACCUMULATION: низкая волатильность, balanced orderflow
+            - DISTRIBUTION: высокая волатильность, imbalanced orderflow
+            - NEUTRAL: нет выраженного режима
+            - UNKNOWN: недостаточно данных
+
+        Example:
+            GET /api/v1/analytics/orderflow/regime?symbol=BTCUSDT&window_ms=300000
+        """
+        from packages.analytics.regime import RegimeDetector
+
+        try:
+            detector = RegimeDetector(symbol=symbol, window_ms=window_ms)
+
+            # TODO: В production читать реальные features из orderflow детекторов
+            # Сейчас возвращаем mock для демонстрации API
+
+            import time
+            current_ms = int(time.time() * 1000)
+
+            # Mock features для демонстрации
+            detector.add_feature("obi", active=True, value=0.5, confidence=0.8, timestamp_ms=current_ms)
+            detector.add_feature("ofi", active=True, value=0.3, confidence=0.7, timestamp_ms=current_ms)
+            detector.add_feature("walls_bid", active=False, confidence=0.2, timestamp_ms=current_ms)
+
+            analysis = detector.analyze()
+
+            return JSONResponse(
+                status_code=200,
+                content={
+                    "symbol": symbol,
+                    "state": {
+                        "symbol": analysis.state.symbol,
+                        "regime": analysis.state.regime,
+                        "regime_confidence": analysis.state.regime_confidence,
+                        "features": [f.model_dump() for f in analysis.state.features],
+                        "timestamp_ms": analysis.state.timestamp_ms,
+                        "window_ms": analysis.state.window_ms,
+                    },
+                    "feature_importance": [fi.model_dump() for fi in analysis.feature_importance],
+                },
+            )
+
+        except Exception as exc:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Ошибка анализа regime: {exc}"
+            )
+
+    @app.get("/api/v1/analytics/orderflow/features")
+    async def get_orderflow_features(
+        symbol: str = Query(..., description="Symbol (BTCUSDT)"),
+        active_only: bool = Query(False, description="Только активные features"),
+    ):
+        """Получить список всех orderflow features (Roadmap §9.1 Этап 6).
+
+        Возвращает состояние всех book-derived детекторов.
+
+        Query params:
+            - symbol: торговая пара (BTCUSDT)
+            - active_only: фильтр только активных features (default: false)
+
+        Returns:
+            200 OK: {
+                "symbol": "BTCUSDT",
+                "features": [OrderflowFeature, ...],
+                "count": int
+            }
+
+        Available features:
+            - obi: Order Book Imbalance
+            - ofi: Order Flow Imbalance
+            - absorption: Liquidity Absorption
+            - walls_bid/walls_ask: Price Walls
+            - pulling_stacking: Order Pulling/Stacking
+            - liquidation_cascade: Liquidation Cascades
+
+        Example:
+            GET /api/v1/analytics/orderflow/features?symbol=BTCUSDT&active_only=true
+        """
+        from packages.analytics.regime import RegimeDetector
+
+        try:
+            detector = RegimeDetector(symbol=symbol)
+
+            # TODO: В production читать реальные features из live детекторов
+            # Сейчас возвращаем mock для демонстрации API
+
+            import time
+            current_ms = int(time.time() * 1000)
+
+            # Mock features
+            detector.add_feature("obi", active=True, value=0.65, confidence=0.85, timestamp_ms=current_ms,
+                               metadata={"bid_volume": 5000, "ask_volume": 3000})
+            detector.add_feature("ofi", active=True, value=0.42, confidence=0.78, timestamp_ms=current_ms)
+            detector.add_feature("absorption", active=False, confidence=0.25, timestamp_ms=current_ms)
+            detector.add_feature("walls_bid", active=True, value=50000, confidence=0.9, timestamp_ms=current_ms,
+                               metadata={"side": "bid", "price_level": 50000, "qty": 1000})
+            detector.add_feature("pulling_stacking", active=False, confidence=0.15, timestamp_ms=current_ms)
+            detector.add_feature("liquidation_cascade", active=False, confidence=0.1, timestamp_ms=current_ms)
+
+            state = detector.compute_regime()
+            features = state.features
+
+            if active_only:
+                features = [f for f in features if f.active]
+
+            return JSONResponse(
+                status_code=200,
+                content={
+                    "symbol": symbol,
+                    "features": [f.model_dump() for f in features],
+                    "count": len(features),
+                    "timestamp_ms": current_ms,
+                },
+            )
+
+        except Exception as exc:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Ошибка чтения features: {exc}"
             )
 
     return app
