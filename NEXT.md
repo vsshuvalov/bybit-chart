@@ -35,7 +35,7 @@
 
 ## ⏰ Critical Timeline
 
-**2026-08-14 00:55 UTC (через ~35 часов):**
+**2026-08-12 00:55 UTC (через ~11 часов):**
 ```bash
 # Capacity measurement baseline
 sudo -u bybit /opt/bybit-chart/deploy/measure_capacity.sh > /tmp/capacity_report.txt

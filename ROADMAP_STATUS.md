@@ -192,7 +192,7 @@
 
 | # | Задача | Статус | Evidence |
 |---|--------|--------|----------|
-| 1 | Утвердить ADR-001…011 | ✅ DONE | `docs/architecture/decisions/` |
+| 1 | Утвердить ADR-001…011 | ⏳ PARTIAL | `docs/adr/README.md`; ADR-010/011 остаются OPEN |
 | 2 | Заморозить монолит и baseline release | ✅ DONE | 34 коммита, git tags |
 | 3 | Создать package `contracts` | ✅ DONE | `contracts/`, Pydantic schemas |
 | 4 | Параметризовать symbol | ✅ DONE | 3 символа работают |
@@ -216,7 +216,7 @@
 
 ### High Priority (блокируют Этап 2-4)
 
-1. **Capacity measurement** (через 72h — 2026-08-14 00:55 UTC)
+1. **Capacity measurement** (через 24h — 2026-08-12 00:55 UTC)
    - Roadmap §6.8
    - Блокирует: Capacity ADR, решение про disk size
    - Команда: `deploy/measure_capacity.sh`
