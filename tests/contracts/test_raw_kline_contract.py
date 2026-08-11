@@ -8,6 +8,8 @@ import pytest
 from decimal import Decimal
 from hypothesis import given, strategies as st
 
+pytestmark = pytest.mark.contract
+
 from contracts.raw_kline import RawKline
 
 

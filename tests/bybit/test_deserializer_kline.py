@@ -3,6 +3,8 @@
 """
 
 import pytest
+
+pytestmark = pytest.mark.contract
 from decimal import Decimal
 
 from packages.bybit.deserializer_kline import deserialize_kline

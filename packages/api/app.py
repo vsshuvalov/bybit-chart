@@ -649,12 +649,15 @@ def create_app(data_dir: Path | str | None = None) -> FastAPI:
                 ]
             }
         """
-        from packages.analytics.footprint import create_footprint_from_trades
+        from packages.analytics.footprint import FootprintAggregator, compute_footprint_bars
+        from contracts.schemas import RawTrade
 
         try:
             interval_us = parse_interval(interval)
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc))
+
+        interval_seconds = interval_us // 1_000_000
 
         try:
             events = reader.read_range(
@@ -664,8 +667,67 @@ def create_app(data_dir: Path | str | None = None) -> FastAPI:
                 event_type="RawTrade",
             )
 
-            footprint = create_footprint_from_trades(events, interval_us)
-            candles = footprint.to_dict_list(start_ts, end_ts)
+            # Конвертировать raw dicts → RawTrade объекты
+            # Parquet хранит priceTicks, qtySteps, takerSide (camelCase aliases)
+            trades = []
+            for row in events:
+                if row.get("eventType") != "RawTrade":
+                    continue
+                try:
+                    trades.append(RawTrade(
+                        symbol=row.get("symbol", symbol),
+                        trade_id=str(row.get("sequence", 0)),
+                        sequence=row.get("sequence", 0),
+                        exchange_timestamp_ms=row.get("exchangeTimestampMs", 0),
+                        outer_timestamp_ms=row.get("outerTimestampMs", 0),
+                        receive_timestamp_ms=row.get("receiveTimestampMs", 0),
+                        price_ticks=row.get("priceTicks", 0),
+                        qty_steps=row.get("qtySteps", 0),
+                        taker_side=row.get("takerSide", "Buy"),
+                    ))
+                except Exception:
+                    continue
+
+            # Для отображения в API используем qty_steps напрямую (без конвертации)
+            bars = list(compute_footprint_bars(
+                iter(trades),
+                venue="BYBIT",
+                symbol=symbol,
+                interval_seconds=interval_seconds,
+                tick_size=__import__("decimal").Decimal("1"),
+                step_size=__import__("decimal").Decimal("1"),
+            ))
+
+            candles = [
+                {
+                    "interval_start_ms": b.interval_start_ms,
+                    "interval_end_ms": b.interval_end_ms,
+                    "poc_price": str(b.poc_price) if b.poc_price else None,
+                    "total_bid_volume": str(b.total_bid_volume),
+                    "total_ask_volume": str(b.total_ask_volume),
+                    "overall_imbalance": str(b.overall_imbalance),
+                    "level_count": b.level_count,
+                    "cells": [
+                        {
+                            "price": str(level.price),
+                            "buy_volume": float(level.bid_volume),
+                            "sell_volume": float(level.ask_volume),
+                            "delta": float(level.bid_volume - level.ask_volume),
+                            "bid_volume": str(level.bid_volume),
+                            "ask_volume": str(level.ask_volume),
+                            "total_volume": str(level.total_volume),
+                            "imbalance": float(level.imbalance),
+                            "trade_count": level.trade_count,
+                        }
+                        for level in sorted(
+                            b.levels.values(),
+                            key=lambda x: x.price,
+                            reverse=True,
+                        )
+                    ],
+                }
+                for b in bars
+            ]
 
             return JSONResponse(
                 status_code=200,

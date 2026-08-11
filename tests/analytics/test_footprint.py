@@ -5,6 +5,8 @@
 import pytest
 from decimal import Decimal
 
+pytestmark = pytest.mark.contract
+
 from contracts.footprint import FootprintBar, FootprintLevel
 from contracts.schemas import RawTrade, TakerSide
 from packages.analytics.footprint import FootprintAggregator, compute_footprint_bars

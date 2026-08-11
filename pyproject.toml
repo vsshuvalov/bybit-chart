@@ -12,4 +12,5 @@ markers = [
     "fault: fault-injection и crash-consistency тесты",
     "contract: контрактные тесты схем и хранилища",
     "property: property-based тесты на Hypothesis",
+    "integration: интеграционные тесты нескольких компонентов",
 ]
