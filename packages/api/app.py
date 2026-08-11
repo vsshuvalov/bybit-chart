@@ -13,6 +13,7 @@ Endpoints:
 - GET /api/v1/analytics/cvd — CVD analytics (Этап 3 / P3-A2)
 - GET /api/v1/analytics/vwap — VWAP analytics (Этап 3 / P3-A3)
 - GET /api/v1/analytics/volume-profile — Volume Profile (Этап 3 / P3-A4)
+- GET /api/v1/analytics/heatmap — Orderbook Heatmap (Этап 6 / P3-A5)
 """
 
 from pathlib import Path
@@ -756,6 +757,108 @@ def create_app(data_dir: Path | str | None = None) -> FastAPI:
     # Roadmap §2.1: Redis pub/sub для zero-latency broadcast
     # Если Redis недоступен — fallback на polling (уже в websocket.py)
     register_redis_subscriber(app, live_feed_manager, redis_url="redis://localhost:6379/0")
+
+    # ========================================================================
+    # Heatmap Analytics (Roadmap §9.2 Этап 6)
+    # ========================================================================
+
+    @app.get("/api/v1/analytics/heatmap")
+    async def get_heatmap(
+        symbol: str = Query(..., description="Symbol (BTCUSDT)"),
+        start_ms: int = Query(..., description="Начало диапазона (milliseconds)", ge=0),
+        end_ms: int = Query(..., description="Конец диапазона (milliseconds)", ge=0),
+        price_bin_size: int = Query(10, description="Размер price bin (ticks)", ge=1),
+        time_interval_ms: int = Query(60000, description="Временной интервал (ms)", ge=1000),
+    ):
+        """Получить orderbook heatmap tiles (Roadmap §9.2 Этап 6).
+
+        Агрегирует orderbook snapshots в tiles для heatmap visualization.
+
+        Query params:
+            - symbol: торговая пара (BTCUSDT)
+            - start_ms: начало диапазона (milliseconds)
+            - end_ms: конец диапазона (milliseconds)
+            - price_bin_size: размер price bin в ticks (default: 10 = 1.0 USDT для BTCUSDT)
+            - time_interval_ms: размер временного окна (default: 60000 = 1 minute)
+
+        Returns:
+            200 OK: {
+                "symbol": "BTCUSDT",
+                "tiles": [HeatmapTile, ...],
+                "count": int
+            }
+            400 Bad Request: некорректные параметры
+            404 Not Found: symbol не существует или нет orderbook данных
+
+        Example:
+            GET /api/v1/analytics/heatmap?symbol=BTCUSDT&start_ms=1786372648000&end_ms=1786372650000
+        """
+        from packages.analytics.heatmap import compute_heatmap
+        from contracts.heatmap import HeatmapQueryParams
+
+        # Валидация параметров
+        try:
+            params = HeatmapQueryParams(
+                start_ms=start_ms,
+                end_ms=end_ms,
+                price_bin_size=price_bin_size,
+                time_interval_ms=time_interval_ms,
+            )
+            params.validate_range()
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+
+        try:
+            # Читаем orderbook snapshots из Parquet
+            # Конвертируем ms → μs для reader
+            events = reader.read_range(
+                symbol=symbol,
+                start_ts=start_ms * 1000,
+                end_ts=end_ms * 1000,
+                event_type="RawBookEvent",
+            )
+
+            # Фильтруем только snapshots (delta игнорируются)
+            snapshots = [e for e in events if e.type == "snapshot"]
+
+            if not snapshots:
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"Нет orderbook snapshots для {symbol} в указанном диапазоне"
+                )
+
+            # Вычисляем tiles
+            tiles = compute_heatmap(
+                book_events=snapshots,
+                venue="BYBIT",
+                symbol=symbol,
+                time_interval_ms=time_interval_ms,
+                price_bin_size_ticks=price_bin_size,
+            )
+
+            return JSONResponse(
+                status_code=200,
+                content={
+                    "symbol": symbol,
+                    "start_ms": start_ms,
+                    "end_ms": end_ms,
+                    "price_bin_size": price_bin_size,
+                    "time_interval_ms": time_interval_ms,
+                    "tiles": [tile.model_dump() for tile in tiles],
+                    "count": len(tiles),
+                },
+            )
+
+        except FileNotFoundError:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Symbol не найден или нет orderbook данных: {symbol}"
+            )
+        except Exception as exc:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Ошибка вычисления heatmap: {exc}"
+            )
 
     return app
 
