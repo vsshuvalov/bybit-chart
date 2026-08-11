@@ -1,284 +1,241 @@
 """
-Footprint Chart для volume distribution analysis (Roadmap §9).
+Footprint analytics module (Roadmap §9.1 Этап 5).
 
-Источник: Roadmap §9 (Footprint chart, advanced order flow)
-
-Footprint Chart — распределение объёма внутри каждой свечи:
-- Показывает bid/ask volume на каждом price level внутри candle
-- Визуализация: matrix (time × price), цвет = volume intensity
-- Delta footprint: buy volume - sell volume на каждом level
-- Imbalance detection: аномальные bid/ask ratios
-
-Use Cases:
-- Absorption detection (крупные bids поглощают selling)
-- Exhaustion patterns (buying exhausted, no follow-through)
-- Support/resistance validation (volume clusters)
-- Iceberg order detection (hidden liquidity)
-
-Roadmap §9: Footprint chart — professional order flow visualization.
+Агрегирует bid/ask volume по ценовым уровням для footprint chart.
 """
 
-import logging
-from dataclasses import dataclass
-from typing import Any
+from collections import defaultdict
+from decimal import Decimal
+from typing import Iterator
 
-logger = logging.getLogger(__name__)
-
-
-@dataclass
-class FootprintCell:
-    """Одна ячейка footprint chart (price level × time bin).
-
-    Roadmap §9: каждая ячейка хранит bid/ask volume на price level.
-    """
-    price_ticks: int
-    buy_volume: int
-    sell_volume: int
-    delta: int  # buy_volume - sell_volume
-    total_volume: int  # buy_volume + sell_volume
-
-    def get_imbalance(self) -> float:
-        """Рассчитать imbalance ratio.
-
-        Returns:
-            (buy - sell) / (buy + sell), range [-1, 1]
-        """
-        if self.total_volume == 0:
-            return 0.0
-        return self.delta / self.total_volume
+from contracts.footprint import FootprintBar, FootprintLevel
+from contracts.schemas import RawTrade, TakerSide
 
 
-@dataclass
-class FootprintCandle:
-    """Footprint для одной свечи (time bin).
+class FootprintAggregator:
+    """Агрегатор для footprint analytics.
 
-    Roadmap §9: footprint candle содержит volume distribution по price levels.
-    """
-    timestamp_us: int
-    cells: dict[int, FootprintCell]  # price_ticks → FootprintCell
-    open_ticks: int
-    high_ticks: int
-    low_ticks: int
-    close_ticks: int
+    Accumulates bid/ask volume per price level в заданном интервале.
 
-    def get_poc_price(self) -> int | None:
-        """Получить Point of Control (price с максимальным volume).
-
-        Returns:
-            price_ticks POC или None если cells пустые
-        """
-        if not self.cells:
-            return None
-
-        max_cell = max(self.cells.values(), key=lambda c: c.total_volume)
-        return max_cell.price_ticks
-
-    def get_imbalance_levels(self, threshold: float = 0.5) -> list[FootprintCell]:
-        """Найти price levels с сильным imbalance.
-
-        Args:
-            threshold: минимальный |imbalance| для detection (0.5 = 75%/25%)
-
-        Returns:
-            Список cells с imbalance >= threshold
-        """
-        return [
-            cell for cell in self.cells.values()
-            if abs(cell.get_imbalance()) >= threshold
-        ]
-
-    def to_dict(self) -> dict[str, Any]:
-        """Serialize to dict."""
-        return {
-            "timestamp_us": self.timestamp_us,
-            "open_ticks": self.open_ticks,
-            "high_ticks": self.high_ticks,
-            "low_ticks": self.low_ticks,
-            "close_ticks": self.close_ticks,
-            "poc_price": self.get_poc_price(),
-            "cells": [
-                {
-                    "price_ticks": price,
-                    "buy_volume": cell.buy_volume,
-                    "sell_volume": cell.sell_volume,
-                    "delta": cell.delta,
-                    "total_volume": cell.total_volume,
-                    "imbalance": cell.get_imbalance(),
-                }
-                for price, cell in sorted(self.cells.items(), reverse=True)
-            ],
-        }
-
-
-class FootprintChart:
-    """Footprint chart engine для volume distribution analysis.
-
-    Roadmap §9: builds footprint candles from trades.
-    """
-
-    def __init__(self, interval_us: int):
-        """Initialize footprint chart.
-
-        Args:
-            interval_us: candle interval (microseconds), например 60_000_000 = 1m
-        """
-        self.interval_us = interval_us
-        self.candles: dict[int, FootprintCandle] = {}  # timestamp → FootprintCandle
-
-    def add_trade(
-        self,
-        timestamp_us: int,
-        price_ticks: int,
-        qty_steps: int,
-        aggressor_side: str,
-    ):
-        """Добавить trade в footprint.
-
-        Args:
-            timestamp_us: timestamp сделки
-            price_ticks: цена
-            qty_steps: количество
-            aggressor_side: "Buy" | "Sell"
-        """
-        # Определяем candle timestamp
-        candle_ts = (timestamp_us // self.interval_us) * self.interval_us
-
-        # Создаём candle если не существует
-        if candle_ts not in self.candles:
-            self.candles[candle_ts] = FootprintCandle(
-                timestamp_us=candle_ts,
-                cells={},
-                open_ticks=price_ticks,
-                high_ticks=price_ticks,
-                low_ticks=price_ticks,
-                close_ticks=price_ticks,
-            )
-
-        candle = self.candles[candle_ts]
-
-        # Обновляем OHLC
-        candle.high_ticks = max(candle.high_ticks, price_ticks)
-        candle.low_ticks = min(candle.low_ticks, price_ticks)
-        candle.close_ticks = price_ticks
-
-        # Обновляем cell для price level
-        if price_ticks not in candle.cells:
-            candle.cells[price_ticks] = FootprintCell(
-                price_ticks=price_ticks,
-                buy_volume=0,
-                sell_volume=0,
-                delta=0,
-                total_volume=0,
-            )
-
-        cell = candle.cells[price_ticks]
-
-        if aggressor_side == "Buy":
-            cell.buy_volume += qty_steps
-        elif aggressor_side == "Sell":
-            cell.sell_volume += qty_steps
-
-        cell.total_volume = cell.buy_volume + cell.sell_volume
-        cell.delta = cell.buy_volume - cell.sell_volume
-
-    def get_candle(self, timestamp_us: int) -> FootprintCandle | None:
-        """Получить footprint candle по timestamp.
-
-        Args:
-            timestamp_us: timestamp candle
-
-        Returns:
-            FootprintCandle или None
-        """
-        candle_ts = (timestamp_us // self.interval_us) * self.interval_us
-        return self.candles.get(candle_ts)
-
-    def get_candles_range(
-        self,
-        start_ts: int,
-        end_ts: int,
-    ) -> list[FootprintCandle]:
-        """Получить footprint candles в диапазоне.
-
-        Args:
-            start_ts: начало диапазона
-            end_ts: конец диапазона
-
-        Returns:
-            Список FootprintCandle (chronological order)
-        """
-        return [
-            candle for ts, candle in sorted(self.candles.items())
-            if start_ts <= ts < end_ts
-        ]
-
-    def detect_absorption(
-        self,
-        candle: FootprintCandle,
-        min_volume_ratio: float = 3.0,
-    ) -> list[tuple[int, str]]:
-        """Detect absorption patterns (крупный volume поглощает противоположную сторону).
-
-        Args:
-            candle: FootprintCandle для анализа
-            min_volume_ratio: минимальное соотношение buy/sell для absorption
-
-        Returns:
-            Список (price_ticks, "buy_absorption" | "sell_absorption")
-
-        Roadmap §9: Absorption = крупные bids поглощают selling (или наоборот).
-        """
-        absorptions = []
-
-        for price, cell in candle.cells.items():
-            if cell.buy_volume == 0 or cell.sell_volume == 0:
-                continue
-
-            buy_ratio = cell.buy_volume / cell.sell_volume
-            sell_ratio = cell.sell_volume / cell.buy_volume
-
-            if buy_ratio >= min_volume_ratio:
-                absorptions.append((price, "buy_absorption"))
-            elif sell_ratio >= min_volume_ratio:
-                absorptions.append((price, "sell_absorption"))
-
-        return absorptions
-
-    def to_dict_list(self, start_ts: int, end_ts: int) -> list[dict[str, Any]]:
-        """Serialize candles в range to list of dicts.
-
-        Args:
-            start_ts: начало диапазона
-            end_ts: конец диапазона
-
-        Returns:
-            JSON-serializable list
-        """
-        candles = self.get_candles_range(start_ts, end_ts)
-        return [c.to_dict() for c in candles]
-
-
-def create_footprint_from_trades(
-    trades: list[dict[str, Any]],
-    interval_us: int,
-) -> FootprintChart:
-    """Создать Footprint chart из списка RawTrade.
-
-    Args:
-        trades: список RawTrade dict из ParquetReader
-        interval_us: candle interval (microseconds)
-
-    Returns:
-        FootprintChart instance с данными
-    """
-    footprint = FootprintChart(interval_us)
-
-    for trade in trades:
-        footprint.add_trade(
-            timestamp_us=trade.get("timestampUs", 0),
-            price_ticks=trade.get("priceTicks", 0),
-            qty_steps=trade.get("qtySteps", 0),
-            aggressor_side=trade.get("takerSide", ""),
+    Usage:
+        aggregator = FootprintAggregator(
+            venue="BYBIT",
+            symbol="BTCUSDT",
+            interval_seconds=60,
+            tick_size=Decimal("0.1"),
+            step_size=Decimal("0.001"),
         )
 
-    return footprint
+        for trade in trades:
+            aggregator.add_trade(trade)
+
+        footprint = aggregator.build()
+    """
+
+    def __init__(
+        self,
+        venue: str,
+        symbol: str,
+        interval_seconds: int,
+        tick_size: Decimal,
+        step_size: Decimal,
+        interval_start_ms: int | None = None,
+    ):
+        """Инициализировать footprint aggregator.
+
+        Args:
+            venue: биржа (например, "BYBIT")
+            symbol: торговая пара (например, "BTCUSDT")
+            interval_seconds: длительность интервала (секунды)
+            tick_size: размер тика цены (например, 0.1 для BTCUSDT)
+            step_size: размер шага объёма (например, 0.001)
+            interval_start_ms: начало интервала (Unix ms), если None — берётся из первого trade
+        """
+        self.venue = venue
+        self.symbol = symbol
+        self.interval_seconds = interval_seconds
+        self.tick_size = tick_size
+        self.step_size = step_size
+        self.interval_start_ms = interval_start_ms
+
+        # Установить interval_end_ms если start известен
+        if interval_start_ms is not None:
+            self.interval_end_ms = interval_start_ms + (interval_seconds * 1000)
+        else:
+            self.interval_end_ms = None
+
+        # Агрегация по ценовым уровням: {price_str: (bid_volume, ask_volume, trade_count)}
+        self.levels: dict[str, tuple[Decimal, Decimal, int]] = defaultdict(
+            lambda: (Decimal(0), Decimal(0), 0)
+        )
+
+    def add_trade(self, trade: RawTrade) -> None:
+        """Добавить trade в агрегацию.
+
+        Args:
+            trade: RawTrade событие
+        """
+        # Установить interval_start_ms из первого trade
+        if self.interval_start_ms is None:
+            self.interval_start_ms = trade.exchange_timestamp_ms
+            self.interval_end_ms = self.interval_start_ms + (
+                self.interval_seconds * 1000
+            )
+
+        # Проверить, что trade в текущем интервале
+        if trade.exchange_timestamp_ms > self.interval_end_ms:
+            # Trade вне интервала — игнорируем (caller должен создать новый aggregator)
+            return
+
+        # Конвертировать ticks → Decimal
+        price = Decimal(trade.price_ticks) * self.tick_size
+        qty = Decimal(trade.qty_steps) * self.step_size
+
+        # Агрегировать volume по цене
+        price_str = str(price)
+        bid_vol, ask_vol, count = self.levels[price_str]
+
+        if trade.taker_side == TakerSide.BUY:
+            # Агрессивная покупка (taker Buy)
+            bid_vol += qty
+        else:
+            # Агрессивная продажа (taker Sell)
+            ask_vol += qty
+
+        self.levels[price_str] = (bid_vol, ask_vol, count + 1)
+
+    def build(self) -> FootprintBar:
+        """Построить FootprintBar из агрегированных данных.
+
+        Returns:
+            FootprintBar contract
+
+        Raises:
+            ValueError: если нет данных для построения
+        """
+        if self.interval_start_ms is None:
+            raise ValueError("Нет данных для построения FootprintBar")
+
+        if self.interval_end_ms is None:
+            self.interval_end_ms = self.interval_start_ms + (
+                self.interval_seconds * 1000
+            )
+
+        # Построить FootprintLevel для каждого уровня
+        footprint_levels: dict[str, FootprintLevel] = {}
+        total_bid_volume = Decimal(0)
+        total_ask_volume = Decimal(0)
+
+        for price_str, (bid_vol, ask_vol, count) in self.levels.items():
+            price = Decimal(price_str)
+            total_volume = bid_vol + ask_vol
+
+            # Imbalance: (bid - ask) / total
+            if total_volume > 0:
+                imbalance = (bid_vol - ask_vol) / total_volume
+            else:
+                imbalance = Decimal(0)
+
+            footprint_levels[price_str] = FootprintLevel(
+                price=price,
+                bid_volume=bid_vol,
+                ask_volume=ask_vol,
+                total_volume=total_volume,
+                imbalance=imbalance,
+                trade_count=count,
+            )
+
+            total_bid_volume += bid_vol
+            total_ask_volume += ask_vol
+
+        # Найти POC (Point of Control) — уровень с максимальным объёмом
+        poc_price: Decimal | None = None
+        max_volume = Decimal(0)
+
+        for level in footprint_levels.values():
+            if level.total_volume > max_volume:
+                max_volume = level.total_volume
+                poc_price = level.price
+
+        # Общий imbalance
+        total_volume = total_bid_volume + total_ask_volume
+        if total_volume > 0:
+            overall_imbalance = (total_bid_volume - total_ask_volume) / total_volume
+        else:
+            overall_imbalance = Decimal(0)
+
+        return FootprintBar(
+            venue=self.venue,
+            symbol=self.symbol,
+            interval_start_ms=self.interval_start_ms,
+            interval_end_ms=self.interval_end_ms,
+            interval_seconds=self.interval_seconds,
+            levels=footprint_levels,
+            poc_price=poc_price,
+            total_bid_volume=total_bid_volume,
+            total_ask_volume=total_ask_volume,
+            total_volume=total_volume,
+            overall_imbalance=overall_imbalance,
+            level_count=len(footprint_levels),
+        )
+
+
+def compute_footprint_bars(
+    trades: Iterator[RawTrade],
+    venue: str,
+    symbol: str,
+    interval_seconds: int,
+    tick_size: Decimal,
+    step_size: Decimal,
+) -> Iterator[FootprintBar]:
+    """Вычислить footprint bars из потока trades.
+
+    Args:
+        trades: итератор RawTrade
+        venue: биржа
+        symbol: торговая пара
+        interval_seconds: длительность интервала (секунды)
+        tick_size: размер тика цены
+        step_size: размер шага объёма
+
+    Yields:
+        FootprintBar для каждого интервала
+    """
+    aggregator: FootprintAggregator | None = None
+
+    for trade in trades:
+        # Создать новый aggregator для первого trade
+        if aggregator is None:
+            aggregator = FootprintAggregator(
+                venue=venue,
+                symbol=symbol,
+                interval_seconds=interval_seconds,
+                tick_size=tick_size,
+                step_size=step_size,
+                interval_start_ms=trade.exchange_timestamp_ms,
+            )
+
+        # Проверить, нужен ли новый интервал
+        if (
+            aggregator.interval_end_ms is not None
+            and trade.exchange_timestamp_ms > aggregator.interval_end_ms
+        ):
+            # Закрыть текущий интервал
+            yield aggregator.build()
+
+            # Создать новый aggregator для следующего интервала
+            aggregator = FootprintAggregator(
+                venue=venue,
+                symbol=symbol,
+                interval_seconds=interval_seconds,
+                tick_size=tick_size,
+                step_size=step_size,
+                interval_start_ms=trade.exchange_timestamp_ms,
+            )
+
+        # Добавить trade в текущий aggregator
+        aggregator.add_trade(trade)
+
+    # Закрыть последний интервал
+    if aggregator is not None and aggregator.levels:
+        yield aggregator.build()
