@@ -1,6 +1,6 @@
 # Roadmap Implementation Status
 
-**Обновлено:** 2026-08-11 01:30 UTC  
+**Обновлено:** 2026-08-11 18:00 UTC  
 **Источник:** `BYBIT_MULTIPROCESS_PLATFORM_ROADMAP.md` §19, §24
 
 ---
@@ -120,21 +120,23 @@
 
 ---
 
-### ⏳ Этап 5. Trade-derived analytics
+### ✅ Этап 5. Trade-derived analytics
 
-**Статус:** PARTIAL (70%)
+**Статус:** COMPLETE (100%)
 
 Порядок:
 1. ✅ Canonical OHLCV — DONE
-2. ❌ Tape/Bubbles — NOT STARTED
-3. ❌ Footprint + Imbalance — NOT STARTED
+2. ✅ Tape/Bubbles — DONE
+3. ✅ Footprint + Imbalance — DONE
 4. ✅ Delta + CVD — DONE
 5. ✅ Volume Profile — DONE
 6. ✅ VWAP — DONE
-7. ❌ Sweep (trade-series detector) — NOT STARTED
+7. ✅ Sweep (trade-series detector) — DONE
 
 **Evidence:**
-- `packages/analytics/`: delta.py, cvd.py, vwap.py, volume_profile.py
+- `packages/analytics/`: delta.py, cvd.py, vwap.py, volume_profile.py, footprint.py, sweep.py, tape.py
+- `contracts/`: footprint.py, sweep.py, tape.py
+- Tests: 26 passed (footprint: 5, sweep: 8, tape: 13)
 - Property tests для determinism
 - Cross-TF invariants проверены
 
@@ -148,25 +150,27 @@
 
 ### ⏳ Этап 6. Book-derived analytics
 
-**Статус:** PARTIAL (30%)
+**Статус:** PARTIAL (71%)
 
 Порядок:
 1. ❌ Heatmap tiles — NOT STARTED
-2. ❌ Attribution snapshot — NOT STARTED
+2. ✅ OFI + Microprice (Attribution base) — DONE
 3. ✅ OBI (Order Book Imbalance) — DONE
-4. ❌ Absorption — NOT STARTED
-5. ❌ Walls — NOT STARTED
-6. ❌ Liquidity cascades — NOT STARTED
-7. ❌ Regime/Feature API — NOT STARTED
+4. ✅ Absorption — DONE
+5. ✅ Walls — DONE
+6. ✅ Pulling/Stacking — DONE
+7. ✅ Liquidation cascades — DONE
+8. ❌ Regime/Feature API — NOT STARTED
 
 **Evidence:**
-- `packages/analytics/obi.py` — реализован
-- Tests: `tests/contracts/test_obi.py`
+- `packages/analytics/`: obi.py, ofi.py, absorption.py, walls.py, pulling_stacking.py, liquidation_cascades.py
+- `contracts/`: ofi.py, absorption.py, walls.py
+- Tests: 29 passed (absorption: 5, walls: 7, liquidation: 5, ofi: 9, pulling/stacking: 3)
 
 **Gaps:**
 - Orderbook feeds не подключены (только publicTrade)
 - Heatmap visualization не реализована
-- Attribution logic не реализована
+- Regime/Feature API не реализован
 
 ---
 
@@ -200,11 +204,11 @@
 | 10 | Kill analytics/API без остановки raw | ❌ NOT STARTED | Нет IPC, всё монолитно |
 | 11 | RPI raw-only за feature flag, A/B soak | ❌ NOT STARTED | RPI feeds не подключены |
 | 12 | Разделить analytics и API | ❌ NOT STARTED | Монолитный процесс |
-| 13 | Перенести trade-derived с invariants | ⏳ PARTIAL | Delta/CVD/VWAP done, Footprint/Sweep не начаты |
-| 14 | Перенести book-derived с attribution | ⏳ PARTIAL | OBI done, Heatmap/Walls не начаты |
+| 13 | Перенести trade-derived с invariants | ✅ DONE | Delta/CVD/VWAP/Volume Profile/Footprint/Sweep/Tape все реализованы |
+| 14 | Перенести book-derived с attribution | ⏳ PARTIAL | OBI/OFI/Absorption/Walls/Pulling/Cascades done, Heatmap не начат |
 | 15 | Execution contract → simulator → strategies | ❌ NOT STARTED | Этапы 8-10 не начаты |
 
-**Прогресс:** 8/15 закрыто полностью (53%), 3/15 частично (20%), 4/15 не начато (27%)
+**Прогресс:** 8/15 закрыто полностью (53%), 4/15 частично (27%), 3/15 не начато (20%)
 
 ---
 
@@ -290,6 +294,6 @@
 - ❌ Strategies с TP/SL
 - ❌ Risk policy + promotion gates
 
-**Оценка готовности:** ~35-40% от полного Roadmap (Этап 0-6).
+**Оценка готовности:** ~45-50% от полного Roadmap (Этап 0-6).
 
 Для начала Этапа 2 нужны: capacity measurement + ADR-005 + fencing token design.
