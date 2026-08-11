@@ -1,0 +1,96 @@
+# Bybit Market Data Collector — systemd unit
+# Roadmap §19 Этап 2: изолированный collector с health probe
+#
+# Назначение: круглосуточный сбор невосполнимых публичных данных Bybit
+# Scope текущей revision: publicTrade + orderbook.200 для BTCUSDT/ETHUSDT/XRPUSDT
+# PostgreSQL и execution: не требуются до Этапа 9
+#
+# Установка:
+#   sudo cp bybit-collector.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable bybit-collector
+#   sudo systemctl start bybit-collector
+#
+# Проверка:
+#   sudo systemctl status bybit-collector
+#   sudo journalctl -u bybit-collector -f
+
+[Unit]
+Description=Bybit Market Data Collector (recorder-only)
+Documentation=file:///opt/bybit-chart/docs/architecture/TARGET.md
+After=network-online.target ntp.service
+Wants=network-online.target
+
+# Restart policy: collector критичен для невосполнимых данных
+# Aggressive restart при любом падении, кроме clean shutdown
+StartLimitIntervalSec=600
+StartLimitBurst=5
+
+[Service]
+Type=exec
+User=bybit
+Group=bybit
+WorkingDirectory=/opt/bybit-chart
+
+# Python virtual environment
+Environment="PATH=/opt/bybit-chart/.venv/bin:/usr/local/bin:/usr/bin:/bin"
+Environment="PYTHONUNBUFFERED=1"
+
+# Collector entry point (заменить на фактический скрипт при наличии)
+# Сейчас используем multi_symbol_demo как recorder
+ExecStart=/opt/bybit-chart/.venv/bin/python examples/multi_symbol_demo.py \
+    --duration 0 \
+    --symbols BTCUSDT ETHUSDT XRPUSDT
+
+# Health probe (опционально, если реализован /health endpoint)
+# ExecStartPost=/bin/sleep 10
+# ExecStartPost=/usr/bin/curl -f http://localhost:9090/health || exit 1
+
+# Graceful shutdown: SIGTERM → 30s → SIGKILL
+# Roadmap §3 требует flush WAL и gap marker при shutdown
+TimeoutStopSec=30
+KillMode=mixed
+KillSignal=SIGTERM
+
+# Restart policy
+Restart=always
+RestartSec=10
+
+# Resource limits (8GB RAM server — умеренные ограничения)
+# Collector — highest priority по §18.3
+CPUWeight=1000
+IOWeight=1000
+
+# Memory: выделяем collector до 3 GB (остальное под OS, PostgreSQL, analytics)
+# При 8 GB RAM можно безопасно держать все компоненты
+MemoryMax=3072M
+MemoryHigh=2560M
+
+# Disk I/O: collector не должен конкурировать с maintenance
+# (maintenance пока не запущен, но резервируем приоритет)
+IOSchedulingClass=realtime
+IOSchedulingPriority=0
+
+# Security hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/bybit-chart/data /opt/bybit-chart/logs
+
+# Не трогаем /proc, /sys — может понадобиться для metrics
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+
+# Запрет execve, SUID
+RestrictRealtime=true
+RestrictSUIDSGID=true
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=bybit-collector
+
+[Install]
+WantedBy=multi-user.target
