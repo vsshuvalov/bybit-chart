@@ -1,11 +1,14 @@
 #!/bin/bash
 # Capacity measurement script — Roadmap §6.8 requirement
-# Запускать после 72 часов непрерывного сбора данных
+# Запускать после 24 часов непрерывного сбора данных
 
 set -e
 
+# Сменить директорию чтобы избежать "Permission denied" при sudo -u bybit
+cd /tmp
+
 DATA_DIR="${1:-/opt/bybit-chart/data}"
-DURATION_HOURS="${2:-72}"
+DURATION_HOURS="${2:-24}"
 
 if [ ! -d "$DATA_DIR" ]; then
     echo "ERROR: Data directory not found: $DATA_DIR" >&2
@@ -14,18 +17,17 @@ fi
 
 echo "========================================="
 echo "Bybit Collector Capacity Measurement"
-echo "Roadmap §6.8 — 72-hour baseline"
+echo "Roadmap §6.8 — ${DURATION_HOURS}-hour baseline"
 echo "========================================="
 echo ""
 echo "Measurement window: ${DURATION_HOURS} hours"
-echo "Started: $(date -d "${DURATION_HOURS} hours ago" '+%Y-%m-%d %H:%M:%S' 2>/dev/null || date -v-${DURATION_HOURS}H '+%Y-%m-%d %H:%M:%S' 2>/dev/null || echo 'N/A')"
 echo "Ended: $(date '+%Y-%m-%d %H:%M:%S')"
 echo ""
 
 # Общий размер data/
 TOTAL_BYTES=$(du -sb "$DATA_DIR" 2>/dev/null | awk '{print $1}')
 TOTAL_MB=$((TOTAL_BYTES / 1024 / 1024))
-TOTAL_GB=$(echo "scale=2; $TOTAL_MB / 1024" | bc)
+TOTAL_GB=$(awk "BEGIN {printf \"%.2f\", $TOTAL_MB / 1024}")
 
 echo "=== Total Data Volume ==="
 echo "Total size: ${TOTAL_MB} MB (${TOTAL_GB} GB)"
@@ -34,9 +36,10 @@ echo ""
 # Breakdown по символам
 echo "=== Per-Symbol Breakdown ==="
 for symbol in BTCUSDT ETHUSDT XRPUSDT; do
-    SIZE=$(find "$DATA_DIR" -path "*${symbol}*" -type f -exec du -cb {} + 2>/dev/null | tail -1 | awk '{print $1}' || echo 0)
+    SIZE=$(find "$DATA_DIR" -path "*${symbol}*" -type f 2>/dev/null | xargs du -cb 2>/dev/null | tail -1 | awk '{print $1}')
+    SIZE="${SIZE:-0}"
     SIZE_MB=$((SIZE / 1024 / 1024))
-    SIZE_GB=$(echo "scale=2; $SIZE_MB / 1024" | bc)
+    SIZE_GB=$(awk "BEGIN {printf \"%.2f\", $SIZE_MB / 1024}")
     echo "  ${symbol}: ${SIZE_MB} MB (${SIZE_GB} GB)"
 done
 echo ""
@@ -44,7 +47,8 @@ echo ""
 # Breakdown по типу события
 echo "=== Per-EventType Breakdown ==="
 for event_type in publicTrade orderbook; do
-    SIZE=$(find "$DATA_DIR" -path "*${event_type}*" -type f -exec du -cb {} + 2>/dev/null | tail -1 | awk '{print $1}' || echo 0)
+    SIZE=$(find "$DATA_DIR" -path "*${event_type}*" -type f 2>/dev/null | xargs du -cb 2>/dev/null | tail -1 | awk '{print $1}')
+    SIZE="${SIZE:-0}"
     SIZE_MB=$((SIZE / 1024 / 1024))
     echo "  ${event_type}: ${SIZE_MB} MB"
 done
@@ -52,9 +56,9 @@ echo ""
 
 # Файловая статистика
 echo "=== File Statistics ==="
-PARQUET_COUNT=$(find "$DATA_DIR" -name "*.parquet" -type f | wc -l)
-WAL_COUNT=$(find "$DATA_DIR" -name "*.wal" -type f | wc -l)
-MANIFEST_COUNT=$(find "$DATA_DIR" -name "manifest.json" -type f | wc -l)
+PARQUET_COUNT=$(find "$DATA_DIR" -name "*.parquet" -type f 2>/dev/null | wc -l)
+WAL_COUNT=$(find "$DATA_DIR" -name "*.wal" -type f 2>/dev/null | wc -l)
+MANIFEST_COUNT=$(find "$DATA_DIR" -name "manifest.json" -type f 2>/dev/null | wc -l)
 
 echo "  Parquet files: ${PARQUET_COUNT}"
 echo "  WAL files: ${WAL_COUNT}"
@@ -64,46 +68,36 @@ echo ""
 # Throughput calculation
 BYTES_PER_HOUR=$((TOTAL_BYTES / DURATION_HOURS))
 MB_PER_HOUR=$((BYTES_PER_HOUR / 1024 / 1024))
-GB_PER_DAY=$(echo "scale=2; $MB_PER_HOUR * 24 / 1024" | bc)
+GB_PER_DAY=$(awk "BEGIN {printf \"%.2f\", $MB_PER_HOUR * 24 / 1024}")
 
 echo "=== Throughput ==="
 echo "Rate: ${MB_PER_HOUR} MB/hour"
 echo "Rate: ${GB_PER_DAY} GB/day"
 echo ""
 
-# Compression ratio estimate
-# (assumes raw JSON would be ~5x larger than Parquet)
-RAW_ESTIMATE_GB=$(echo "scale=1; $GB_PER_DAY * 5" | bc)
-COMPRESSION_RATIO=$(echo "scale=1; $RAW_ESTIMATE_GB / $GB_PER_DAY" | bc)
-
+# Compression ratio estimate (~5x vs raw JSON)
+RAW_ESTIMATE_GB=$(awk "BEGIN {printf \"%.1f\", $GB_PER_DAY * 5}")
 echo "=== Compression Efficiency ==="
 echo "Estimated raw JSON: ~${RAW_ESTIMATE_GB} GB/day"
 echo "Actual Parquet: ${GB_PER_DAY} GB/day"
-echo "Compression ratio: ~${COMPRESSION_RATIO}x"
 echo ""
 
 # Capacity projections
 echo "=== Capacity Projections ==="
-
-# 30-day retention (raw committed)
-GB_30D=$(echo "scale=1; $GB_PER_DAY * 30" | bc)
+GB_30D=$(awk "BEGIN {printf \"%.1f\", $GB_PER_DAY * 30}")
 echo "30-day raw retention: ${GB_30D} GB"
 
-# Add derived artifacts (estimate +50%)
-GB_30D_WITH_DERIVED=$(echo "scale=1; $GB_30D * 1.5" | bc)
+GB_30D_WITH_DERIVED=$(awk "BEGIN {printf \"%.1f\", $GB_30D * 1.5}")
 echo "With derived data (+50%): ${GB_30D_WITH_DERIVED} GB"
 
-# Add WAL tail, .tmp, compaction (estimate +20%)
-GB_30D_WITH_WORKING=$(echo "scale=1; $GB_30D_WITH_DERIVED * 1.2" | bc)
+GB_30D_WITH_WORKING=$(awk "BEGIN {printf \"%.1f\", $GB_30D_WITH_DERIVED * 1.2}")
 echo "With working space (+20%): ${GB_30D_WITH_WORKING} GB"
 
-# Add 30% free reserve (Roadmap §6.8 requirement)
-GB_30D_WITH_RESERVE=$(echo "scale=0; $GB_30D_WITH_WORKING * 1.43" | bc)  # 1/0.7 ≈ 1.43
+GB_30D_WITH_RESERVE=$(awk "BEGIN {printf \"%.0f\", $GB_30D_WITH_WORKING * 1.43}")
 echo "With 30% reserve (required): ${GB_30D_WITH_RESERVE} GB"
 
-# Round up to next 50GB tier
-RECOMMENDED_DISK=$(( (GB_30D_WITH_RESERVE / 50 + 1) * 50 ))
-
+# Округлить до ближайших 50 GB
+RECOMMENDED_DISK=$(awk "BEGIN {x=$GB_30D_WITH_RESERVE; print int(x/50+1)*50}")
 echo ""
 echo "========================================="
 echo "RECOMMENDATION"
@@ -111,35 +105,32 @@ echo "========================================="
 echo "Minimum disk for 30-day retention: ${RECOMMENDED_DISK} GB NVMe"
 echo ""
 echo "Notes:"
-echo "- This assumes current feed scope (publicTrade + orderbook.200)"
-echo "- Adding L1000/RPI will increase by 2-3x (Roadmap §19 Этап 3)"
-echo "- PostgreSQL requires additional space (estimate +10-20 GB)"
+echo "- This assumes current feed scope (publicTrade only)"
+echo "- Adding orderbook feeds will increase by 3-5x"
+echo "- Adding RPI/kline will increase by 1.5-2x"
+echo "- PostgreSQL requires additional space (+10-20 GB)"
 echo "- Backup volume should match data volume"
 echo ""
 
-# Feed scope detection
+# Feed scope
 echo "=== Current Feed Scope ==="
-LATEST_LOG=$(journalctl -u bybit-collector -n 1000 2>/dev/null | grep -i "subscribe\|orderbook\|publicTrade" | tail -5 || echo "N/A")
-if [ "$LATEST_LOG" = "N/A" ]; then
-    echo "  Unable to detect from journalctl"
-    echo "  Manual check: sudo journalctl -u bybit-collector | grep subscribe"
-else
-    echo "$LATEST_LOG"
-fi
+journalctl -u bybit-collector@BTCUSDT -n 20 2>/dev/null | grep -i "subscribe\|publicTrade\|orderbook" | tail -5 || \
+journalctl -u bybit-collector -n 20 2>/dev/null | grep -i "subscribe\|publicTrade\|orderbook" | tail -5 || \
+  echo "  (journalctl not accessible — check manually)"
 echo ""
 
-# Disk health check
+# Disk health
 echo "=== Current Disk Status ==="
-df -h "$DATA_DIR" | tail -1 | awk '{print "  Used: " $3 " / " $2 " (" $5 ")"}'
-FREE_PERCENT=$(df "$DATA_DIR" | tail -1 | awk '{print 100 - $5}' | sed 's/%//')
-if [ "$FREE_PERCENT" -lt 30 ]; then
-    echo "  ⚠️  WARNING: Free space below 30% threshold!"
+df -h "$DATA_DIR" 2>/dev/null | tail -1 | awk '{print "  Used: " $3 " / " $2 " (" $5 " used, " $4 " free)"}'
+FREE_PERCENT=$(df "$DATA_DIR" 2>/dev/null | tail -1 | awk '{gsub(/%/,"",$5); print 100 - $5}')
+if [ -n "$FREE_PERCENT" ] && [ "$FREE_PERCENT" -lt 30 ]; then
+    echo "  WARNING: Free space below 30% threshold!"
 else
-    echo "  ✅ Disk reserve OK (${FREE_PERCENT}% free)"
+    echo "  Disk reserve OK (${FREE_PERCENT}% free)"
 fi
 echo ""
 
 echo "========================================="
 echo "Report generated: $(date '+%Y-%m-%d %H:%M:%S')"
-echo "Save this output for Capacity ADR"
+echo "Save this output for Capacity ADR-017"
 echo "========================================="
