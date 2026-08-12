@@ -14,6 +14,7 @@
  */
 
 import { useViewStore, Timeframe, Environment, TradingState } from '../store'
+import DiagnosticsPanel from './DiagnosticsPanel'
 
 export default function TopBar() {
   const {
@@ -70,7 +71,7 @@ export default function TopBar() {
           {isReplayMode ? '📹 Replay' : '🔴 Live'}
         </button>
 
-        <div className="quality-badge good">Quality: Good</div>
+        <DiagnosticsPanel />
 
         <select
           value={environment}
@@ -178,20 +179,17 @@ export default function TopBar() {
           color: white;
         }
 
-        .quality-badge {
+        .env-select,
+        .trading-state {
           height: 32px;
           padding: 0 var(--spacing-md);
+          background: var(--bg-tertiary);
+          border: 1px solid var(--border-default);
           border-radius: var(--radius-sm);
-          font-size: 12px;
-          display: flex;
-          align-items: center;
-          font-weight: 500;
-        }
-
-        .quality-badge.good {
-          background: rgba(38, 166, 154, 0.15);
-          color: var(--status-success);
-          border: 1px solid var(--status-success);
+          color: var(--text-primary);
+          font-size: 13px;
+          cursor: pointer;
+          transition: all 0.2s;
         }
 
         .trading-state.enabled {
