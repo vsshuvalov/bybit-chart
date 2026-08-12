@@ -1,0 +1,199 @@
+{
+  "dashboard": {
+    "title": "Bybit Chart - Orderflow",
+    "tags": ["bybit", "orderflow", "detectors"],
+    "timezone": "browser",
+    "schemaVersion": 16,
+    "version": 1,
+    "refresh": "5s",
+    "panels": [
+      {
+        "id": 1,
+        "title": "BookState Status",
+        "type": "stat",
+        "gridPos": {"h": 4, "w": 6, "x": 0, "y": 0},
+        "targets": [
+          {
+            "expr": "orderflow_book_state_status",
+            "legendFormat": "Status"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "mappings": [
+              {"type": "value", "value": "0", "text": "NOT READY"},
+              {"type": "value", "value": "1", "text": "SYNCING"},
+              {"type": "value", "value": "2", "text": "READY"},
+              {"type": "value", "value": "3", "text": "GAP"}
+            ],
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"color": "red", "value": 0},
+                {"color": "yellow", "value": 1},
+                {"color": "green", "value": 2},
+                {"color": "orange", "value": 3}
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 2,
+        "title": "Book Snapshots Processed",
+        "type": "stat",
+        "gridPos": {"h": 4, "w": 6, "x": 6, "y": 0},
+        "targets": [
+          {
+            "expr": "orderflow_book_snapshots_processed",
+            "legendFormat": "Snapshots"
+          }
+        ]
+      },
+      {
+        "id": 3,
+        "title": "Book Deltas Rate",
+        "type": "stat",
+        "gridPos": {"h": 4, "w": 6, "x": 12, "y": 0},
+        "targets": [
+          {
+            "expr": "rate(orderflow_book_deltas_processed[1m])",
+            "legendFormat": "Deltas/sec"
+          }
+        ]
+      },
+      {
+        "id": 4,
+        "title": "Book Gaps Detected",
+        "type": "stat",
+        "gridPos": {"h": 4, "w": 6, "x": 18, "y": 0},
+        "targets": [
+          {
+            "expr": "rate(orderflow_book_gaps_detected_total[5m])",
+            "legendFormat": "Gaps/min"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"color": "green", "value": 0},
+                {"color": "yellow", "value": 0.1},
+                {"color": "red", "value": 1}
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 5,
+        "title": "Detector Events Rate",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 4},
+        "targets": [
+          {
+            "expr": "rate(orderflow_sweeps_detected_total[1m])",
+            "legendFormat": "Sweeps/sec"
+          },
+          {
+            "expr": "rate(orderflow_cascades_detected_total[1m])",
+            "legendFormat": "Cascades/sec"
+          },
+          {
+            "expr": "rate(orderflow_walls_detected_total[1m])",
+            "legendFormat": "Walls/sec"
+          },
+          {
+            "expr": "rate(orderflow_absorption_events_total[1m])",
+            "legendFormat": "Absorption/sec"
+          }
+        ],
+        "yaxes": [
+          {"format": "short", "label": "Events/sec"},
+          {"format": "short"}
+        ]
+      },
+      {
+        "id": 6,
+        "title": "Regime Confidence",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 4},
+        "targets": [
+          {
+            "expr": "orderflow_regime_confidence",
+            "legendFormat": "Confidence"
+          }
+        ],
+        "yaxes": [
+          {"format": "percentunit", "label": "Confidence", "min": 0, "max": 1},
+          {"format": "short"}
+        ]
+      },
+      {
+        "id": 7,
+        "title": "Regime Changes",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 12},
+        "targets": [
+          {
+            "expr": "rate(orderflow_regime_changes_total[5m])",
+            "legendFormat": "Changes/min"
+          }
+        ],
+        "yaxes": [
+          {"format": "short", "label": "Changes/min"},
+          {"format": "short"}
+        ]
+      },
+      {
+        "id": 8,
+        "title": "Event Processing Latency",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 12},
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.50, rate(orderflow_event_processing_latency_seconds_bucket[5m]))",
+            "legendFormat": "p50"
+          },
+          {
+            "expr": "histogram_quantile(0.95, rate(orderflow_event_processing_latency_seconds_bucket[5m]))",
+            "legendFormat": "p95"
+          },
+          {
+            "expr": "histogram_quantile(0.99, rate(orderflow_event_processing_latency_seconds_bucket[5m]))",
+            "legendFormat": "p99"
+          }
+        ],
+        "yaxes": [
+          {"format": "s", "label": "Latency"},
+          {"format": "short"}
+        ]
+      },
+      {
+        "id": 9,
+        "title": "IPC Events Received vs Dropped",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 24, "x": 0, "y": 20},
+        "targets": [
+          {
+            "expr": "rate(orderflow_ipc_events_received_total[1m])",
+            "legendFormat": "Received/sec"
+          },
+          {
+            "expr": "rate(orderflow_ipc_events_dropped_total[1m])",
+            "legendFormat": "Dropped/sec"
+          }
+        ],
+        "yaxes": [
+          {"format": "short", "label": "Events/sec"},
+          {"format": "short"}
+        ]
+      }
+    ],
+    "time": {
+      "from": "now-30m",
+      "to": "now"
+    }
+  }
+}
