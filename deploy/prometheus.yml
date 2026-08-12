@@ -1,0 +1,86 @@
+# Prometheus configuration для bybit-chart 5-process architecture
+# Этап 5.1.2: Monitoring & Alerting
+
+global:
+  scrape_interval: 15s      # Scrape targets каждые 15 секунд
+  evaluation_interval: 15s  # Evaluate rules каждые 15 секунд
+  external_labels:
+    cluster: 'bybit-chart'
+    environment: 'production'
+
+# Alertmanager configuration (Этап 5.1.4)
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+            - localhost:9093
+
+# Load rules (Этап 5.1.4)
+rule_files:
+  - "alerts/*.yml"
+
+# Scrape configurations
+scrape_configs:
+  # API Server (port 8000)
+  - job_name: 'api-server'
+    static_configs:
+      - targets: ['localhost:8000']
+        labels:
+          service: 'api-server'
+          component: 'http'
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+
+  # Collector Worker (через UDS → HTTP proxy или custom exporter)
+  # Note: UDS не поддерживается напрямую Prometheus, нужен HTTP→UDS proxy
+  - job_name: 'collector-worker'
+    static_configs:
+      - targets: ['localhost:9100']
+        labels:
+          service: 'collector-worker'
+          component: 'data-ingestion'
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+
+  # Analytics Worker
+  - job_name: 'analytics-worker'
+    static_configs:
+      - targets: ['localhost:9101']
+        labels:
+          service: 'analytics-worker'
+          component: 'analytics'
+    metrics_path: '/metrics'
+    scrape_interval: 15s
+
+  # Orderflow Worker
+  - job_name: 'orderflow-worker'
+    static_configs:
+      - targets: ['localhost:9102']
+        labels:
+          service: 'orderflow-worker'
+          component: 'orderflow'
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+
+  # Maintenance Worker
+  - job_name: 'maintenance-worker'
+    static_configs:
+      - targets: ['localhost:9103']
+        labels:
+          service: 'maintenance-worker'
+          component: 'storage'
+    metrics_path: '/metrics'
+    scrape_interval: 30s
+
+  # Node Exporter (system metrics)
+  - job_name: 'node-exporter'
+    static_configs:
+      - targets: ['localhost:9104']
+        labels:
+          instance: 'bybit-chart-node'
+    scrape_interval: 15s
+
+  # Prometheus self-monitoring
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']

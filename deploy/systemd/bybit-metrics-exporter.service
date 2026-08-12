@@ -1,0 +1,25 @@
+[Unit]
+Description=Bybit Chart Metrics Exporter (Prometheus HTTP→UDS proxy)
+After=network.target bybit-collector.service bybit-analytics.service bybit-orderflow.service bybit-maintenance.service
+Wants=bybit-collector.service bybit-analytics.service bybit-orderflow.service bybit-maintenance.service
+
+[Service]
+Type=simple
+User=bybit
+Group=bybit
+WorkingDirectory=/opt/bybit-chart
+ExecStart=/opt/bybit-chart/.venv/bin/python3 /opt/bybit-chart/workers/metrics_exporter.py
+Restart=always
+RestartSec=10
+
+# Security
+NoNewPrivileges=true
+PrivateTmp=true
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=bybit-metrics-exporter
+
+[Install]
+WantedBy=multi-user.target
