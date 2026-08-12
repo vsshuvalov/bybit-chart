@@ -1,0 +1,98 @@
+groups:
+  - name: bybit-chart-api
+    interval: 30s
+    rules:
+      # API request rate issues
+      - alert: APIRequestRateHigh
+        expr: rate(api_http_requests_total[5m]) > 1000
+        for: 5m
+        labels:
+          severity: warning
+          component: api
+        annotations:
+          summary: "API request rate is high"
+          description: "API handling {{ $value | humanize }} req/sec. May need scaling."
+
+      # API error rate
+      - alert: APIErrorRateHigh
+        expr: rate(api_http_errors_total[5m]) / rate(api_http_requests_total[5m]) > 0.05
+        for: 3m
+        labels:
+          severity: warning
+          component: api
+        annotations:
+          summary: "API error rate is high"
+          description: "{{ $value | humanizePercentage }} of API requests are failing."
+
+      - alert: APIErrorRateCritical
+        expr: rate(api_http_errors_total[5m]) / rate(api_http_requests_total[5m]) > 0.2
+        for: 1m
+        labels:
+          severity: critical
+          component: api
+        annotations:
+          summary: "API error rate is critical"
+          description: "{{ $value | humanizePercentage }} of API requests are failing. API may be broken."
+
+      # API latency
+      - alert: APILatencyHigh
+        expr: histogram_quantile(0.95, rate(api_http_request_duration_seconds_bucket[5m])) > 1
+        for: 5m
+        labels:
+          severity: warning
+          component: api
+        annotations:
+          summary: "API latency is high"
+          description: "API p95 latency is {{ $value | humanizeDuration }}. Backend may be slow."
+
+      - alert: APILatencyCritical
+        expr: histogram_quantile(0.95, rate(api_http_request_duration_seconds_bucket[5m])) > 5
+        for: 2m
+        labels:
+          severity: critical
+          component: api
+        annotations:
+          summary: "API latency is critical"
+          description: "API p95 latency is {{ $value | humanizeDuration }}. Users experiencing severe delays."
+
+      # WebSocket connections
+      - alert: WebSocketConnectionsLow
+        expr: api_websocket_connections_active < 1
+        for: 10m
+        labels:
+          severity: info
+          component: api
+        annotations:
+          summary: "No active WebSocket connections"
+          description: "No clients connected via WebSocket. This may be normal if no UI is open."
+
+      - alert: WebSocketConnectionsHigh
+        expr: api_websocket_connections_active > 100
+        for: 5m
+        labels:
+          severity: warning
+          component: api
+        annotations:
+          summary: "High WebSocket connections"
+          description: "{{ $value }} active WebSocket connections. May need connection limits or scaling."
+
+      # IPC client issues
+      - alert: IPCClientTimeoutsHigh
+        expr: rate(api_ipc_client_timeouts_total[5m]) > 0.1
+        for: 3m
+        labels:
+          severity: warning
+          component: api
+        annotations:
+          summary: "IPC client timeouts are high"
+          description: "IPC timeouts: {{ $value | humanize }}/sec. Backend workers may be overloaded."
+
+      - alert: IPCClientLatencyHigh
+        expr: histogram_quantile(0.95, rate(api_ipc_client_latency_seconds_bucket[5m])) > 0.5
+        for: 5m
+        labels:
+          severity: warning
+          component: api
+        annotations:
+          summary: "IPC client latency is high"
+          description: "IPC p95 latency is {{ $value | humanizeDuration }}. Backend workers are slow."

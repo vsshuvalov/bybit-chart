@@ -1,0 +1,54 @@
+{{ define "email.html" }}
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body { font-family: Arial, sans-serif; }
+    .alert { padding: 15px; margin: 10px 0; border-left: 4px solid; }
+    .critical { border-color: #d9534f; background-color: #f2dede; }
+    .warning { border-color: #f0ad4e; background-color: #fcf8e3; }
+    .info { border-color: #5bc0de; background-color: #d9edf7; }
+    .resolved { border-color: #5cb85c; background-color: #dff0d8; }
+    h2 { color: #333; }
+    .label { font-weight: bold; }
+    .meta { color: #666; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <h2>Bybit Chart Alerts</h2>
+
+  {{ if gt (len .Alerts.Firing) 0 }}
+  <h3>🔥 Firing ({{ len .Alerts.Firing }})</h3>
+  {{ range .Alerts.Firing }}
+  <div class="alert {{ .Labels.severity }}">
+    <div><span class="label">Alert:</span> {{ .Labels.alertname }}</div>
+    <div><span class="label">Component:</span> {{ .Labels.component }}</div>
+    <div><span class="label">Severity:</span> {{ .Labels.severity }}</div>
+    <div><span class="label">Summary:</span> {{ .Annotations.summary }}</div>
+    <div><span class="label">Description:</span> {{ .Annotations.description }}</div>
+    <div class="meta">Started: {{ .StartsAt.Format "2006-01-02 15:04:05 MST" }}</div>
+  </div>
+  {{ end }}
+  {{ end }}
+
+  {{ if gt (len .Alerts.Resolved) 0 }}
+  <h3>✅ Resolved ({{ len .Alerts.Resolved }})</h3>
+  {{ range .Alerts.Resolved }}
+  <div class="alert resolved">
+    <div><span class="label">Alert:</span> {{ .Labels.alertname }}</div>
+    <div><span class="label">Component:</span> {{ .Labels.component }}</div>
+    <div><span class="label">Summary:</span> {{ .Annotations.summary }}</div>
+    <div class="meta">Resolved: {{ .EndsAt.Format "2006-01-02 15:04:05 MST" }}</div>
+  </div>
+  {{ end }}
+  {{ end }}
+
+  <hr>
+  <p class="meta">
+    <a href="{{ .ExternalURL }}">View in Alertmanager</a> |
+    <a href="http://localhost:9090/alerts">View in Prometheus</a> |
+    <a href="http://localhost:3000">View in Grafana</a>
+  </p>
+</body>
+</html>
+{{ end }}

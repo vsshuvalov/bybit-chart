@@ -1,0 +1,89 @@
+groups:
+  - name: bybit-chart-maintenance
+    interval: 60s
+    rules:
+      # WAL lag issues
+      - alert: WALLagHigh
+        expr: maintenance_wal_lag_seconds > 300
+        for: 5m
+        labels:
+          severity: warning
+          component: maintenance
+        annotations:
+          summary: "WAL lag is high"
+          description: "WAL lag is {{ $value | humanizeDuration }}. Maintenance worker may be slow or crashed."
+
+      - alert: WALLagCritical
+        expr: maintenance_wal_lag_seconds > 1800
+        for: 5m
+        labels:
+          severity: critical
+          component: maintenance
+        annotations:
+          summary: "WAL lag is critical"
+          description: "WAL lag is {{ $value | humanizeDuration }} (>30min). WAL may fill disk soon."
+
+      # Segment size issues
+      - alert: SegmentSizeTooLarge
+        expr: maintenance_segment_size_bytes > 1073741824
+        for: 10m
+        labels:
+          severity: warning
+          component: maintenance
+        annotations:
+          summary: "Parquet segment size is too large"
+          description: "Segment size is {{ $value | humanize1024 }}B (>1GB). May cause query performance issues."
+
+      # Disk usage
+      - alert: DiskUsageHigh
+        expr: maintenance_disk_usage_bytes > 85899345920
+        for: 10m
+        labels:
+          severity: warning
+          component: maintenance
+        annotations:
+          summary: "Disk usage is high"
+          description: "Disk usage is {{ $value | humanize1024 }}B (>80GB). Consider cleanup or expansion."
+
+      - alert: DiskUsageCritical
+        expr: maintenance_disk_usage_bytes > 107374182400
+        for: 5m
+        labels:
+          severity: critical
+          component: maintenance
+        annotations:
+          summary: "Disk usage is critical"
+          description: "Disk usage is {{ $value | humanize1024 }}B (>100GB). Disk may fill soon."
+
+      # Fencing conflicts
+      - alert: MaintenanceFencingConflicts
+        expr: rate(maintenance_fencing_conflicts_total[10m]) > 0
+        for: 2m
+        labels:
+          severity: warning
+          component: maintenance
+        annotations:
+          summary: "Maintenance fencing conflicts detected"
+          description: "WriterLease conflicts detected. Collector may still be holding lease."
+
+      # Commit failures
+      - alert: SegmentCommitFailureRate
+        expr: rate(maintenance_segment_commit_errors_total[10m]) > 0.01
+        for: 5m
+        labels:
+          severity: warning
+          component: maintenance
+        annotations:
+          summary: "Segment commit failures detected"
+          description: "Segment commits failing at {{ $value | humanize }}/sec. Check logs for errors."
+
+      # Commit latency
+      - alert: SegmentCommitLatencyHigh
+        expr: histogram_quantile(0.95, rate(maintenance_segment_commit_latency_seconds_bucket[10m])) > 30
+        for: 10m
+        labels:
+          severity: warning
+          component: maintenance
+        annotations:
+          summary: "Segment commit latency is high"
+          description: "p95 commit latency is {{ $value | humanizeDuration }}. Disk I/O may be slow."

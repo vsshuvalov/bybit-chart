@@ -1,0 +1,98 @@
+groups:
+  - name: bybit-chart-orderflow
+    interval: 30s
+    rules:
+      # BookState issues
+      - alert: BookStateNotReady
+        expr: orderflow_book_state_status < 2
+        for: 5m
+        labels:
+          severity: warning
+          component: orderflow
+        annotations:
+          summary: "BookState is not ready"
+          description: "BookState has been in not_ready/syncing state for >5 minutes. Orderflow analysis is degraded."
+
+      - alert: BookStateGap
+        expr: orderflow_book_state_status == 3
+        for: 1m
+        labels:
+          severity: critical
+          component: orderflow
+        annotations:
+          summary: "BookState gap detected"
+          description: "BookState detected a sequence gap. Book integrity is compromised."
+
+      - alert: BookGapsRateHigh
+        expr: rate(orderflow_book_gaps_detected_total[5m]) > 0.5
+        for: 3m
+        labels:
+          severity: warning
+          component: orderflow
+        annotations:
+          summary: "Book gaps rate is high"
+          description: "Book gaps: {{ $value | humanize }}/sec. Network may be unstable or exchange is overloaded."
+
+      # IPC event loss
+      - alert: IPCEventDropRateHigh
+        expr: rate(orderflow_ipc_events_dropped_total[5m]) / (rate(orderflow_ipc_events_received_total[5m]) + rate(orderflow_ipc_events_dropped_total[5m])) > 0.01
+        for: 2m
+        labels:
+          severity: warning
+          component: orderflow
+        annotations:
+          summary: "IPC event drop rate is high"
+          description: "{{ $value | humanizePercentage }} of IPC events are being dropped. Orderflow worker may be overloaded."
+
+      # Event processing latency
+      - alert: EventProcessingLatencyHigh
+        expr: histogram_quantile(0.95, rate(orderflow_event_processing_latency_seconds_bucket[5m])) > 0.05
+        for: 3m
+        labels:
+          severity: warning
+          component: orderflow
+        annotations:
+          summary: "Event processing latency is high"
+          description: "Orderflow p95 latency is {{ $value | humanizeDuration }}. Detectors may be slow."
+
+      # Regime detection issues
+      - alert: RegimeConfidenceLow
+        expr: orderflow_regime_confidence < 0.3
+        for: 10m
+        labels:
+          severity: info
+          component: orderflow
+        annotations:
+          summary: "Regime confidence is low"
+          description: "Market regime confidence is {{ $value | humanizePercentage }}. Market may be transitioning or choppy."
+
+      - alert: RegimeChangesFrequent
+        expr: rate(orderflow_regime_changes_total[15m]) > 0.05
+        for: 10m
+        labels:
+          severity: info
+          component: orderflow
+        annotations:
+          summary: "Frequent regime changes"
+          description: "Regime changing {{ $value | humanize }}/sec. Market is highly volatile."
+
+      # Detector anomalies (too many events may indicate bugs)
+      - alert: SweepsRateAnomalous
+        expr: rate(orderflow_sweeps_detected_total[5m]) > 10
+        for: 5m
+        labels:
+          severity: warning
+          component: orderflow
+        annotations:
+          summary: "Sweep detection rate is anomalous"
+          description: "Sweeps detected at {{ $value | humanize }}/sec. Check detector thresholds or market conditions."
+
+      - alert: CascadesRateAnomalous
+        expr: rate(orderflow_cascades_detected_total[5m]) > 5
+        for: 5m
+        labels:
+          severity: warning
+          component: orderflow
+        annotations:
+          summary: "Cascade detection rate is anomalous"
+          description: "Cascades detected at {{ $value | humanize }}/sec. Market may be extremely volatile."

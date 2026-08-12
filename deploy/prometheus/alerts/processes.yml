@@ -1,0 +1,65 @@
+groups:
+  - name: bybit-chart-processes
+    interval: 30s
+    rules:
+      # Process down alerts
+      - alert: CollectorProcessDown
+        expr: collector_process_up == 0
+        for: 1m
+        labels:
+          severity: critical
+          component: collector
+        annotations:
+          summary: "Collector process is down"
+          description: "Collector worker has been down for more than 1 minute. Data ingestion is stopped."
+
+      - alert: AnalyticsProcessDown
+        expr: analytics_process_up == 0
+        for: 2m
+        labels:
+          severity: warning
+          component: analytics
+        annotations:
+          summary: "Analytics process is down"
+          description: "Analytics worker has been down for more than 2 minutes. Analytics queries will fail."
+
+      - alert: OrderflowProcessDown
+        expr: orderflow_process_up == 0
+        for: 1m
+        labels:
+          severity: critical
+          component: orderflow
+        annotations:
+          summary: "Orderflow process is down"
+          description: "Orderflow worker has been down for more than 1 minute. Orderflow analysis is stopped."
+
+      - alert: MaintenanceProcessDown
+        expr: maintenance_process_up == 0
+        for: 5m
+        labels:
+          severity: warning
+          component: maintenance
+        annotations:
+          summary: "Maintenance process is down"
+          description: "Maintenance worker has been down for more than 5 minutes. WAL commits are paused."
+
+      - alert: APIProcessDown
+        expr: api_process_up == 0
+        for: 30s
+        labels:
+          severity: critical
+          component: api
+        annotations:
+          summary: "API process is down"
+          description: "API server has been down for more than 30 seconds. All API endpoints are unavailable."
+
+      # Multiple processes down (catastrophic)
+      - alert: MultipleProcessesDown
+        expr: (collector_process_up + analytics_process_up + orderflow_process_up + maintenance_process_up + api_process_up) < 3
+        for: 1m
+        labels:
+          severity: critical
+          component: system
+        annotations:
+          summary: "Multiple processes are down"
+          description: "Less than 3 workers are running. System is severely degraded."

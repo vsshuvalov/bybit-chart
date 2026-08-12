@@ -1,0 +1,108 @@
+groups:
+  - name: bybit-chart-collector
+    interval: 30s
+    rules:
+      # WebSocket connection issues
+      - alert: WebSocketDisconnected
+        expr: collector_ws_connections_active == 0
+        for: 30s
+        labels:
+          severity: critical
+          component: collector
+        annotations:
+          summary: "WebSocket connection lost"
+          description: "No active WebSocket connections. Data ingestion is stopped."
+
+      - alert: WebSocketReconnectsHigh
+        expr: rate(collector_ws_reconnects_total[5m]) > 0.5
+        for: 3m
+        labels:
+          severity: warning
+          component: collector
+        annotations:
+          summary: "High WebSocket reconnect rate"
+          description: "WebSocket is reconnecting more than once per 10 seconds ({{ $value | humanize }} reconnects/sec). Network may be unstable."
+
+      - alert: WebSocketErrorsHigh
+        expr: rate(collector_ws_errors_total[5m]) > 1
+        for: 2m
+        labels:
+          severity: warning
+          component: collector
+        annotations:
+          summary: "High WebSocket error rate"
+          description: "WebSocket errors: {{ $value | humanize }}/sec. Check logs for details."
+
+      # Data ingestion rate drops
+      - alert: TradeIngestionStopped
+        expr: rate(collector_trades_received_total[2m]) == 0
+        for: 3m
+        labels:
+          severity: critical
+          component: collector
+        annotations:
+          summary: "Trade ingestion has stopped"
+          description: "No trades received in the last 3 minutes. WebSocket may be disconnected or market is closed."
+
+      - alert: TradeIngestionLow
+        expr: rate(collector_trades_received_total[5m]) < 5
+        for: 5m
+        labels:
+          severity: warning
+          component: collector
+        annotations:
+          summary: "Trade ingestion rate is low"
+          description: "Trade rate is {{ $value | humanize }}/sec (expected >5/sec). Market may be slow or connection degraded."
+
+      - alert: BookEventsIngestionStopped
+        expr: rate(collector_book_events_received_total[2m]) == 0
+        for: 3m
+        labels:
+          severity: critical
+          component: collector
+        annotations:
+          summary: "Book events ingestion has stopped"
+          description: "No book events received in the last 3 minutes."
+
+      # WAL issues
+      - alert: WALWriteLatencyHigh
+        expr: histogram_quantile(0.95, rate(collector_wal_write_latency_seconds_bucket[5m])) > 0.1
+        for: 3m
+        labels:
+          severity: warning
+          component: collector
+        annotations:
+          summary: "WAL write latency is high"
+          description: "WAL p95 write latency is {{ $value | humanizeDuration }}. Disk may be slow."
+
+      - alert: WALFsyncLatencyHigh
+        expr: histogram_quantile(0.95, rate(collector_wal_fsync_latency_seconds_bucket[5m])) > 0.5
+        for: 3m
+        labels:
+          severity: critical
+          component: collector
+        annotations:
+          summary: "WAL fsync latency is critical"
+          description: "WAL p95 fsync latency is {{ $value | humanizeDuration }}. Disk I/O is severely degraded."
+
+      # IPC issues
+      - alert: IPCDropRateHigh
+        expr: rate(collector_ipc_drops_total[5m]) / (rate(collector_ipc_published_total[5m]) + rate(collector_ipc_drops_total[5m])) > 0.05
+        for: 2m
+        labels:
+          severity: warning
+          component: collector
+        annotations:
+          summary: "IPC drop rate is high"
+          description: "{{ $value | humanizePercentage }} of IPC messages are being dropped. Subscribers may be slow."
+
+      # Fencing conflicts (should be rare)
+      - alert: FencingConflictsDetected
+        expr: rate(collector_fencing_conflicts_total[10m]) > 0
+        for: 1m
+        labels:
+          severity: warning
+          component: collector
+        annotations:
+          summary: "Fencing conflicts detected"
+          description: "WriterLease conflicts detected. Multiple writers may be active (split-brain risk)."
