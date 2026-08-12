@@ -8,6 +8,7 @@ requires-python = ">=3.12"
 pythonpath = ["."]
 testpaths = ["tests"]
 addopts = "-ra --strict-markers"
+asyncio_mode = "auto"
 markers = [
     "fault: fault-injection и crash-consistency тесты",
     "contract: контрактные тесты схем и хранилища",

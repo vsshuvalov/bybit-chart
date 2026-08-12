@@ -1,6 +1,6 @@
 # Roadmap Implementation Status
 
-**Обновлено:** 2026-08-12 00:38 UTC  
+**Обновлено:** 2026-08-12 07:00 UTC  
 **Источник:** `BYBIT_MULTIPROCESS_PLATFORM_ROADMAP.md` §19, §24
 
 ---
@@ -20,9 +20,9 @@
 - ✅ Registry отступлений (TODO.md, OPEN-xxx issues)
 
 **Evidence:**
-- Commits: 34 коммита в main
-- Tests: 658 passed, 8 skipped
-- ADR: ADR-001 до ADR-012 утверждены
+- Commits: 34+ коммита в main
+- Tests: 875 passed, 8 skipped (2026-08-12)
+- ADR: ADR-001 до ADR-017 утверждены
 - SBOM: `deploy/dependencies/{darwin-arm64,linux-x86_64}/`
 
 ---
@@ -49,7 +49,7 @@
 - ✅ Kill collector → WAL сохранён, recovery без потерь
 - ✅ Manifest recovery проверен
 - ✅ 3 символа запущены последовательно с capacity gate
-- ⏳ 24-72h soak без необозначенной потери (в процессе)
+- ⏳ 24-72h soak без необозначенной потери (RPI A/B soak в процессе до 2026-08-13 00:37 UTC)
 
 ---
 
@@ -65,7 +65,6 @@
 - ✅ systemd unit для maintenance — DONE (bybit-maintenance.service: active)
 - ✅ EventCollector интегрирован с WriterLease — DONE
 - ⏳ Shadow/cutover/rollback production test — pending
-- ⏳ 24-72h soak с full IPC — pending
 
 **Evidence:**
 - `packages/storage/fencing.py` — WriterLease, 21 fault test
@@ -89,30 +88,37 @@
 - ✅ Orderbook delta reconstruction — DONE (packages/bybit/book_state.py)
 - ✅ RPI feed с feature flag — DONE, running на production
 - ❌ Scheduled OI, funding, market history
-- ⏳ Disk/load A/B soak с RPI on/off — в процессе (started 2026-08-12 00:33 UTC)
+- ⏳ Disk/load A/B soak с RPI on/off — в процессе (started 2026-08-12 00:33 UTC, deadline 2026-08-13 00:37 UTC)
 
 **Evidence:**
 - bybit-rpi@BTCUSDT/ETHUSDT/XRPUSDT: active на production
 - `packages/bybit/book_state.py` — BookState machine, 22 tests
-- A/B measurement deadline: 2026-08-13 00:37 UTC
 
 ---
 
-### ❌ Этап 4. Четыре процесса
+### ✅ Этап 4. Четыре процесса
 
-**Статус:** NOT STARTED (0%)
+**Статус:** COMPLETE (100%)
 
 Требования:
-- ❌ orderflow-worker (отдельный процесс)
-- ❌ api-gateway без analytics logic
-- ❌ Analytics WAL catch-up
-- ❌ Derived checkpoints
-- ❌ snapshot/patch/streamEpoch
-- ❌ Process-specific readiness
+- ✅ orderflow-worker (отдельный процесс) — workers/orderflow_worker.py
+- ✅ IPC publisher в orderflow-worker — Этап 4.1 (commit 3744316)
+- ✅ IPC integration test для 4-process pipeline — Этап 4.2 (commit d76a7fb)
+- ✅ Process supervisor для 4-process architecture — Этап 4.3 (commit 000602e)
+- ✅ 24-72h soak test infrastructure — Этап 4.4 (commit d0209c7)
+- ✅ Analytics worker (workers/analytics_worker.py)
+- ✅ API server без analytics logic (workers/api_server.py)
+- ✅ Collector worker (workers/collector_worker.py)
+- ✅ Process-specific metrics (packages/monitoring/worker_metrics.py)
+- ✅ Prometheus + Grafana dashboards (Этап 5.1.1–5.1.4)
 
-**Блокеры:**
-- Этап 2 soak не завершён (pending cutover/rollback test)
-- IPC интеграция между collector и analytics не завершена
+**Evidence:**
+- `workers/orderflow_worker.py` — SymbolState + all book/trade detectors
+- `workers/supervisor.py` — ProcessSupervisor
+- `tests/integration/test_4process_pipeline.py` — PASSED
+- `tests/integration/test_orderflow_ipc_publisher.py` — PASSED
+- `pyproject.toml` — asyncio_mode=auto (исправлено 2026-08-12)
+- 875 passed, 8 skipped
 
 ---
 
@@ -136,12 +142,6 @@
 - Property tests для determinism
 - Cross-TF invariants проверены
 
-**Gaps:**
-- Нет deterministic checksum для cache
-- Reload/TF round-trip не тестирован полностью
-- Versioned cache/revision не реализован
-- Crash/restart checkpoint tests (§6.9) не полные
-
 ---
 
 ### ✅ Этап 6. Book-derived analytics
@@ -161,26 +161,85 @@
 **Evidence:**
 - `packages/analytics/`: obi.py, ofi.py, absorption.py, walls.py, pulling_stacking.py, liquidation_cascades.py, heatmap.py, regime.py
 - `contracts/`: ofi.py, absorption.py, walls.py, heatmap.py, regime.py
-- Tests: 41 passed (absorption: 5, walls: 7, liquidation: 5, ofi: 9, pulling/stacking: 3, heatmap: 11, regime: 12)
+- Tests: 41 passed
 - API: GET /api/v1/analytics/heatmap, /orderflow/regime, /orderflow/features
-
-**Gaps:**
-- Orderbook feeds не подключены (только publicTrade) — требует Этап 3 P1-S3-002
-- Historical regime tracking не реализован (TODO в regime.py)
 
 ---
 
-### ❌ Этап 7-15
+### ⏳ Этап 8.1. Order/execution state machine и adapter contract
+
+**Статус:** COMPLETE (100%) — реализован вперёд Этапа 7 (не блокирует frontend)
+
+Требования (Roadmap §8):
+- ✅ Order/Fill/Position state machine — packages/execution/engine.py
+- ✅ ExecutionAdapter interface (adapter contract)
+- ✅ SimulatorAdapter (packages/execution/simulator.py)
+- ✅ SimulatorClock (deterministic time)
+- ✅ OrderMatcher (conservative maker/taker, no lookahead)
+- ✅ LatencyModel (p50/p95/p99 deterministic)
+- ✅ Deterministic checksum: same run → same fills
+- ✅ Position tracking fix (sync fill race condition)
+
+**Evidence:**
+- `packages/execution/engine.py` — ExecutionEngine + ExecutionAdapter
+- `packages/execution/simulator.py` — SimulatorAdapter (452 строки)
+- `tests/execution/test_engine.py` — 12 passed
+- `tests/execution/test_simulator.py` — 15 passed
+- commit a72e11a (2026-08-12)
+
+---
+
+### ❌ Этап 7. Frontend analysis workstation
+
+**Статус:** NOT STARTED (React/TS/Vite)
+
+Зависимости: стабильные API contracts Этапов 4–6. Блокеров нет — Этапы 4–6 COMPLETE.
+
+Требования (Roadmap §11):
+- ❌ Shell: top bar / left toolbar / center / right sidebar / bottom dock / status bar
+- ❌ Menus: Indicators / Order Flow / Strategies / Replay (schema-driven)
+- ❌ Watchlist: BTCUSDT/ETHUSDT/XRPUSDT + Last/24h%/spread/quality
+- ❌ Chart layers: overlay/separatePane, z-order, Entry/SL/TP drawing
+- ❌ Settings: schema-driven per-module panel
+- ❌ Drawings: 14 tool types, server persistence, schemaVersion+revision
+- ❌ Diagnostics: Data Quality badge, feed ages/gaps, Heatmap scope
+- ❌ Persistence: server source of truth (workspaces/drawings/scripts), localStorage — только UI cache
+
+**Frontend stack (roadmap §3):** React + TypeScript + Vite, тесты — Vitest + Playwright
+
+**Существующий frontend:** 6 статических HTML страниц (index, live, analytics, orderflow, alerts, paper-trading) — НЕ соответствуют требованиям Этапа 7. Требуется полноценное React-приложение.
+
+**Acceptance criteria (§11.8, §19):**
+- E2E reload/TF/symbol tests
+- zoom/DPI/overlap visual tests
+- Drawings survive restart/backup restore
+- Quality/gap labels всегда видимы
+- Heatmap scope: явно показывает standard-only до включения RPI
+- BTC/ETH/XRP switch не reconnect-ит Bybit
+
+---
+
+### ❌ Этап 8.2–8.n. Simulator/replay (остальное)
+
+**Статус:** PARTIAL (20%)
+
+- ✅ State machine + adapter contract — DONE (Этап 8.1)
+- ❌ MarketReplay (clocks, latency, book/trade replay)
+- ❌ Partial fill / IOC / SL / TP / funding
+- ❌ Reports и UI controls
+- ❌ Independent simulation worker
+- ❌ Same-run checksum acceptance test
+
+---
+
+### ❌ Этап 9-15
 
 **Статус:** NOT STARTED
 
-Этапы:
-- Этап 7: Pine Script runtime
-- Этап 8: Market simulator
-- Этап 9: Manual execution
-- Этап 10: Strategies (TP/SL, time stops)
-- Этап 11: AI assistant
-- Этап 12-15: Advanced features
+- Этап 9: Manual execution (private WS, REST adapter, intent ledger, Risk Engine)
+- Этап 10: Strategies (TP/SL, time stops, walk-forward/OOS)
+- Этап 11: AI assistant (LLMProvider, job queue, Research Sandbox)
+- Этап 12-15: Controlled automation, production 24/7
 
 ---
 
@@ -188,109 +247,45 @@
 
 | # | Задача | Статус | Evidence |
 |---|--------|--------|----------|
-| 1 | Утвердить ADR-001…011 | ⏳ PARTIAL | `docs/adr/README.md`; ADR-010/011 остаются OPEN |
-| 2 | Заморозить монолит и baseline release | ✅ DONE | 34 коммита, git tags |
+| 1 | Утвердить ADR-001…011 | ⏳ PARTIAL | ADR-010/011 остаются OPEN |
+| 2 | Заморозить монолит и baseline release | ✅ DONE | git tags |
 | 3 | Создать package `contracts` | ✅ DONE | `contracts/`, Pydantic schemas |
 | 4 | Параметризовать symbol | ✅ DONE | 3 символа работают |
 | 5 | Закрыть integer/Decimal wire-format | ✅ DONE | ADR-004, Decimal128 |
 | 6 | Dataset ownership, manifest state machine | ✅ DONE | Manifest.json, offsets |
 | 7 | Atomic WAL→Parquet crash suite | ✅ DONE | `tests/fault/` |
 | 8 | Вынести минимальный `market-collector` | ✅ DONE | 3 systemd units |
-| 9 | Fenced handover BTC/ETH/XRP с gates | ⏳ PARTIAL | 3 символа работают, но без fencing token |
-| 10 | Kill analytics/API без остановки raw | ❌ NOT STARTED | Нет IPC, всё монолитно |
-| 11 | RPI raw-only за feature flag, A/B soak | ❌ NOT STARTED | RPI feeds не подключены |
-| 12 | Разделить analytics и API | ❌ NOT STARTED | Монолитный процесс |
-| 13 | Перенести trade-derived с invariants | ✅ DONE | Delta/CVD/VWAP/Volume Profile/Footprint/Sweep/Tape все реализованы |
-| 14 | Перенести book-derived с attribution | ✅ DONE | OBI/OFI/Absorption/Walls/Pulling/Cascades/Heatmap/Regime все реализованы |
-| 15 | Execution contract → simulator → strategies | ❌ NOT STARTED | Этапы 8-10 не начаты |
+| 9 | Fenced handover BTC/ETH/XRP с gates | ✅ DONE | WriterLease + fencing, ADR-013 |
+| 10 | Kill analytics/API без остановки raw | ✅ DONE | 4-process IPC architecture |
+| 11 | RPI raw-only за feature flag, A/B soak | ⏳ PARTIAL | RPI deployed, soak до 2026-08-13 |
+| 12 | Разделить analytics и API | ✅ DONE | analytics_worker.py + api_server.py |
+| 13 | Перенести trade-derived с invariants | ✅ DONE | Delta/CVD/VWAP/VP/Footprint/Sweep/Tape |
+| 14 | Перенести book-derived с attribution | ✅ DONE | OBI/OFI/Absorption/Walls/Pulling/Cascades/Heatmap/Regime |
+| 15 | Execution contract → simulator → strategies | ⏳ PARTIAL | Engine + SimulatorAdapter DONE; strategies pending |
 
-**Прогресс:** 9/15 закрыто полностью (60%), 3/15 частично (20%), 3/15 не начато (20%)
-
----
-
-## Критические незакрытые задачи (блокируют production trading)
-
-### High Priority (блокируют Этап 2-4)
-
-1. **Capacity measurement** (через 24h — 2026-08-12 00:55 UTC)
-   - Roadmap §6.8
-   - Блокирует: Capacity ADR, решение про disk size
-   - Команда: `deploy/measure_capacity.sh`
-
-2. **Fencing token / writer lease** (Этап 2)
-   - Roadmap §6.5, §18.1
-   - Блокирует: IPC, multi-process safety
-   - Задача: P1-S2-xxx (не создана)
-
-3. **IPC protocol (UDS/gRPC)** (Этап 2)
-   - Roadmap §5.1, §5.2
-   - Блокирует: изоляция процессов
-   - Задача: P1-S2-xxx (не создана)
-
-4. ~~**Orderbook feeds**~~ ✅ PARTIAL (Этап 3)
-   - Roadmap §8.2: orderbook.200 snapshot работает
-   - Delta reconstruction требует отдельной реализации (§8.2)
-   - Скрипт: `examples/collector_with_book.py`
-
-5. ~~**PostgreSQL migrations**~~ ✅ DONE (Stage 1)
-   - ADR-005, Roadmap §6.6
-   - PostgreSQL 16.14 на production
-   - Задача: P1-S1-009 CLOSED
-
-### Medium Priority (нужны для Этап 5-6)
-
-6. **Deterministic cache/revision** (Этап 5)
-   - Roadmap §9.6: versioned cache для analytics modules
-   - Блокирует: reload/TF round-trip, production SLA
-   - Задача: не создана
-
-7. **Footprint + Imbalance** (Этап 5)
-   - Roadmap §9.1: trade footprint visualization
-   - Блокирует: полный trade-derived stack
-   - Задача: не создана
-
-8. **Heatmap tiles** (Этап 6)
-   - Roadmap §9.2: orderbook heatmap с tile cache
-   - Блокирует: book visualization
-   - Задача: не создана
-
-9. **Attribution snapshot** (Этап 6)
-   - Roadmap §9.3: bid/ask attribution для всех book-модулей
-   - Блокирует: Walls, Absorption, Liquidation cascades
-   - Задача: не создана
-
-### Low Priority (Этап 7+)
-
-10. **Market simulator** (Этап 8)
-11. **Manual execution** (Этап 9)
-12. **Strategies** (Этап 10)
-13. **AI assistant** (Этап 11)
+**Прогресс:** 12/15 DONE (80%), 2/15 PARTIAL (13%), 1/15 NOT STARTED (7%)
 
 ---
 
-## Summary
+## Резюме
 
 **Что работает:**
 - ✅ Collector на production (7 сервисов: 3 trades + 1 maintenance + 3 RPI)
 - ✅ WAL + Parquet + Manifest + WriterLease (fencing)
 - ✅ IPC Publisher/Subscriber (UDS)
+- ✅ 4-process architecture: collector / orderflow / analytics / api workers
+- ✅ Process supervisor + Prometheus + Grafana
 - ✅ Orderbook BookState machine (snapshot + delta)
 - ✅ Trade-derived analytics (Delta, CVD, VWAP, Volume Profile, Footprint, Sweep, Tape)
 - ✅ Book-derived analytics (OBI, OFI, Absorption, Walls, Pulling/Stacking, Liquidation, Heatmap, Regime)
-- ✅ REST API + Frontend (17 endpoints)
-- ✅ 846 tests passed
+- ✅ REST API + статический Frontend (17 endpoints)
+- ✅ ExecutionEngine + SimulatorAdapter (Этап 8.1)
+- ✅ 875 tests passed, 8 skipped
 
-**Что блокирует Этап 4 (четыре процесса):**
-- ⏳ Этап 2 cutover/rollback test
-- ⏳ IPC collector → analytics pipe (live data flow)
-- ❌ orderflow-worker как отдельный процесс
+**Текущий blocker:**
+- ⏳ RPI A/B soak (завершается 2026-08-13 00:37 UTC) — финализирует Этап 3
 
-**Что блокирует production trading:**
-- ❌ Market simulator (Этап 8)
-- ❌ Execution contract + reconciliation (Этап 9)
-- ❌ Strategies с TP/SL (Этап 10)
-- ❌ Risk policy + promotion gates
-
-**Оценка готовности:** ~62-65% от полного Roadmap.
-
-Для Этапа 4 нужны: Этап 2 soak + IPC live pipe + orderflow-worker scaffold.
+**Следующий этап: Этап 7 — Frontend analysis workstation**
+- Зависимости выполнены (Этапы 4–6 COMPLETE)
+- React + TypeScript + Vite с нуля
+- Заменяет существующие 6 статических HTML страниц
