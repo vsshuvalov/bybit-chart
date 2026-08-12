@@ -13,6 +13,9 @@
 
 import { useUIStore } from '../store'
 import Watchlist from './Watchlist'
+import DOMPanel from './DOMPanel'
+import TapePanel from './TapePanel'
+import LevelsPanel from './LevelsPanel'
 
 export default function RightSidebar() {
   const { rightSidebarTab, setRightSidebarTab } = useUIStore()
@@ -89,41 +92,6 @@ export default function RightSidebar() {
           overflow-y: auto;
         }
       `}</style>
-    </div>
-  )
-}
-
-// Placeholder panels (will implement in separate tasks)
-
-function DOMPanel() {
-  return (
-    <div style={{ padding: 'var(--spacing-md)', color: 'var(--text-muted)' }}>
-      DOM Panel — TODO
-      <div style={{ marginTop: '8px', fontSize: '12px' }}>
-        Bid/Ask depth, cumulative volume, pulling/stacking detection
-      </div>
-    </div>
-  )
-}
-
-function TapePanel() {
-  return (
-    <div style={{ padding: 'var(--spacing-md)', color: 'var(--text-muted)' }}>
-      Tape Panel — TODO
-      <div style={{ marginTop: '8px', fontSize: '12px' }}>
-        Recent trades: time, price, side, volume, BT/RPI flags
-      </div>
-    </div>
-  )
-}
-
-function LevelsPanel() {
-  return (
-    <div style={{ padding: 'var(--spacing-md)', color: 'var(--text-muted)' }}>
-      Levels Panel — TODO
-      <div style={{ marginTop: '8px', fontSize: '12px' }}>
-        POC/VAH/VAL, VWAP, walls, user-drawn levels
-      </div>
     </div>
   )
 }
