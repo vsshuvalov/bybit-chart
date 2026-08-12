@@ -18,10 +18,13 @@ Acceptance criteria:
 
 import asyncio
 import json
+import pytest
 import socket
 import time
 from pathlib import Path
 from typing import Any
+
+pytestmark = pytest.mark.integration
 
 from contracts.schemas import OrderflowSweep, OrderflowOFI, RawTrade, RawBookEvent
 from packages.ipc.subscriber import IPCSubscriber

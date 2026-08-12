@@ -8,6 +8,10 @@ Tests:
 - Fee accounting
 """
 
+import pytest
+
+pytestmark = pytest.mark.contract
+
 from datetime import datetime
 from decimal import Decimal
 

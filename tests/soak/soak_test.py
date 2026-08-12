@@ -33,7 +33,11 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional
 
-import psutil
+try:
+    import psutil
+    HAS_PSUTIL = True
+except ImportError:
+    HAS_PSUTIL = False
 
 
 @dataclass

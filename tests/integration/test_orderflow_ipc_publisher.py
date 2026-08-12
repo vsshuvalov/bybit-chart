@@ -9,8 +9,11 @@ Integration test для orderflow-worker IPC publisher (Этап 4.1).
 """
 
 import asyncio
+import pytest
 import time
 from pathlib import Path
+
+pytestmark = pytest.mark.integration
 
 from contracts.schemas import OrderflowSweep, OrderflowOFI
 from packages.ipc.subscriber import IPCSubscriber

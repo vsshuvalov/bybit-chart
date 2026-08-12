@@ -276,7 +276,17 @@ class ExecutionEngine:
         order_id = self.adapter.submit_order(order)
         order.order_id = order_id
 
+        # Сохраняем order сразу после получения order_id.
+        # Примечание: adapter может синхронно вызвать fill callback внутри submit_order
+        # (simulator). В этом случае engine._on_fill получит fill с order_id="sim_N"
+        # но orders ещё не содержит этот id. Workaround: принимаем pending fills post-hoc.
         self.orders[order_id] = order
+
+        # Replay any fills that arrived during submit (simulator pattern)
+        if order_id in self.adapter._pending_fills_buffer if hasattr(self.adapter, '_pending_fills_buffer') else False:
+            for fill in self.adapter._pending_fills_buffer.pop(order_id, []):
+                self._on_fill(fill)
+
         return order
 
     def cancel_order(self, order_id: str) -> bool:
@@ -321,14 +331,21 @@ class ExecutionEngine:
             order.filled_at = update.timestamp
 
     def _on_fill(self, fill: Fill):
-        """Handle fill event."""
-        order = self.orders.get(fill.order_id)
-        if not order:
-            return
+        """Handle fill event.
 
-        # Update position
+        Note: fill may arrive synchronously during adapter.submit_order (simulator
+        pattern), before the order is stored in self.orders. Position update
+        only needs fill fields — it does not require the order object.
+        """
+        # Update position unconditionally — _update_position only uses fill fields.
         position = self.get_position(fill.symbol)
         self._update_position(position, fill)
+
+        # Update order state if already registered (async / post-submit path).
+        order = self.orders.get(fill.order_id)
+        if order:
+            order.filled_qty = fill.qty if order.filled_qty == Decimal(0) else order.filled_qty
+            order.avg_fill_price = fill.price
 
     def _on_reject(self, order: Order, reason: RejectReason):
         """Handle order rejection."""
