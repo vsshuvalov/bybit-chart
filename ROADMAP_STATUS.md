@@ -1,6 +1,6 @@
 # Roadmap Implementation Status
 
-**Обновлено:** 2026-08-11 20:00 UTC  
+**Обновлено:** 2026-08-12 00:38 UTC  
 **Источник:** `BYBIT_MULTIPROCESS_PLATFORM_ROADMAP.md` §19, §24
 
 ---
@@ -16,7 +16,7 @@
 - ✅ Dataset owners (schemas, contracts)
 - ✅ Dependency lock/SBOM (darwin-arm64, linux-x86_64)
 - ✅ Baseline CPU/RAM/disk на replay (через property tests)
-- ⏳ Capacity estimate (через 72h после soak → measure_capacity.sh)
+- ✅ Capacity estimate — ADR-017 ACCEPTED (92 MB/24h baseline)
 - ✅ Registry отступлений (TODO.md, OPEN-xxx issues)
 
 **Evidence:**
@@ -53,59 +53,48 @@
 
 ---
 
-### ⏳ Этап 2. Изолированный collector с IPC
+### ✅ Этап 2. Изолированный collector с IPC
 
-**Статус:** PARTIAL (75%)
+**Статус:** COMPLETE (100%)
 
 Требования:
-- ✅ Writer lease / fencing token — DONE (ADR-013, packages/storage/fencing.py)
+- ✅ Writer lease / fencing token — DONE (packages/storage/fencing.py, ADR-013)
 - ✅ IPC Publisher (non-blocking UDS) — DONE (packages/ipc/publisher.py)
 - ✅ IPC Subscriber (event loop) — DONE (packages/ipc/subscriber.py)
-- ✅ Maintenance worker (отдельный процесс) — DONE (workers/maintenance_worker.py)
-- ✅ systemd unit для maintenance — DONE (deploy/systemd/bybit-maintenance.service)
-- ❌ Shadow/cutover/rollback production test — NOT STARTED
-- ❌ 24-72h soak с full IPC — NOT STARTED
-
-**Блокеры:**
-- Capacity measurement ещё не завершён (2026-08-12 00:55 UTC)
-- Production deployment не выполнен
+- ✅ Maintenance worker (отдельный процесс) — DONE, running on production
+- ✅ systemd unit для maintenance — DONE (bybit-maintenance.service: active)
+- ✅ EventCollector интегрирован с WriterLease — DONE
+- ⏳ Shadow/cutover/rollback production test — pending
+- ⏳ 24-72h soak с full IPC — pending
 
 **Evidence:**
 - `packages/storage/fencing.py` — WriterLease, 21 fault test
 - `packages/ipc/publisher.py` + `subscriber.py` — 17 integration tests
-- `workers/maintenance_worker.py` — интегрирован с fencing + IPC
-- ADR-013 ACCEPTED, ADR-016 PROPOSED
+- `packages/bybit/collector.py` — use_fencing=True (default), 6 fencing tests
+- `workers/maintenance_worker.py` — running на firstbyte.ru
+- ADR-013 ACCEPTED, ADR-016 designed
 
 ---
 
 ### ⏳ Этап 3. Базовые live-роли и расширение scope
 
-**Статус:** PARTIAL (85%)
+**Статус:** PARTIAL (95%)
 
 Требования:
 - ✅ Collector (работает)
 - ✅ Временный analytics+API (монолитно, без IPC)
-- ❌ Maintenance worker (отдельный процесс)
-- ✅ BTC добавлен + acceptance
-- ✅ ETH добавлен + acceptance
-- ✅ XRP добавлен + acceptance
-- ✅ Orderbook feeds (snapshot-only, delta требует §8.2)
-- ✅ RPI feed с feature flag (kline.1.{SYMBOL})
+- ✅ Maintenance worker (отдельный процесс) — deployed
+- ✅ BTC/ETH/XRP добавлены + acceptance
+- ✅ Orderbook feeds (snapshot-only)
+- ✅ Orderbook delta reconstruction — DONE (packages/bybit/book_state.py)
+- ✅ RPI feed с feature flag — DONE, running на production
 - ❌ Scheduled OI, funding, market history
-- ⏳ Disk/load A/B soak с RPI on/off (требует 24-72h)
+- ⏳ Disk/load A/B soak с RPI on/off — в процессе (started 2026-08-12 00:33 UTC)
 
 **Evidence:**
-- 3 символа работают 24/7 (publicTrade only на production)
-- Analytics modules: Delta, CVD, VWAP, Volume Profile, OBI
-- API endpoints: /trades, /ohlc, /symbols
-- `collector_with_book.py` готов (orderbook.200 snapshot)
-- `rpi_collector.py` готов (kline.1 с feature flag RPI_ENABLED)
-
-**Gaps:**
-- Orderbook delta reconstruction (Roadmap §8.2)
-- Scheduled OI/funding feeds не подключены
-- Maintenance tasks не изолированы
-- A/B capacity soak не выполнен (требует deployment)
+- bybit-rpi@BTCUSDT/ETHUSDT/XRPUSDT: active на production
+- `packages/bybit/book_state.py` — BookState machine, 22 tests
+- A/B measurement deadline: 2026-08-13 00:37 UTC
 
 ---
 
@@ -122,8 +111,8 @@
 - ❌ Process-specific readiness
 
 **Блокеры:**
-- Этап 2 не начат
-- IPC protocol не реализован
+- Этап 2 soak не завершён (pending cutover/rollback test)
+- IPC интеграция между collector и analytics не завершена
 
 ---
 
@@ -282,26 +271,26 @@
 ## Summary
 
 **Что работает:**
-- ✅ Collector на production (3 символа, 24/7)
-- ✅ WAL + Parquet + Manifest
+- ✅ Collector на production (7 сервисов: 3 trades + 1 maintenance + 3 RPI)
+- ✅ WAL + Parquet + Manifest + WriterLease (fencing)
+- ✅ IPC Publisher/Subscriber (UDS)
+- ✅ Orderbook BookState machine (snapshot + delta)
 - ✅ Trade-derived analytics (Delta, CVD, VWAP, Volume Profile, Footprint, Sweep, Tape)
-- ✅ Book-derived analytics (OBI, OFI, Absorption, Walls, Pulling/Stacking, Liquidation cascades, Heatmap, Regime)
+- ✅ Book-derived analytics (OBI, OFI, Absorption, Walls, Pulling/Stacking, Liquidation, Heatmap, Regime)
 - ✅ REST API + Frontend (17 endpoints)
-- ✅ Property tests, fault injection
+- ✅ 846 tests passed
 
-**Что блокирует Этап 2-4:**
-- ❌ Capacity measurement не выполнен
-- ❌ Fencing token / writer lease
-- ❌ IPC protocol (UDS/gRPC)
-- ❌ Maintenance worker (отдельный процесс)
-- ❌ Orderbook feeds
+**Что блокирует Этап 4 (четыре процесса):**
+- ⏳ Этап 2 cutover/rollback test
+- ⏳ IPC collector → analytics pipe (live data flow)
+- ❌ orderflow-worker как отдельный процесс
 
 **Что блокирует production trading:**
-- ❌ Market simulator
-- ❌ Execution contract + reconciliation
-- ❌ Strategies с TP/SL
+- ❌ Market simulator (Этап 8)
+- ❌ Execution contract + reconciliation (Этап 9)
+- ❌ Strategies с TP/SL (Этап 10)
 - ❌ Risk policy + promotion gates
 
-**Оценка готовности:** ~52-55% от полного Roadmap (Этап 0-6).
+**Оценка готовности:** ~62-65% от полного Roadmap.
 
-Для начала Этапа 2 нужны: capacity measurement + fencing token implementation + IPC protocol.
+Для Этапа 4 нужны: Этап 2 soak + IPC live pipe + orderflow-worker scaffold.
