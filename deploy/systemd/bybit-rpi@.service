@@ -1,0 +1,65 @@
+# Bybit RPI Collector — systemd unit
+# P1-S3-004: RPI A/B soak (kline.1.{SYMBOL})
+#
+# Запускать ПОСЛЕ получения capacity baseline (ADR-017 ACCEPTED).
+# Собирает kline.1 feed для A/B сравнения disk usage vs trades-only.
+#
+# Установка:
+#   sudo cp bybit-rpi@.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable bybit-rpi@BTCUSDT
+#   sudo systemctl start bybit-rpi@BTCUSDT
+#
+# Проверка:
+#   sudo systemctl status bybit-rpi@BTCUSDT
+#   sudo journalctl -u bybit-rpi@BTCUSDT -f
+
+[Unit]
+Description=Bybit RPI Feed Collector - %i
+After=network-online.target bybit-collector.service
+Wants=network-online.target
+
+StartLimitIntervalSec=600
+StartLimitBurst=3
+
+[Service]
+Type=exec
+User=bybit
+Group=bybit
+WorkingDirectory=/opt/bybit-chart
+
+Environment="PATH=/opt/bybit-chart/.venv/bin:/usr/local/bin:/usr/bin:/bin"
+Environment="PYTHONUNBUFFERED=1"
+Environment="PYTHONPATH=/opt/bybit-chart"
+Environment="RPI_ENABLED=1"
+
+ExecStart=/opt/bybit-chart/.venv/bin/python examples/rpi_collector.py \
+    --symbol %i \
+    --output-dir /opt/bybit-chart/data
+
+TimeoutStopSec=30
+KillMode=mixed
+KillSignal=SIGTERM
+
+Restart=on-failure
+RestartSec=30
+
+# Меньший приоритет чем у основного collector
+CPUWeight=100
+IOWeight=100
+MemoryMax=256M
+
+IOSchedulingClass=idle
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/bybit-chart/data /opt/bybit-chart/logs /tmp
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=bybit-rpi@%i
+
+[Install]
+WantedBy=multi-user.target
