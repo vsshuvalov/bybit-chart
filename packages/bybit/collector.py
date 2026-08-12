@@ -10,6 +10,12 @@ Event Collector для записи Bybit событий в WAL (Stage 2 / P2-S2
 - Вызывает wal.append(payload)
 - Batch commit по GroupCommitPolicy
 
+Fencing (ADR-013):
+- Захватывает WriterLease при __init__ (use_fencing=True по умолчанию)
+- assert_still_valid() перед каждым wal.append()
+- При EpochViolationError → немедленно останавливает запись
+- close() освобождает lease
+
 Интеграция с close_and_publish_segment():
 - Заменяет stub-десериализацию Frame.payload → row
 - Читает реальный RawTrade из payload
@@ -23,6 +29,11 @@ from typing import Any
 
 from contracts.schemas import RawTrade, BookCheckpoint
 from packages.storage import WalPartition, GroupCommitPolicy
+from packages.storage.fencing import (
+    EpochViolationError,
+    LeaseAcquisitionError,
+    WriterLease,
+)
 from packages.storage.redis_publisher import get_redis_publisher
 
 logger = logging.getLogger(__name__)
@@ -47,6 +58,7 @@ class EventCollector:
         *,
         max_segment_bytes: int = 8 * 1024 * 1024,
         group_commit: GroupCommitPolicy | None = None,
+        use_fencing: bool = True,
     ):
         """Инициализировать коллектор.
 
@@ -55,13 +67,28 @@ class EventCollector:
             partition_id: идентификатор partition (symbol)
             max_segment_bytes: размер сегмента для roll
             group_commit: политика batch commit
+            use_fencing: захватить WriterLease при старте (ADR-013)
         """
         self.partition_dir = Path(partition_dir)
         self.partition_id = partition_id
 
         if group_commit is None:
-            # Дефолт: commit каждые 100 записей или 1MB
             group_commit = GroupCommitPolicy(max_records=100, max_bytes=1024 * 1024)
+
+        # Fencing: захватить lease перед открытием WAL (ADR-013)
+        self._lease: WriterLease | None = None
+        if use_fencing:
+            self._lease = WriterLease(self.partition_dir)
+            try:
+                epoch = self._lease.acquire()
+                logger.info(
+                    f"EventCollector: writer lease acquired "
+                    f"partition={partition_id} epoch={epoch}"
+                )
+            except LeaseAcquisitionError as exc:
+                raise RuntimeError(
+                    f"Cannot start collector for {partition_id}: {exc}"
+                ) from exc
 
         self.wal = WalPartition(
             directory=self.partition_dir,
@@ -70,7 +97,6 @@ class EventCollector:
             group_commit=group_commit,
         )
 
-        # Восстанавливаем WAL при старте
         recovery = self.wal.recover()
         logger.info(
             f"EventCollector восстановлен: partition={partition_id}, "
@@ -87,22 +113,22 @@ class EventCollector:
         Returns:
             wal_offset записи
 
-        Примечание: commit происходит автоматически по GroupCommitPolicy.
-        Roadmap §2.1: публикует в Redis для real-time broadcast.
+        Raises:
+            EpochViolationError: cutover произошёл — collector должен остановиться
         """
-        # Сериализация: JSON для MVP (ADR-002 заменит на Protobuf)
-        payload = self._serialize_event(trade)
+        # Fencing: проверить lease перед записью (ADR-013)
+        if self._lease is not None:
+            self._lease.assert_still_valid()
 
+        payload = self._serialize_event(trade)
         result = self.wal.append(payload)
         logger.debug(f"Записан trade: offset={result.wal_offset}, id={trade.trade_id}")
 
-        # Roadmap §2.1: публикуем в Redis для real-time broadcast
         try:
             redis_pub = get_redis_publisher()
             trade_dict = trade.model_dump(mode='json')
             redis_pub.publish_event(self.partition_id, {"type": "trade", "data": trade_dict})
         except Exception as exc:
-            # Redis публикация не критична — не ломаем основной flow
             logger.debug(f"Redis publish failed (non-critical): {exc}")
 
         return result.wal_offset
@@ -116,12 +142,16 @@ class EventCollector:
         Returns:
             wal_offset записи
 
-        Roadmap §8.2: Только snapshot, delta reconstruction — будущее расширение.
-        Roadmap §2.1: публикует в Redis для real-time broadcast.
-        """
-        # Сериализация: JSON для MVP
-        payload = self._serialize_event(checkpoint)
+        Raises:
+            EpochViolationError: cutover произошёл — collector должен остановиться
 
+        Roadmap §8.2: Только snapshot, delta reconstruction — будущее расширение.
+        """
+        # Fencing: проверить lease перед записью (ADR-013)
+        if self._lease is not None:
+            self._lease.assert_still_valid()
+
+        payload = self._serialize_event(checkpoint)
         result = self.wal.append(payload)
         logger.debug(
             f"Записан book checkpoint: offset={result.wal_offset}, "
@@ -129,7 +159,6 @@ class EventCollector:
             f"levelCount={checkpoint.level_count}"
         )
 
-        # Roadmap §2.1: публикуем в Redis
         try:
             redis_pub = get_redis_publisher()
             checkpoint_dict = checkpoint.model_dump(mode='json')
@@ -167,8 +196,10 @@ class EventCollector:
         logger.debug(f"Flush: durable_offset={self.wal.durable_offset}")
 
     def close(self) -> None:
-        """Закрыть WAL partition."""
+        """Закрыть WAL partition и освободить writer lease."""
         self.wal.close()
+        if self._lease is not None:
+            self._lease.release()
         logger.info(f"EventCollector закрыт: partition={self.partition_id}")
 
 

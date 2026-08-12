@@ -213,3 +213,80 @@ class TestRawTradeToParquetRow:
         assert row["coverageBoundaryTicks"] == 0
         assert row["coverageBps"] == Decimal("0.0000")
         assert row["isFeedRangeComplete"] is False
+
+
+class TestEventCollectorFencing:
+    """Тесты интеграции WriterLease в EventCollector (ADR-013)."""
+
+    def test_fencing_enabled_by_default(self, tmp_path):
+        """По умолчанию fencing включён, lease захватывается при инициализации."""
+        collector = EventCollector(tmp_path, "BTCUSDT")
+        try:
+            assert collector._lease is not None
+            assert collector._lease.is_active
+            assert collector._lease.epoch == 1
+        finally:
+            collector.close()
+
+    def test_fencing_disabled(self, tmp_path):
+        """use_fencing=False — lease не захватывается."""
+        collector = EventCollector(tmp_path, "BTCUSDT", use_fencing=False)
+        try:
+            assert collector._lease is None
+        finally:
+            collector.close()
+
+    def test_second_collector_fails_while_first_active(self, tmp_path):
+        """Второй коллектор не может стартовать пока первый держит lease."""
+        from packages.storage.fencing import LeaseAcquisitionError
+        collector1 = EventCollector(tmp_path, "BTCUSDT")
+        try:
+            with pytest.raises(RuntimeError, match="Cannot start collector"):
+                EventCollector(tmp_path, "BTCUSDT")
+        finally:
+            collector1.close()
+
+    def test_second_collector_starts_after_first_closed(self, tmp_path):
+        """После close() первого — второй стартует с epoch+1."""
+        collector1 = EventCollector(tmp_path, "BTCUSDT")
+        collector1.close()
+
+        collector2 = EventCollector(tmp_path, "BTCUSDT")
+        try:
+            assert collector2._lease.epoch == 2
+        finally:
+            collector2.close()
+
+    def test_close_releases_lease(self, tmp_path):
+        """close() освобождает lease."""
+        collector = EventCollector(tmp_path, "BTCUSDT")
+        collector.close()
+        assert not collector._lease.is_active
+
+    def test_epoch_violation_raises_on_append(self, tmp_path):
+        """append_trade бросает EpochViolationError при cutover."""
+        from packages.storage.fencing import EpochViolationError
+        import os
+
+        trade = RawTrade(
+            symbol="BTCUSDT",
+            trade_id="t1",
+            sequence=1,
+            exchange_timestamp_ms=1000,
+            outer_timestamp_ms=1000,
+            receive_timestamp_ms=1000,
+            price_ticks=500000,
+            qty_steps=1,
+            taker_side=TakerSide.BUY,
+        )
+
+        collector = EventCollector(tmp_path, "BTCUSDT")
+        # Симулируем cutover: принудительно сдвигаем epoch file
+        (tmp_path / ".writer.epoch").write_text("99")
+        try:
+            with pytest.raises(EpochViolationError):
+                collector.append_trade(trade)
+        finally:
+            # Восстановить epoch чтобы close не упал
+            (tmp_path / ".writer.epoch").write_text("1")
+            collector.close()
