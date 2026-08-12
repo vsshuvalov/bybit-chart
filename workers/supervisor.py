@@ -1,376 +1,387 @@
 #!/usr/bin/env python3
 """
-Process Supervisor для multi-process architecture (Roadmap §3).
-
-Источник: Roadmap §3 (process management, health checks, restart policies)
+Process Supervisor для bybit-chart 4-process architecture (Roadmap Этап 4.3).
 
 Responsibilities:
-- Запуск и остановка worker процессов
-- Health monitoring через IPC
-- Automatic restart при crashes
-- Graceful shutdown всех процессов
-- Process status reporting
+- Start/stop/restart всех 4 workers
+- Health monitoring с auto-restart при сбоях
+- Graceful shutdown sequence (SIGTERM → wait → SIGKILL)
+- Dependency ordering (collector first, API last)
+- Status reporting и metrics
+- Log aggregation
 
-Workers:
-- collector-worker: WebSocket → WAL
-- analytics-worker: Parquet → индикаторы (TODO)
-- api-server: REST + WebSocket (TODO)
-- maintenance-worker: WAL → Parquet (TODO)
+Architecture:
+    Supervisor
+    ├─ collector-worker (запускается первым)
+    ├─ orderflow-worker (после collector готов)
+    ├─ analytics-worker (после orderflow готов)
+    └─ api-server (запускается последним)
 
-Roadmap требования:
-- Independent process lifecycle
-- Crash detection и restart
-- Health checks через UDS
-- Graceful shutdown cascade
+Usage:
+    python3 supervisor.py start
+    python3 supervisor.py stop
+    python3 supervisor.py restart
+    python3 supervisor.py status
 """
 
 import asyncio
+import json
 import logging
 import signal
+import socket
 import subprocess
 import sys
 import time
 from dataclasses import dataclass
+from enum import Enum
 from pathlib import Path
-
-from packages.ipc import IPCMessage, ProcessRegistry, UDSClient
+from typing import Optional
 
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
 )
-
 logger = logging.getLogger("supervisor")
 
 
+class ProcessState(str, Enum):
+    STOPPED = "stopped"
+    STARTING = "starting"
+    RUNNING = "running"
+    UNHEALTHY = "unhealthy"
+    STOPPING = "stopping"
+    CRASHED = "crashed"
+
+
 @dataclass
-class WorkerConfig:
-    """Конфигурация worker процесса."""
+class ProcessConfig:
+    """Configuration для одного worker process."""
     name: str
     command: list[str]
-    restart_policy: str = "on-failure"  # "always", "on-failure", "never"
+    socket_path: Path
+    log_path: Path
+    startup_timeout: int = 30  # seconds
+    health_check_interval: int = 10  # seconds
+    restart_on_failure: bool = True
     max_restarts: int = 5
-    restart_delay: float = 5.0
-    health_check_interval: float = 30.0
+    restart_window: int = 300  # 5 minutes
 
 
-@dataclass
-class WorkerState:
-    """Состояние worker процесса."""
-    config: WorkerConfig
-    process: subprocess.Popen | None = None
-    restart_count: int = 0
-    last_restart: float = 0.0
-    status: str = "stopped"  # "stopped", "starting", "running", "crashed", "stopping"
-    pid: int | None = None
+class ManagedProcess:
+    """Managed worker process с health monitoring."""
+
+    def __init__(self, config: ProcessConfig):
+        self.config = config
+        self.state = ProcessState.STOPPED
+        self.process: Optional[subprocess.Popen] = None
+        self.pid: Optional[int] = None
+        self.restarts = 0
+        self.restart_times: list[float] = []
+        self.last_health_check = 0.0
+
+    def start(self) -> bool:
+        """Start the process."""
+        if self.state in [ProcessState.STARTING, ProcessState.RUNNING]:
+            logger.warning(f"{self.config.name}: already running")
+            return False
+
+        logger.info(f"{self.config.name}: starting...")
+        self.state = ProcessState.STARTING
+
+        try:
+            log_file = open(self.config.log_path, "a")
+            self.process = subprocess.Popen(
+                self.config.command,
+                stdout=log_file,
+                stderr=subprocess.STDOUT,
+                preexec_fn=lambda: signal.signal(signal.SIGTERM, signal.SIG_DFL),
+            )
+            self.pid = self.process.pid
+            logger.info(f"{self.config.name}: started (PID {self.pid})")
+            self.state = ProcessState.RUNNING
+            return True
+        except Exception as e:
+            logger.error(f"{self.config.name}: failed to start: {e}")
+            self.state = ProcessState.CRASHED
+            return False
+
+    def stop(self, force: bool = False) -> bool:
+        """Stop the process."""
+        if self.state == ProcessState.STOPPED:
+            return True
+
+        logger.info(f"{self.config.name}: stopping...")
+        self.state = ProcessState.STOPPING
+
+        if not self.process or not self.pid:
+            self.state = ProcessState.STOPPED
+            return True
+
+        try:
+            if force:
+                self.process.kill()  # SIGKILL
+            else:
+                self.process.terminate()  # SIGTERM
+                try:
+                    self.process.wait(timeout=10)
+                except subprocess.TimeoutExpired:
+                    logger.warning(f"{self.config.name}: timeout, force killing")
+                    self.process.kill()
+                    self.process.wait(timeout=5)
+
+            self.state = ProcessState.STOPPED
+            self.process = None
+            self.pid = None
+            logger.info(f"{self.config.name}: stopped")
+            return True
+        except Exception as e:
+            logger.error(f"{self.config.name}: failed to stop: {e}")
+            return False
+
+    def health_check(self) -> bool:
+        """Check if process is healthy via UDS health check."""
+        now = time.time()
+        if now - self.last_health_check < self.config.health_check_interval:
+            return self.state == ProcessState.RUNNING
+
+        self.last_health_check = now
+
+        # Check if process is alive
+        if not self.process or self.process.poll() is not None:
+            logger.warning(f"{self.config.name}: process died")
+            self.state = ProcessState.CRASHED
+            return False
+
+        # Check UDS socket
+        if not self.config.socket_path.exists():
+            logger.warning(f"{self.config.name}: socket not found")
+            self.state = ProcessState.UNHEALTHY
+            return False
+
+        # UDS health check
+        try:
+            sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            sock.settimeout(2.0)
+            sock.connect(str(self.config.socket_path))
+
+            request = {"type": "health"}
+            sock.sendall(json.dumps(request).encode() + b"\n")
+
+            data = sock.recv(4096)
+            sock.close()
+
+            response = json.loads(data.decode())
+            status = response.get("status", "unknown")
+
+            if status in ["healthy", "ok"]:
+                self.state = ProcessState.RUNNING
+                return True
+            else:
+                logger.warning(f"{self.config.name}: unhealthy status: {status}")
+                self.state = ProcessState.UNHEALTHY
+                return False
+
+        except Exception as e:
+            logger.warning(f"{self.config.name}: health check failed: {e}")
+            self.state = ProcessState.UNHEALTHY
+            return False
+
+    def should_restart(self) -> bool:
+        """Check if process should be auto-restarted."""
+        if not self.config.restart_on_failure:
+            return False
+
+        if self.state not in [ProcessState.CRASHED, ProcessState.UNHEALTHY]:
+            return False
+
+        # Check restart rate limit
+        now = time.time()
+        self.restart_times = [t for t in self.restart_times if now - t < self.config.restart_window]
+
+        if len(self.restart_times) >= self.config.max_restarts:
+            logger.error(
+                f"{self.config.name}: restart rate limit exceeded "
+                f"({self.config.max_restarts} restarts in {self.config.restart_window}s)"
+            )
+            return False
+
+        return True
+
+    def restart(self) -> bool:
+        """Restart the process."""
+        logger.info(f"{self.config.name}: restarting...")
+        self.stop()
+        time.sleep(2)
+        success = self.start()
+        if success:
+            self.restarts += 1
+            self.restart_times.append(time.time())
+        return success
 
 
 class ProcessSupervisor:
-    """Supervisor для управления worker процессами.
+    """Supervisor для управления всеми 4 workers."""
 
-    Roadmap §3: process management, health checks, restart policies.
-    """
-
-    def __init__(self, registry_dir: Path):
-        """Initialize supervisor.
-
-        Args:
-            registry_dir: директория process registry
-        """
+    def __init__(self, data_dir: Path, registry_dir: Path):
+        self.data_dir = data_dir
         self.registry_dir = registry_dir
-        self.registry = ProcessRegistry(registry_dir)
-        self.workers: dict[str, WorkerState] = {}
         self.running = False
 
-    def add_worker(self, config: WorkerConfig):
-        """Добавить worker для управления.
+        # Define all processes in dependency order
+        self.processes = {
+            "collector": ManagedProcess(ProcessConfig(
+                name="collector",
+                command=["python3", "workers/collector_worker.py"],
+                socket_path=Path("/tmp/bybit-collector.sock"),
+                log_path=Path("/tmp/bybit-collector.log"),
+            )),
+            "orderflow": ManagedProcess(ProcessConfig(
+                name="orderflow",
+                command=["python3", "workers/orderflow_worker.py"],
+                socket_path=Path("/tmp/bybit-orderflow.sock"),
+                log_path=Path("/tmp/bybit-orderflow.log"),
+            )),
+            "analytics": ManagedProcess(ProcessConfig(
+                name="analytics",
+                command=["python3", "workers/analytics_worker.py"],
+                socket_path=Path("/tmp/bybit-analytics.sock"),
+                log_path=Path("/tmp/bybit-analytics.log"),
+            )),
+            "api": ManagedProcess(ProcessConfig(
+                name="api",
+                command=["python3", "-m", "uvicorn", "packages.api.app:app", "--host", "0.0.0.0", "--port", "8000"],
+                socket_path=Path("/tmp/bybit-api.sock"),
+                log_path=Path("/tmp/bybit-api.log"),
+            )),
+        }
 
-        Args:
-            config: конфигурация worker
-        """
-        self.workers[config.name] = WorkerState(config=config)
-        logger.info(f"Added worker: {config.name}")
+        # Dependency order для startup
+        self.startup_order = ["collector", "orderflow", "analytics", "api"]
 
-    async def start(self):
-        """Запустить supervisor и все workers."""
-        logger.info("Starting supervisor...")
+        # Shutdown order (reverse)
+        self.shutdown_order = list(reversed(self.startup_order))
 
+    def start_all(self) -> bool:
+        """Start all processes in dependency order."""
+        logger.info("Starting all processes...")
+
+        for name in self.startup_order:
+            proc = self.processes[name]
+            if not proc.start():
+                logger.error(f"Failed to start {name}, aborting startup")
+                self.stop_all()
+                return False
+
+            # Wait for readiness
+            logger.info(f"Waiting for {name} to be ready...")
+            for _ in range(proc.config.startup_timeout):
+                time.sleep(1)
+                if proc.config.socket_path.exists():
+                    if proc.health_check():
+                        break
+            else:
+                logger.error(f"{name} failed to become ready, aborting startup")
+                self.stop_all()
+                return False
+
+        logger.info("All processes started successfully")
         self.running = True
+        return True
 
-        # Start all workers
-        for name, state in self.workers.items():
-            await self._start_worker(state)
+    def stop_all(self, force: bool = False) -> bool:
+        """Stop all processes in reverse dependency order."""
+        logger.info("Stopping all processes...")
 
-        # Start monitoring loop
-        await self._monitoring_loop()
-
-    async def stop(self):
-        """Graceful shutdown всех workers."""
-        logger.info("Stopping supervisor...")
+        success = True
+        for name in self.shutdown_order:
+            proc = self.processes[name]
+            if not proc.stop(force=force):
+                success = False
 
         self.running = False
+        logger.info("All processes stopped")
+        return success
 
-        # Stop all workers
-        for name, state in self.workers.items():
-            await self._stop_worker(state)
-
-        logger.info("Supervisor stopped")
-
-    async def _start_worker(self, state: WorkerState):
-        """Запустить worker процесс.
-
-        Args:
-            state: состояние worker
-        """
-        config = state.config
-
-        logger.info(f"Starting worker: {config.name}")
-
-        try:
-            state.status = "starting"
-
-            # Start process
-            process = subprocess.Popen(
-                config.command,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True,
-            )
-
-            state.process = process
-            state.pid = process.pid
-            state.status = "running"
-
-            logger.info(f"Worker started: {config.name} (PID: {process.pid})")
-
-        except Exception as exc:
-            logger.error(f"Failed to start worker {config.name}: {exc}")
-            state.status = "crashed"
-
-    async def _stop_worker(self, state: WorkerState):
-        """Остановить worker процесс.
-
-        Args:
-            state: состояние worker
-        """
-        config = state.config
-
-        if not state.process or state.status == "stopped":
-            return
-
-        logger.info(f"Stopping worker: {config.name} (PID: {state.pid})")
-
-        state.status = "stopping"
-
-        try:
-            # Send SIGTERM
-            state.process.terminate()
-
-            # Wait for graceful shutdown (max 10 seconds)
-            try:
-                state.process.wait(timeout=10)
-            except subprocess.TimeoutExpired:
-                logger.warning(f"Worker {config.name} did not stop gracefully, killing...")
-                state.process.kill()
-                state.process.wait()
-
-            state.status = "stopped"
-            state.process = None
-            state.pid = None
-
-            logger.info(f"Worker stopped: {config.name}")
-
-        except Exception as exc:
-            logger.error(f"Error stopping worker {config.name}: {exc}")
-
-    async def _monitoring_loop(self):
-        """Мониторинг health workers."""
-        logger.info("Starting monitoring loop...")
-
-        while self.running:
-            for name, state in self.workers.items():
-                await self._check_worker_health(state)
-
-            await asyncio.sleep(5)
-
-    async def _check_worker_health(self, state: WorkerState):
-        """Проверить health worker.
-
-        Args:
-            state: состояние worker
-        """
-        config = state.config
-
-        # Check if process is alive
-        if state.process and state.process.poll() is not None:
-            # Process terminated
-            logger.warning(f"Worker {config.name} terminated unexpectedly (exit code: {state.process.returncode})")
-            state.status = "crashed"
-
-            # Check restart policy
-            if await self._should_restart(state):
-                logger.info(f"Restarting worker {config.name}...")
-                state.restart_count += 1
-                state.last_restart = time.time()
-                await asyncio.sleep(config.restart_delay)
-                await self._start_worker(state)
-
-        # Try health check via IPC
-        elif state.status == "running":
-            try:
-                socket_path = self.registry.discover_process(config.name.replace("-worker", ""))
-                if socket_path:
-                    client = UDSClient(socket_path, "supervisor")
-                    await client.connect()
-
-                    health_msg = IPCMessage(
-                        message_type="health",
-                        payload={},
-                        source="supervisor",
-                    )
-
-                    response = await asyncio.wait_for(
-                        client.send_message(health_msg),
-                        timeout=5.0,
-                    )
-
-                    await client.close()
-
-                    if response:
-                        logger.debug(f"Health check OK: {config.name} → {response.payload.get('status')}")
-
-            except asyncio.TimeoutError:
-                logger.warning(f"Health check timeout: {config.name}")
-            except Exception as exc:
-                logger.debug(f"Health check failed: {config.name} → {exc}")
-
-    async def _should_restart(self, state: WorkerState) -> bool:
-        """Определить нужно ли перезапускать worker.
-
-        Args:
-            state: состояние worker
-
-        Returns:
-            True если нужно перезапустить
-        """
-        config = state.config
-
-        if config.restart_policy == "never":
-            return False
-
-        if config.restart_policy == "always":
-            return state.restart_count < config.max_restarts
-
-        if config.restart_policy == "on-failure":
-            # Restart only if process exited with non-zero code
-            if state.process and state.process.returncode != 0:
-                return state.restart_count < config.max_restarts
-
-        return False
+    def restart_all(self) -> bool:
+        """Restart all processes."""
+        logger.info("Restarting all processes...")
+        self.stop_all()
+        time.sleep(2)
+        return self.start_all()
 
     def get_status(self) -> dict:
-        """Получить статус всех workers.
-
-        Returns:
-            Dict с статусом
-        """
+        """Get status of all processes."""
         return {
-            "supervisor": "running" if self.running else "stopped",
-            "workers": {
-                name: {
-                    "status": state.status,
-                    "pid": state.pid,
-                    "restart_count": state.restart_count,
-                }
-                for name, state in self.workers.items()
-            },
+            name: {
+                "state": proc.state.value,
+                "pid": proc.pid,
+                "restarts": proc.restarts,
+            }
+            for name, proc in self.processes.items()
         }
+
+    async def monitor_loop(self):
+        """Main monitoring loop."""
+        logger.info("Starting monitor loop...")
+
+        while self.running:
+            await asyncio.sleep(5)
+
+            for name, proc in self.processes.items():
+                # Health check
+                healthy = proc.health_check()
+
+                if not healthy and proc.should_restart():
+                    logger.warning(f"{name}: auto-restarting...")
+                    proc.restart()
+
+    def signal_handler(self, signum, frame):
+        """Handle shutdown signals."""
+        logger.info(f"Received signal {signum}, shutting down...")
+        self.running = False
+        self.stop_all()
+        sys.exit(0)
 
 
 async def main():
     """Main entry point."""
+    if len(sys.argv) < 2:
+        print("Usage: supervisor.py {start|stop|restart|status}")
+        sys.exit(1)
+
+    command = sys.argv[1]
+
+    data_dir = Path("data")
     registry_dir = Path("/tmp/bybit-registry")
-    registry_dir.mkdir(parents=True, exist_ok=True)
+    registry_dir.mkdir(exist_ok=True)
 
-    supervisor = ProcessSupervisor(registry_dir)
-
-    # Add collector worker
-    supervisor.add_worker(WorkerConfig(
-        name="collector-worker",
-        command=[
-            sys.executable,
-            "workers/collector_worker.py",
-            "data",
-            "BTCUSDT,ETHUSDT,XRPUSDT",
-        ],
-        restart_policy="on-failure",
-        max_restarts=5,
-    ))
-
-    # Add analytics worker
-    supervisor.add_worker(WorkerConfig(
-        name="analytics-worker",
-        command=[
-            sys.executable,
-            "workers/analytics_worker.py",
-            "/opt/bybit-chart/data",
-        ],
-        restart_policy="on-failure",
-        max_restarts=5,
-    ))
-
-    # Add orderflow worker (Этап 4 — 5-й процесс)
-    supervisor.add_worker(WorkerConfig(
-        name="orderflow-worker",
-        command=[
-            sys.executable,
-            "workers/orderflow_worker.py",
-            "/opt/bybit-chart/data",
-        ],
-        restart_policy="on-failure",
-        max_restarts=5,
-    ))
-
-    # Add API server
-    supervisor.add_worker(WorkerConfig(
-        name="api-server",
-        command=[
-            sys.executable,
-            "workers/api_server.py",
-        ],
-        restart_policy="on-failure",
-        max_restarts=5,
-    ))
-
-    # Add maintenance worker
-    supervisor.add_worker(WorkerConfig(
-        name="maintenance-worker",
-        command=[
-            sys.executable,
-            "workers/maintenance_worker.py",
-            "data",
-        ],
-        restart_policy="on-failure",
-        max_restarts=5,
-    ))
+    supervisor = ProcessSupervisor(data_dir, registry_dir)
 
     # Setup signal handlers
-    loop = asyncio.get_running_loop()
+    signal.signal(signal.SIGTERM, supervisor.signal_handler)
+    signal.signal(signal.SIGINT, supervisor.signal_handler)
 
-    def signal_handler(sig):
-        logger.info(f"Received signal {sig}, shutting down...")
-        asyncio.create_task(supervisor.stop())
+    if command == "start":
+        if supervisor.start_all():
+            await supervisor.monitor_loop()
+        else:
+            sys.exit(1)
 
-    for sig in (signal.SIGTERM, signal.SIGINT):
-        loop.add_signal_handler(sig, lambda s=sig: signal_handler(s))
+    elif command == "stop":
+        supervisor.stop_all()
 
-    # Start supervisor
-    try:
-        await supervisor.start()
-    except KeyboardInterrupt:
-        logger.info("Interrupted by user")
-    except Exception as exc:
-        logger.error(f"Supervisor error: {exc}", exc_info=True)
+    elif command == "restart":
+        if supervisor.restart_all():
+            await supervisor.monitor_loop()
+        else:
+            sys.exit(1)
+
+    elif command == "status":
+        status = supervisor.get_status()
+        print(json.dumps(status, indent=2))
+
+    else:
+        print(f"Unknown command: {command}")
         sys.exit(1)
 
 

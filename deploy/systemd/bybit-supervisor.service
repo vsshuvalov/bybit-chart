@@ -1,0 +1,25 @@
+[Unit]
+Description=Bybit Chart Supervisor (4-process architecture)
+After=network.target
+
+[Service]
+Type=simple
+User=bybit
+Group=bybit
+WorkingDirectory=/opt/bybit-chart
+ExecStart=/opt/bybit-chart/.venv/bin/python3 /opt/bybit-chart/workers/supervisor.py start
+ExecStop=/opt/bybit-chart/.venv/bin/python3 /opt/bybit-chart/workers/supervisor.py stop
+Restart=always
+RestartSec=10
+
+# Security
+NoNewPrivileges=true
+PrivateTmp=true
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=bybit-supervisor
+
+[Install]
+WantedBy=multi-user.target
