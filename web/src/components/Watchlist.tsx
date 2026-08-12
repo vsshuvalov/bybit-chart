@@ -31,15 +31,27 @@ export default function Watchlist() {
 
   // Mock data — будет заменено на реальные данные из API
   const watchlistItems: WatchlistItem[] = (symbolsData?.symbols || ['BTCUSDT', 'ETHUSDT', 'XRPUSDT']).map(
-    (sym) => ({
-      symbol: sym,
-      last: sym === 'BTCUSDT' ? 50123.45 : sym === 'ETHUSDT' ? 2456.78 : 0.5234,
-      change24h: Math.random() * 10 - 5, // -5% to +5%
-      spread: 0.01,
-      quality: 'good',
-      position: 0,
-      pnl: 0,
-    })
+    (sym) => {
+      // Generate realistic mock prices
+      const basePrices: Record<string, number> = {
+        BTCUSDT: 50123.45,
+        ETHUSDT: 2456.78,
+        XRPUSDT: 0.5234,
+      }
+      const basePrice = basePrices[sym] || 100
+      const change = (Math.random() * 10 - 5) // -5% to +5%
+      const last = basePrice * (1 + change / 100)
+
+      return {
+        symbol: sym,
+        last: last,
+        change24h: change,
+        spread: 0.01,
+        quality: 'good',
+        position: 0,
+        pnl: 0,
+      }
+    }
   )
 
   return (

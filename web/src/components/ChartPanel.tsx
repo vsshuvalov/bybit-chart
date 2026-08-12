@@ -20,7 +20,7 @@ export default function ChartPanel() {
   const { symbol, timeframe } = useViewStore()
 
   // Fetch OHLC data
-  const { data: ohlcData } = useQuery({
+  const { data: ohlcData, error } = useQuery({
     queryKey: ['ohlc', symbol, timeframe],
     queryFn: async () => {
       const now = Date.now() * 1000 // microseconds
@@ -29,6 +29,9 @@ export default function ChartPanel() {
     },
     refetchInterval: 10000, // refresh every 10s
   })
+
+  // Mock data fallback if API returns no candles
+  const useMockData = !ohlcData || ohlcData.count === 0
 
   // Initialize chart
   useEffect(() => {
@@ -90,25 +93,57 @@ export default function ChartPanel() {
 
   // Update data when ohlcData changes
   useEffect(() => {
-    if (!candleSeriesRef.current || !ohlcData) return
+    if (!candleSeriesRef.current) return
 
-    // Convert API data to lightweight-charts format
-    const candles: CandlestickData[] = ohlcData.candles.map((c) => ({
-      time: Math.floor(c.timestamp_us / 1000000) as any, // seconds
-      open: c.open_ticks / 100, // ticks to price (assuming 0.01 tick size)
-      high: c.high_ticks / 100,
-      low: c.low_ticks / 100,
-      close: c.close_ticks / 100,
-    }))
+    let candles: CandlestickData[] = []
+
+    if (ohlcData && ohlcData.count > 0) {
+      // Real data from API
+      candles = ohlcData.candles.map((c) => ({
+        time: Math.floor(c.timestamp_us / 1000000) as any, // seconds
+        open: c.open_ticks / 100, // ticks to price (assuming 0.01 tick size)
+        high: c.high_ticks / 100,
+        low: c.low_ticks / 100,
+        close: c.close_ticks / 100,
+      }))
+    } else {
+      // Mock data for demo (no backend data available)
+      const now = Math.floor(Date.now() / 1000)
+      const basePrice = symbol === 'BTCUSDT' ? 50000 : symbol === 'ETHUSDT' ? 2500 : 0.5
+      const intervalSeconds = timeframe === '1m' ? 60 : timeframe === '5m' ? 300 : timeframe === '15m' ? 900 : 3600
+
+      for (let i = 0; i < 100; i++) {
+        const time = now - (100 - i) * intervalSeconds
+        const noise = (Math.random() - 0.5) * basePrice * 0.01
+        const open = basePrice + noise
+        const close = open + (Math.random() - 0.5) * basePrice * 0.005
+        const high = Math.max(open, close) + Math.random() * basePrice * 0.003
+        const low = Math.min(open, close) - Math.random() * basePrice * 0.003
+
+        candles.push({
+          time: time as any,
+          open,
+          high,
+          low,
+          close,
+        })
+      }
+    }
 
     candleSeriesRef.current.setData(candles)
-  }, [ohlcData])
+  }, [ohlcData, symbol, timeframe, useMockData])
 
   return (
     <div className="chart-panel">
       <div className="chart-container" ref={chartContainerRef} />
 
-      {!ohlcData && (
+      {useMockData && (
+        <div className="mock-data-badge">
+          ⚠️ Mock Data (no backend data)
+        </div>
+      )}
+
+      {!ohlcData && !error && (
         <div className="chart-loading">
           <div className="loading-spinner" />
           <div>Loading {symbol} {timeframe} data...</div>
@@ -153,6 +188,20 @@ export default function ChartPanel() {
           to {
             transform: rotate(360deg);
           }
+        }
+
+        .mock-data-badge {
+          position: absolute;
+          top: var(--spacing-md);
+          right: var(--spacing-md);
+          padding: 6px 12px;
+          background: rgba(255, 152, 0, 0.15);
+          border: 1px solid var(--status-warning);
+          border-radius: var(--radius-sm);
+          color: var(--status-warning);
+          font-size: 12px;
+          font-weight: 500;
+          z-index: 10;
         }
       `}</style>
     </div>

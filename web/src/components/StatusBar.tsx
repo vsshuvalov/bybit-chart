@@ -13,12 +13,13 @@
 export default function StatusBar() {
   // Mock data — будет заменено на реальные данные из /health и /metrics
   const status = {
-    collectorLag: 123, // ms
-    analyticsLag: 456, // ms
+    collectorLag: 0, // ms (no live collector on dev)
+    analyticsLag: 0, // ms
     gapCount: 0,
     lastUpdate: new Date().toISOString(),
     release: 'a72e11a',
     configHash: 'bb64cab',
+    mode: 'DEV', // dev/production flag
   }
 
   return (
