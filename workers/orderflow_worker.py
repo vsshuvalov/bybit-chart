@@ -60,14 +60,14 @@ class SymbolState:
         # Trade-based detectors
         self.sweep = SweepDetector(min_levels=3, window_ms=500)
         self.tape = TapeFilter(min_qty_steps=1000)
-        self.bubbles = BubbleAggregator(merge_window_ms=5000)
+        self.bubbles = BubbleAggregator(cluster_window_ms=5000)
         self.absorption = AbsorptionDetector(min_absorbed_qty=500, window_ms=2000)
         self.liquidation = LiquidationCascadeDetector(
             min_trade_qty=5000, window_ms=3000, min_cascade_count=3
         )
 
         # Book-based detectors
-        self.obi = OBIEngine(levels=5)
+        self.obi = OBIEngine(near_levels=5)
         self.ofi = OFICalculator()
         self.walls = WallDetector(min_qty_steps=5000, max_depth=50)
         self.pulling_stacking = PullingStackingDetector()
