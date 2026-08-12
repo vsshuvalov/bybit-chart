@@ -132,7 +132,22 @@ interface UIState {
   bottomDockTab: 'delta' | 'oi' | 'strategy' | 'replay'
 
   // Drawing tool
-  activeTool: 'cursor' | 'trendline' | 'horizontal' | 'rectangle' | 'text' | null
+  activeTool:
+    | 'cursor'
+    | 'trendline'
+    | 'ray'
+    | 'horizontal'
+    | 'vertical'
+    | 'rectangle'
+    | 'ellipse'
+    | 'text'
+    | 'channel'
+    | 'fibonacci'
+    | 'anchored-vwap'
+    | 'volume-profile'
+    | 'ruler'
+    | 'risk-reward'
+    | null
 
   // Actions
   toggleLeftToolbar: () => void

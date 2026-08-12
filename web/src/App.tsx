@@ -10,7 +10,7 @@
  *   Status bar: feed ages | gaps | analytics lag | release/config hashes
  */
 
-import { useViewStore, useUIStore } from './store'
+import { useUIStore } from './store'
 import TopBar from './components/TopBar'
 import LeftToolbar from './components/LeftToolbar'
 import RightSidebar from './components/RightSidebar'
