@@ -179,6 +179,8 @@ class OrderflowMetrics:
     # IPC
     ipc_events_received_total: Counter
     ipc_events_dropped_total: Counter
+    orderflow_events_published_total: Counter
+    orderflow_events_dropped_total: Counter
 
     # Performance
     event_processing_latency_seconds: Histogram
@@ -202,6 +204,8 @@ class OrderflowMetrics:
 
         self.ipc_events_received_total = Counter("orderflow_ipc_events_received_total")
         self.ipc_events_dropped_total = Counter("orderflow_ipc_events_dropped_total")
+        self.orderflow_events_published_total = Counter("orderflow_events_published_total")
+        self.orderflow_events_dropped_total = Counter("orderflow_events_dropped_total")
 
         self.event_processing_latency_seconds = Histogram("orderflow_event_processing_latency_seconds")
 

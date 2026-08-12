@@ -543,3 +543,54 @@ class RawEventEnvelope(BaseModel):
         if v is None:
             return None
         return _parse_int_str(v, "sourceSequence/updateId")
+
+
+# ---------------------------------------------------------------------------
+# Orderflow Events (Этап 4: IPC publisher от orderflow-worker)
+# ---------------------------------------------------------------------------
+
+class OrderflowSweep(BaseModel):
+    """Sweep event: агрессивный ордер сметающий несколько уровней стакана."""
+    symbol: str
+    timestamp: int  # milliseconds
+    side: str  # "Buy" or "Sell"
+    levels_swept: int
+    volume: float
+    price_start: float
+    price_end: float
+
+
+class OrderflowCascade(BaseModel):
+    """Liquidation cascade event: последовательность быстрых ликвидаций."""
+    symbol: str
+    timestamp: int
+    side: str
+    volume: float
+    price_range: float
+
+
+class OrderflowOFI(BaseModel):
+    """Order Flow Imbalance update."""
+    symbol: str
+    timestamp: int
+    ofi: float
+    microprice: float
+    imbalance: float
+
+
+class OrderflowWall(BaseModel):
+    """Wall detected: крупный лимитный ордер в стакане."""
+    symbol: str
+    timestamp: int
+    side: str
+    price: float
+    size: float
+
+
+class OrderflowRegimeChange(BaseModel):
+    """Market regime change event."""
+    symbol: str
+    timestamp: int
+    old_regime: str
+    new_regime: str
+    confidence: float

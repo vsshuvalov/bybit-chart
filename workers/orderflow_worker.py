@@ -36,6 +36,7 @@ from packages.analytics.walls import WallDetector
 from packages.bybit.book_state import BookState
 from packages.bybit.collector import deserialize_event_from_payload
 from packages.ipc import IPCMessage, ProcessRegistry, UDSServer
+from packages.ipc.publisher import IPCPublisher
 from packages.ipc.subscriber import IPCSubscriber
 from packages.monitoring.worker_metrics import OrderflowMetrics
 from packages.storage.manifest import Manifest
@@ -52,8 +53,9 @@ logger = logging.getLogger("orderflow-worker")
 class SymbolState:
     """Per-symbol state: BookState + все детекторы."""
 
-    def __init__(self, symbol: str, depth: int = 200):
+    def __init__(self, symbol: str, depth: int = 200, publisher_callback=None):
         self.symbol = symbol
+        self.publisher_callback = publisher_callback  # Callback для публикации events
 
         # Orderbook state machine
         self.book = BookState(symbol, depth=depth)
@@ -96,6 +98,18 @@ class SymbolState:
             if len(self.recent_sweeps) > 100:
                 self.recent_sweeps = self.recent_sweeps[-100:]
 
+            # Publish sweep event via IPC
+            if self.publisher_callback:
+                self.publisher_callback("OrderflowSweep", {
+                    "symbol": self.symbol,
+                    "timestamp": trade.timestamp,
+                    "side": sweep.side,
+                    "levels_swept": sweep.levels_swept,
+                    "volume": sweep.volume,
+                    "price_start": sweep.price_start,
+                    "price_end": sweep.price_end,
+                })
+
         self.tape.process(trade)
         self.bubbles.process(trade)
         self.absorption.process(trade)
@@ -105,6 +119,16 @@ class SymbolState:
             self.recent_cascades.append(cascade)
             if len(self.recent_cascades) > 50:
                 self.recent_cascades = self.recent_cascades[-50:]
+
+            # Publish cascade event via IPC
+            if self.publisher_callback:
+                self.publisher_callback("OrderflowCascade", {
+                    "symbol": self.symbol,
+                    "timestamp": cascade.get("timestamp", trade.timestamp),
+                    "side": cascade.get("side"),
+                    "volume": cascade.get("volume", 0),
+                    "price_range": cascade.get("price_range", 0),
+                })
 
     def on_book_event(self, event: RawBookEvent) -> None:
         """Обработать RawBookEvent (snapshot или delta)."""
@@ -133,7 +157,26 @@ class SymbolState:
                 "spread": ofi_result.spread,
             }
 
-        self.walls.process(event)
+            # Publish OFI update via IPC
+            if self.publisher_callback:
+                self.publisher_callback("OrderflowOFI", {
+                    "symbol": self.symbol,
+                    "timestamp": event.timestamp,
+                    "ofi": ofi_result.ofi,
+                    "microprice": ofi_result.microprice,
+                    "imbalance": ofi_result.imbalance,
+                })
+
+        wall_event = self.walls.process(event)
+        if wall_event and self.publisher_callback:
+            self.publisher_callback("OrderflowWall", {
+                "symbol": self.symbol,
+                "timestamp": event.timestamp,
+                "side": wall_event.get("side"),
+                "price": wall_event.get("price"),
+                "size": wall_event.get("size"),
+            })
+
         self.pulling_stacking.process(event)
         self.heatmap.add_snapshot(event)
 
@@ -210,6 +253,7 @@ class OrderflowWorker:
         self.uds_server: UDSServer | None = None
         self.registry: ProcessRegistry | None = None
         self._ipc_subscriber: IPCSubscriber | None = None
+        self._ipc_publisher: IPCPublisher | None = None
 
         # Per-symbol state
         self._symbols: dict[str, SymbolState] = {}
@@ -255,6 +299,11 @@ class OrderflowWorker:
         self._ipc_subscriber.register_handler("RawBookEvent", self._on_raw_book_event)
         self._ipc_subscriber.run_in_thread(daemon=True)
 
+        # IPC publisher: публикуем orderflow events для analytics/API
+        tx_sock = self.socket_path.parent / "bybit-orderflow-tx.sock"
+        self._ipc_publisher = IPCPublisher(tx_sock)
+        logger.info(f"IPC publisher initialized on {tx_sock}")
+
         self.registry.register_process("orderflow", self.socket_path)
 
         # Readiness: ждём пока registry подтвердит регистрацию
@@ -290,6 +339,9 @@ class OrderflowWorker:
 
         if self._ipc_subscriber:
             self._ipc_subscriber.stop()
+
+        if self._ipc_publisher:
+            self._ipc_publisher.close()
 
         if self.uds_server:
             await self.uds_server.stop()
@@ -417,9 +469,21 @@ class OrderflowWorker:
 
     def _ensure_symbol(self, symbol: str) -> SymbolState:
         if symbol not in self._symbols:
-            self._symbols[symbol] = SymbolState(symbol)
+            # Pass publisher callback для публикации events
+            publisher_cb = self._publish_event if self._ipc_publisher else None
+            self._symbols[symbol] = SymbolState(symbol, publisher_callback=publisher_cb)
             logger.info(f"Registered new symbol: {symbol}")
         return self._symbols[symbol]
+
+    def _publish_event(self, event_type: str, payload: dict) -> None:
+        """Publish orderflow event через IPC."""
+        if self._ipc_publisher:
+            try:
+                self._ipc_publisher.publish(event_type, payload)
+                self.metrics.orderflow_events_published_total.inc()
+            except Exception as e:
+                logger.error(f"Failed to publish {event_type}: {e}")
+                self.metrics.orderflow_events_dropped_total.inc()
 
     def _wal_catchup(self, symbol: str) -> None:
         """WAL catch-up при старте: replay events из live WAL tail."""
