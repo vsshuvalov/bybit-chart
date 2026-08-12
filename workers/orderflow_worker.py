@@ -27,7 +27,7 @@ from packages.analytics.absorption import AbsorptionDetector
 from packages.analytics.heatmap import HeatmapAggregator
 from packages.analytics.liquidation_cascades import LiquidationCascadeDetector
 from packages.analytics.ofi import OFICalculator
-from packages.analytics.obi import OBICalculator
+from packages.analytics.obi import OBIEngine
 from packages.analytics.pulling_stacking import PullingStackingDetector
 from packages.analytics.regime import RegimeDetector
 from packages.analytics.sweep import SweepDetector
@@ -67,7 +67,7 @@ class SymbolState:
         )
 
         # Book-based detectors
-        self.obi = OBICalculator()
+        self.obi = OBIEngine(levels=5)
         self.ofi = OFICalculator()
         self.walls = WallDetector(min_qty_steps=5000, max_depth=50)
         self.pulling_stacking = PullingStackingDetector()

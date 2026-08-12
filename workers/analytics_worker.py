@@ -30,9 +30,9 @@ import signal
 import sys
 from pathlib import Path
 
-from packages.analytics.delta import DeltaEngine
-from packages.analytics.vwap import VWAPEngine
-from packages.analytics.volume_profile import VolumeProfileEngine
+from packages.analytics.delta import aggregate_delta_by_interval
+from packages.analytics.vwap import aggregate_vwap_by_interval
+from packages.analytics.volume_profile import calculate_volume_profile
 from packages.bybit.collector import deserialize_event_from_payload
 from packages.ipc import IPCMessage, ProcessRegistry, UDSServer
 from packages.ipc.subscriber import IPCSubscriber
@@ -72,11 +72,6 @@ class AnalyticsWorker:
 
         # Storage (read-only)
         self.reader: ParquetReader | None = None
-
-        # Analytics engines (cached instances)
-        self.delta_engines: dict[str, DeltaEngine] = {}
-        self.vwap_engines: dict[str, VWAPEngine] = {}
-        self.volume_profile_engines: dict[str, VolumeProfileEngine] = {}
 
         # State
         self.running = False
@@ -130,11 +125,8 @@ class AnalyticsWorker:
                 await asyncio.sleep(60)
                 # Сбросить кеши для символов, получивших новые сегменты
                 for sym in list(self._invalidated_symbols):
-                    self.delta_engines.pop(sym, None)
-                    self.vwap_engines.pop(sym, None)
-                    self.volume_profile_engines.pop(sym, None)
                     self._invalidated_symbols.discard(sym)
-                    logger.debug(f"Engine cache cleared for {sym}")
+                    logger.debug(f"Cache invalidated for {sym}")
         except asyncio.CancelledError:
             logger.info("Analytics worker stopping...")
         finally:
@@ -148,10 +140,6 @@ class AnalyticsWorker:
 
         if self._ipc_subscriber:
             self._ipc_subscriber.stop()
-
-        self.delta_engines.clear()
-        self.vwap_engines.clear()
-        self.volume_profile_engines.clear()
 
         if self.uds_server:
             await self.uds_server.stop()
@@ -279,27 +267,27 @@ class AnalyticsWorker:
         symbol = params["symbol"]
         start_ts = params["start_ts"]
         end_ts = params["end_ts"]
+    def _get_delta(self, params: dict) -> dict:
+        symbol = params["symbol"]
+        start_ts = params["start_ts"]
+        end_ts = params["end_ts"]
         interval_us = params["interval_us"]
-
-        engine_key = f"{symbol}_{interval_us}"
-        engine = DeltaEngine(interval_us)
 
         # Parquet part
         events = self.reader.read_range(
             symbol=symbol, start_ts=start_ts, end_ts=end_ts, event_type="RawTrade",
         )
-        for event in events:
-            engine.add_trade(event)
 
-        # WAL catch-up: live tail
-        for event in self._read_wal_tail(symbol):
-            from contracts.schemas import RawTrade
+        # WAL catch-up: добавить live tail
+        from contracts.schemas import RawTrade
+        wal_events = self._read_wal_tail(symbol)
+        for event in wal_events:
             if isinstance(event, RawTrade):
-                ts = event.exchange_timestamp_ms * 1000  # ms → µs
+                ts = event.exchange_timestamp_ms * 1000
                 if start_ts <= ts < end_ts:
-                    engine.add_trade(event)
+                    events.append(event.model_dump(mode="json"))
 
-        bars = engine.to_dict_list(start_ts, end_ts)
+        bars = aggregate_delta_by_interval(events, interval_us)
         return {"bars": bars, "count": len(bars)}
 
     def _get_vwap(self, params: dict) -> dict:
@@ -308,21 +296,18 @@ class AnalyticsWorker:
         end_ts = params["end_ts"]
         interval_us = params["interval_us"]
 
-        engine = VWAPEngine(interval_us)
         events = self.reader.read_range(
             symbol=symbol, start_ts=start_ts, end_ts=end_ts, event_type="RawTrade",
         )
-        for event in events:
-            engine.add_trade(event)
 
+        from contracts.schemas import RawTrade
         for event in self._read_wal_tail(symbol):
-            from contracts.schemas import RawTrade
             if isinstance(event, RawTrade):
                 ts = event.exchange_timestamp_ms * 1000
                 if start_ts <= ts < end_ts:
-                    engine.add_trade(event)
+                    events.append(event.model_dump(mode="json"))
 
-        bars = engine.to_dict_list(start_ts, end_ts)
+        bars = aggregate_vwap_by_interval(events, interval_us)
         return {"bars": bars, "count": len(bars)}
 
     def _get_volume_profile(self, params: dict) -> dict:
@@ -331,21 +316,18 @@ class AnalyticsWorker:
         end_ts = params["end_ts"]
         price_tick = params["price_tick"]
 
-        engine = VolumeProfileEngine(price_tick)
         events = self.reader.read_range(
             symbol=symbol, start_ts=start_ts, end_ts=end_ts, event_type="RawTrade",
         )
-        for event in events:
-            engine.add_trade(event)
 
+        from contracts.schemas import RawTrade
         for event in self._read_wal_tail(symbol):
-            from contracts.schemas import RawTrade
             if isinstance(event, RawTrade):
                 ts = event.exchange_timestamp_ms * 1000
                 if start_ts <= ts < end_ts:
-                    engine.add_trade(event)
+                    events.append(event.model_dump(mode="json"))
 
-        return engine.to_dict()
+        return calculate_volume_profile(events, price_tick)
 
 
 async def main():
