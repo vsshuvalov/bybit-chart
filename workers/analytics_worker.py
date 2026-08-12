@@ -36,6 +36,7 @@ from packages.analytics.volume_profile import calculate_volume_profile
 from packages.bybit.collector import deserialize_event_from_payload
 from packages.ipc import IPCMessage, ProcessRegistry, UDSServer
 from packages.ipc.subscriber import IPCSubscriber
+from packages.monitoring.worker_metrics import AnalyticsMetrics
 from packages.storage.manifest import Manifest
 from packages.storage.parquet_reader import ParquetReader
 from packages.storage.wal import WalPartition
@@ -77,6 +78,9 @@ class AnalyticsWorker:
         self.running = False
         self.health_status = "starting"
         self._invalidated_symbols: set[str] = set()
+
+        # Metrics
+        self.metrics = AnalyticsMetrics()
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -170,19 +174,28 @@ class AnalyticsWorker:
 
     def _handle_request(self, message: IPCMessage) -> dict:
         try:
+            self.metrics.queries_total.inc()
             request_type = message.payload.get("type")
-            if request_type == "get_delta":
-                return self._get_delta(message.payload)
+
+            if request_type == "get_metrics":
+                return {"metrics": self.metrics.to_prometheus()}
+            elif request_type == "get_delta":
+                result = self._get_delta(message.payload)
+                return result
             elif request_type == "get_vwap":
-                return self._get_vwap(message.payload)
+                result = self._get_vwap(message.payload)
+                return result
             elif request_type == "get_volume_profile":
-                return self._get_volume_profile(message.payload)
+                result = self._get_volume_profile(message.payload)
+                return result
             elif request_type == "get_symbols":
                 symbols = [d.name for d in self.data_dir.iterdir() if d.is_dir()]
                 return {"symbols": symbols}
             else:
+                self.metrics.query_errors_total.inc()
                 return {"error": f"Unknown request type: {request_type}"}
         except Exception as exc:
+            self.metrics.query_errors_total.inc()
             logger.error(f"Request handler error: {exc}", exc_info=True)
             return {"error": str(exc)}
 
@@ -267,25 +280,24 @@ class AnalyticsWorker:
         symbol = params["symbol"]
         start_ts = params["start_ts"]
         end_ts = params["end_ts"]
-    def _get_delta(self, params: dict) -> dict:
-        symbol = params["symbol"]
-        start_ts = params["start_ts"]
-        end_ts = params["end_ts"]
         interval_us = params["interval_us"]
 
         # Parquet part
+        self.metrics.parquet_reads_total.inc()
         events = self.reader.read_range(
             symbol=symbol, start_ts=start_ts, end_ts=end_ts, event_type="RawTrade",
         )
 
         # WAL catch-up: добавить live tail
         from contracts.schemas import RawTrade
+        self.metrics.wal_tail_reads_total.inc()
         wal_events = self._read_wal_tail(symbol)
         for event in wal_events:
             if isinstance(event, RawTrade):
                 ts = event.exchange_timestamp_ms * 1000
                 if start_ts <= ts < end_ts:
                     events.append(event.model_dump(mode="json"))
+                    self.metrics.wal_tail_events_merged.inc()
 
         bars = aggregate_delta_by_interval(events, interval_us)
         return {"bars": bars, "count": len(bars)}
@@ -296,16 +308,19 @@ class AnalyticsWorker:
         end_ts = params["end_ts"]
         interval_us = params["interval_us"]
 
+        self.metrics.parquet_reads_total.inc()
         events = self.reader.read_range(
             symbol=symbol, start_ts=start_ts, end_ts=end_ts, event_type="RawTrade",
         )
 
         from contracts.schemas import RawTrade
+        self.metrics.wal_tail_reads_total.inc()
         for event in self._read_wal_tail(symbol):
             if isinstance(event, RawTrade):
                 ts = event.exchange_timestamp_ms * 1000
                 if start_ts <= ts < end_ts:
                     events.append(event.model_dump(mode="json"))
+                    self.metrics.wal_tail_events_merged.inc()
 
         bars = aggregate_vwap_by_interval(events, interval_us)
         return {"bars": bars, "count": len(bars)}
@@ -316,16 +331,19 @@ class AnalyticsWorker:
         end_ts = params["end_ts"]
         price_tick = params["price_tick"]
 
+        self.metrics.parquet_reads_total.inc()
         events = self.reader.read_range(
             symbol=symbol, start_ts=start_ts, end_ts=end_ts, event_type="RawTrade",
         )
 
         from contracts.schemas import RawTrade
+        self.metrics.wal_tail_reads_total.inc()
         for event in self._read_wal_tail(symbol):
             if isinstance(event, RawTrade):
                 ts = event.exchange_timestamp_ms * 1000
                 if start_ts <= ts < end_ts:
                     events.append(event.model_dump(mode="json"))
+                    self.metrics.wal_tail_events_merged.inc()
 
         return calculate_volume_profile(events, price_tick)
 

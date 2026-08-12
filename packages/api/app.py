@@ -31,6 +31,7 @@ from packages.api.websocket import register_websocket_endpoints, live_feed_manag
 from packages.api.redis_subscriber import register_redis_subscriber
 from packages.storage.parquet_reader import ParquetReader
 from packages.monitoring import get_metrics_collector, Timer
+from packages.monitoring.worker_metrics import APIMetrics
 
 # Конфигурация
 DATA_DIR = Path("/tmp/bybit-chart-data")  # Переопределяется через env или config
@@ -64,8 +65,11 @@ def create_app(data_dir: Path | str | None = None) -> FastAPI:
     reader_data_dir = Path(data_dir) if data_dir else DATA_DIR
     reader = ParquetReader(reader_data_dir)
 
-    # Initialize metrics collector
+    # Initialize metrics collector (old general metrics)
     metrics = get_metrics_collector()
+
+    # Initialize API-specific metrics
+    api_metrics = APIMetrics()
 
     @app.get("/health")
     async def health_check():
@@ -129,25 +133,36 @@ def create_app(data_dir: Path | str | None = None) -> FastAPI:
 
         Roadmap §15: metrics для Prometheus scraping.
         """
-        return metrics.export_prometheus()
+        # Combine old metrics + new API-specific metrics
+        old_metrics = metrics.export_prometheus()
+        new_metrics = api_metrics.to_prometheus()
+        return old_metrics + "\n" + new_metrics
 
     # Middleware для request metrics
     @app.middleware("http")
     async def metrics_middleware(request, call_next):
         """Track request metrics."""
-        metrics.http_requests_total.inc()
+        import time
+        start_time = time.time()
 
-        with Timer(metrics.http_request_duration_seconds):
-            try:
-                response = await call_next(request)
+        api_metrics.http_requests_total.inc()
+        metrics.http_requests_total.inc()  # Keep old metrics too
 
-                if response.status_code >= 400:
-                    metrics.http_errors_total.inc()
+        try:
+            response = await call_next(request)
 
-                return response
-            except Exception as exc:
+            duration = time.time() - start_time
+            api_metrics.http_request_duration_seconds.observe(duration)
+
+            if response.status_code >= 400:
+                api_metrics.http_errors_total.inc()
                 metrics.http_errors_total.inc()
-                raise
+
+            return response
+        except Exception as exc:
+            api_metrics.http_errors_total.inc()
+            metrics.http_errors_total.inc()
+            raise
 
     @app.get("/api/v1/symbols")
     async def list_symbols():

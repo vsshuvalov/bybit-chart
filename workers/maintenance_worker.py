@@ -43,6 +43,7 @@ from pathlib import Path
 from packages.ipc import IPCMessage, ProcessRegistry, UDSServer
 from packages.ipc.publisher import IPCPublisher
 from packages.ipc.subscriber import IPCSubscriber
+from packages.monitoring.worker_metrics import MaintenanceMetrics
 from packages.storage.fencing import (
     EpochViolationError,
     LeaseAcquisitionError,
@@ -114,6 +115,9 @@ class MaintenanceWorker:
             "errors": 0,
             "fencing_conflicts": 0,
         }
+
+        # Metrics
+        self.metrics = MaintenanceMetrics()
 
     async def start(self):
         """Запустить maintenance worker."""
@@ -272,6 +276,9 @@ class MaintenanceWorker:
             symbol: символ
             symbol_dir: директория символа
         """
+        import time
+        start_time = time.time()
+
         wal_dir = symbol_dir / "wal"
         if not wal_dir.exists():
             return
@@ -284,9 +291,11 @@ class MaintenanceWorker:
         try:
             epoch = lease.acquire()
             logger.debug(f"Acquired writer lease for {symbol}: epoch={epoch}")
+            self.metrics.fencing_renewals_total.inc()
         except LeaseAcquisitionError as exc:
             # Collector держит lease — пропустить этот символ сейчас
             logger.info(f"Writer lease busy for {symbol}: {exc}")
+            self.metrics.fencing_conflicts_total.inc()
             self.stats["fencing_conflicts"] += 1
             return
 
@@ -296,9 +305,14 @@ class MaintenanceWorker:
             report = wal.recover(declared_durable_offset=0)
             logger.debug(f"WAL report for {symbol}: {report}")
 
+            self.metrics.segments_committed_total.inc()
+            duration = time.time() - start_time
+            self.metrics.segment_commit_latency_seconds.observe(duration)
+
         except EpochViolationError as exc:
             # Cutover произошёл — прекратить операцию немедленно
             logger.error(f"Epoch violation for {symbol}: {exc}. Stopping commit.")
+            self.metrics.fencing_conflicts_total.inc()
             self.stats["fencing_conflicts"] += 1
         finally:
             lease.release()
@@ -385,7 +399,10 @@ class MaintenanceWorker:
         """Handle request."""
         request_type = message.payload.get("type")
 
-        if request_type == "get_stats":
+        if request_type == "get_metrics":
+            return {"metrics": self.metrics.to_prometheus()}
+
+        elif request_type == "get_stats":
             return {"stats": self.stats}
 
         elif request_type == "force_commit":

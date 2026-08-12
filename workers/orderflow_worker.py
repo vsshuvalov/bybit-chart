@@ -37,6 +37,7 @@ from packages.bybit.book_state import BookState
 from packages.bybit.collector import deserialize_event_from_payload
 from packages.ipc import IPCMessage, ProcessRegistry, UDSServer
 from packages.ipc.subscriber import IPCSubscriber
+from packages.monitoring.worker_metrics import OrderflowMetrics
 from packages.storage.manifest import Manifest
 from packages.storage.wal import WalPartition
 
@@ -221,6 +222,9 @@ class OrderflowWorker:
             "gaps_detected": 0,
         }
 
+        # Metrics
+        self.metrics = OrderflowMetrics()
+
     # ------------------------------------------------------------------
     # Lifecycle
     # ------------------------------------------------------------------
@@ -300,26 +304,42 @@ class OrderflowWorker:
     def _on_raw_trade(self, payload: dict) -> None:
         """Handle RawTrade от collector."""
         try:
+            self.metrics.ipc_events_received_total.inc()
             symbol = payload.get("symbol", "")
             state = self._ensure_symbol(symbol)
             trade = RawTrade(**payload)
             state.on_trade(trade)
             self.stats["trades_processed"] += 1
         except Exception as exc:
+            self.metrics.ipc_events_dropped_total.inc()
             logger.debug(f"on_raw_trade error: {exc}")
 
     def _on_raw_book_event(self, payload: dict) -> None:
         """Handle RawBookEvent от collector."""
         try:
+            self.metrics.ipc_events_received_total.inc()
             symbol = payload.get("symbol", "")
             state = self._ensure_symbol(symbol)
             event = RawBookEvent(**payload)
+
+            if event.type == "snapshot":
+                self.metrics.book_snapshots_processed.inc()
+            else:
+                self.metrics.book_deltas_processed.inc()
+
             prev_gaps = state.book.gap_count
             state.on_book_event(event)
             if state.book.gap_count > prev_gaps:
+                self.metrics.book_gaps_detected_total.inc()
                 self.stats["gaps_detected"] += 1
+
+            # Update book_state_status gauge
+            status_map = {"not_ready": 0, "syncing": 1, "ready": 2, "gap": 3}
+            self.metrics.book_state_status.set(status_map.get(state.book.status, 0))
+
             self.stats["book_events_processed"] += 1
         except Exception as exc:
+            self.metrics.ipc_events_dropped_total.inc()
             logger.debug(f"on_raw_book_event error: {exc}")
 
     def _handle_health(self, message: IPCMessage) -> dict:
@@ -335,7 +355,10 @@ class OrderflowWorker:
             req_type = message.payload.get("type")
             symbol = message.payload.get("symbol", "")
 
-            if req_type == "get_features":
+            if req_type == "get_metrics":
+                return {"metrics": self.metrics.to_prometheus()}
+
+            elif req_type == "get_features":
                 state = self._symbols.get(symbol)
                 if not state:
                     return {"error": f"Unknown symbol: {symbol}"}

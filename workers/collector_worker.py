@@ -30,6 +30,7 @@ from packages.bybit.deserializer_book import deserialize_book_snapshot
 from packages.bybit.ws_client import BybitWebSocketClient
 from packages.ipc import IPCMessage, ProcessRegistry, UDSServer
 from packages.ipc.publisher import IPCPublisher
+from packages.monitoring.worker_metrics import CollectorMetrics
 
 logging.basicConfig(
     level=logging.INFO,
@@ -75,6 +76,9 @@ class CollectorWorker:
         self.running = False
         self.health_status = "starting"
         self.stats = {s: {"trades": 0, "book_events": 0, "ipc_drops": 0} for s in symbols}
+
+        # Metrics
+        self.metrics = CollectorMetrics()
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -171,6 +175,7 @@ class CollectorWorker:
     async def _handle_trade_msg(self, symbol: str, msg: dict, collector: EventCollector):
         """Десериализовать и записать trade."""
         try:
+            self.metrics.ws_messages_received_total.inc()
             data_list = msg.get("data", [])
             if not isinstance(data_list, list):
                 data_list = [data_list]
@@ -186,30 +191,42 @@ class CollectorWorker:
                 trade = deserialize_public_trade(trade_msg)
                 if trade:
                     collector.append_trade(trade)
+                    self.metrics.trades_received_total.inc()
+                    self.metrics.wal_writes_total.inc()
                     self.stats[symbol]["trades"] += 1
                     # IPC publish (best-effort)
                     payload = trade.model_dump(mode="json")
                     for pub in self._publishers.values():
                         ok = pub.publish_raw("RawTrade", payload)
-                        if not ok:
+                        if ok:
+                            self.metrics.ipc_published_total.inc()
+                        else:
+                            self.metrics.ipc_drops_total.inc()
                             self.stats[symbol]["ipc_drops"] += 1
         except Exception as exc:
+            self.metrics.ws_errors_total.inc()
             logger.debug(f"Trade msg error {symbol}: {exc}")
 
     async def _handle_book_msg(self, symbol: str, msg: dict, collector: EventCollector):
         """Десериализовать и записать book snapshot/delta."""
         try:
+            self.metrics.ws_messages_received_total.inc()
             msg_type = msg.get("type", "")
             if msg_type == "snapshot":
                 checkpoint = deserialize_book_snapshot(
                     msg, connection_epoch="live"
                 )
                 collector.append_book_checkpoint(checkpoint)
+                self.metrics.book_events_received_total.inc()
+                self.metrics.wal_writes_total.inc()
                 self.stats[symbol]["book_events"] += 1
                 payload = checkpoint.model_dump(mode="json")
                 for pub in self._publishers.values():
                     ok = pub.publish_raw("RawBookEvent", payload)
-                    if not ok:
+                    if ok:
+                        self.metrics.ipc_published_total.inc()
+                    else:
+                        self.metrics.ipc_drops_total.inc()
                         self.stats[symbol]["ipc_drops"] += 1
             # delta events: publisher publishes raw, orderflow-worker handles BookState
             elif msg_type == "delta":
@@ -233,9 +250,15 @@ class CollectorWorker:
                     receiveTimestampMs=msg.get("ts", 0),
                     connectionEpoch="live",
                 )
+                self.metrics.book_events_received_total.inc()
                 for pub in self._publishers.values():
-                    pub.publish_raw("RawBookEvent", book_event.model_dump(mode="json"))
+                    ok = pub.publish_raw("RawBookEvent", book_event.model_dump(mode="json"))
+                    if ok:
+                        self.metrics.ipc_published_total.inc()
+                    else:
+                        self.metrics.ipc_drops_total.inc()
         except Exception as exc:
+            self.metrics.ws_errors_total.inc()
             logger.debug(f"Book msg error {symbol}: {exc}")
 
     async def stop(self):
@@ -270,6 +293,8 @@ class CollectorWorker:
             return {"symbols": list(self.collectors.keys())}
         elif req_type == "get_stats":
             return {"stats": self.stats}
+        elif req_type == "get_metrics":
+            return {"metrics": self.metrics.to_prometheus()}
         else:
             return {"error": "Unknown request type"}
 
