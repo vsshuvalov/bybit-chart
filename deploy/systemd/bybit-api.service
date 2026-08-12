@@ -1,0 +1,50 @@
+# Bybit API Server Worker — systemd unit
+# Этап 4: изолированный API процесс
+#
+# FastAPI HTTP + WebSocket
+# Проксирует запросы к analytics-worker и orderflow-worker через UDS
+
+[Unit]
+Description=Bybit API Server Worker
+After=network.target bybit-analytics.service bybit-orderflow.service
+Wants=bybit-analytics.service bybit-orderflow.service
+
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+[Service]
+Type=exec
+User=bybit
+Group=bybit
+WorkingDirectory=/opt/bybit-chart
+Environment="PATH=/opt/bybit-chart/.venv/bin:/usr/local/bin:/usr/bin:/bin"
+Environment="PYTHONUNBUFFERED=1"
+Environment="PYTHONPATH=/opt/bybit-chart"
+Environment="PORT=8000"
+
+ExecStart=/opt/bybit-chart/.venv/bin/python workers/api_server.py
+
+TimeoutStopSec=30
+KillMode=mixed
+KillSignal=SIGTERM
+
+Restart=on-failure
+RestartSec=10
+
+CPUWeight=300
+IOWeight=200
+MemoryMax=512M
+
+# API открыт на порту — нужен доступ к сети
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/bybit-chart/logs /tmp
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=bybit-api
+
+[Install]
+WantedBy=multi-user.target

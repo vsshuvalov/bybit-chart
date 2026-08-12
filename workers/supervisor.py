@@ -313,7 +313,19 @@ async def main():
         command=[
             sys.executable,
             "workers/analytics_worker.py",
-            "data",
+            "/opt/bybit-chart/data",
+        ],
+        restart_policy="on-failure",
+        max_restarts=5,
+    ))
+
+    # Add orderflow worker (Этап 4 — 5-й процесс)
+    supervisor.add_worker(WorkerConfig(
+        name="orderflow-worker",
+        command=[
+            sys.executable,
+            "workers/orderflow_worker.py",
+            "/opt/bybit-chart/data",
         ],
         restart_policy="on-failure",
         max_restarts=5,

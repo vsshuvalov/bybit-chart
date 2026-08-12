@@ -1,0 +1,49 @@
+# Bybit Orderflow Worker — systemd unit
+# Этап 4: изолированный orderflow процесс (5-й процесс)
+#
+# Получает live events от collector через IPC (SOCK_DGRAM)
+# Обрабатывает: OBI, OFI, BookState, Sweep, Walls, Regime, Heatmap, ...
+# Отвечает на запросы от api-server через UDS
+
+[Unit]
+Description=Bybit Orderflow Worker
+After=network.target bybit-maintenance.service
+Wants=bybit-maintenance.service
+
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+[Service]
+Type=exec
+User=bybit
+Group=bybit
+WorkingDirectory=/opt/bybit-chart
+Environment="PATH=/opt/bybit-chart/.venv/bin:/usr/local/bin:/usr/bin:/bin"
+Environment="PYTHONUNBUFFERED=1"
+Environment="PYTHONPATH=/opt/bybit-chart"
+
+ExecStart=/opt/bybit-chart/.venv/bin/python workers/orderflow_worker.py /opt/bybit-chart/data
+
+TimeoutStopSec=30
+KillMode=mixed
+KillSignal=SIGTERM
+
+Restart=on-failure
+RestartSec=10
+
+CPUWeight=400
+IOWeight=200
+MemoryMax=768M
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/bybit-chart/data /opt/bybit-chart/logs /tmp
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=bybit-orderflow
+
+[Install]
+WantedBy=multi-user.target

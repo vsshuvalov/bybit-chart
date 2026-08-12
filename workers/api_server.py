@@ -46,78 +46,60 @@ logger = logging.getLogger("api-server")
 
 
 class APIServerWorker:
-    """API Server Worker — изолированный API процесс.
+    """API Server Worker — изолированный API процесс (Этап 4).
 
-    Roadmap §3 + §7: isolated API с IPC к analytics.
+    Roadmap §3 + §7: isolated API с IPC к analytics + orderflow.
+    Добавлены: все analytics endpoints, orderflow endpoints, /stream snapshot.
     """
 
     def __init__(
         self,
         socket_path: Path,
         registry_dir: Path,
-        host: str = "127.0.0.1",
+        host: str = "0.0.0.0",
         port: int = 8000,
     ):
-        """Initialize API server worker.
-
-        Args:
-            socket_path: путь к UDS socket для IPC
-            registry_dir: директория process registry
-            host: API server host
-            port: API server port
-        """
         self.socket_path = socket_path
         self.registry_dir = registry_dir
         self.host = host
         self.port = port
 
-        # IPC components
         self.uds_server: UDSServer | None = None
         self.registry: ProcessRegistry | None = None
         self.analytics_client: UDSClient | None = None
+        self.orderflow_client: UDSClient | None = None
 
-        # FastAPI app
         self.app: FastAPI | None = None
-
-        # State
         self.running = False
         self.health_status = "starting"
-
-        # Metrics
         self.metrics = get_metrics_collector()
 
     async def start(self):
         """Запустить API server worker."""
         logger.info(f"Starting API server worker on {self.host}:{self.port}...")
 
-        # Initialize IPC
         self.uds_server = UDSServer(self.socket_path, "api-server")
         self.registry = ProcessRegistry(self.registry_dir)
 
-        # Register handlers
         self.uds_server.register_handler("health", self._handle_health_check)
 
-        # Start UDS server (for health checks)
         asyncio.create_task(self.uds_server.start())
-
-        # Register in process registry
         self.registry.register_process("api", self.socket_path)
 
-        # Wait for UDS server
-        await asyncio.sleep(0.5)
+        # Реальная readiness: ждём аналитику
+        for _ in range(300):
+            await asyncio.sleep(0.1)
+            if self.registry.discover_process("api"):
+                break
 
-        # Connect to analytics worker
-        await self._connect_analytics()
+        await self._connect_workers()
 
-        # Create FastAPI app
         self.app = self._create_app()
-
         self.running = True
         self.health_status = "healthy"
 
         logger.info("API server worker started successfully")
 
-        # Run FastAPI server
         config = uvicorn.Config(
             self.app,
             host=self.host,
@@ -128,37 +110,34 @@ class APIServerWorker:
         await server.serve()
 
     async def stop(self):
-        """Graceful shutdown."""
         logger.info("Stopping API server worker...")
-
         self.running = False
         self.health_status = "stopping"
 
-        # Close analytics client
         if self.analytics_client:
             await self.analytics_client.close()
-
-        # Stop UDS server
+        if self.orderflow_client:
+            await self.orderflow_client.close()
         if self.uds_server:
             await self.uds_server.stop()
 
         self.health_status = "stopped"
         logger.info("API server worker stopped")
 
-    async def _connect_analytics(self):
-        """Connect to analytics worker via IPC."""
-        analytics_socket = self.registry.discover_process("analytics")
-
-        if not analytics_socket:
-            logger.warning("Analytics worker not found in registry")
-            return
-
-        try:
-            self.analytics_client = UDSClient(analytics_socket, "api-server")
-            await self.analytics_client.connect()
-            logger.info(f"Connected to analytics worker at {analytics_socket}")
-        except Exception as exc:
-            logger.error(f"Failed to connect to analytics worker: {exc}")
+    async def _connect_workers(self):
+        """Connect к analytics и orderflow workers через IPC."""
+        for name, attr in [("analytics", "analytics_client"), ("orderflow", "orderflow_client")]:
+            sock = self.registry.discover_process(name)
+            if sock:
+                try:
+                    client = UDSClient(sock, "api-server")
+                    await client.connect()
+                    setattr(self, attr, client)
+                    logger.info(f"Connected to {name}-worker at {sock}")
+                except Exception as exc:
+                    logger.warning(f"Failed to connect to {name}-worker: {exc}")
+            else:
+                logger.warning(f"{name}-worker not found in registry")
 
     def _handle_health_check(self, message: IPCMessage) -> dict:
         """Handle health check request."""
@@ -310,6 +289,153 @@ class APIServerWorker:
             except Exception as exc:
                 logger.error(f"Error: {exc}")
                 raise HTTPException(status_code=500, detail=str(exc))
+
+        # ----------------------------------------------------------------
+        # VWAP endpoint
+        # ----------------------------------------------------------------
+        @app.get("/api/v1/vwap")
+        async def get_vwap(
+            symbol: str = Query(...),
+            start_ts: int = Query(...),
+            end_ts: int = Query(...),
+            interval: str = Query("1m"),
+        ):
+            """Get VWAP via IPC to analytics worker."""
+            if not self.analytics_client:
+                raise HTTPException(status_code=503, detail="Analytics worker unavailable")
+            interval_map = {"1m": 60_000_000, "5m": 300_000_000, "15m": 900_000_000, "1h": 3_600_000_000}
+            interval_us = interval_map.get(interval, 60_000_000)
+            try:
+                request = IPCMessage(
+                    message_type="request",
+                    payload={"type": "get_vwap", "symbol": symbol,
+                             "start_ts": start_ts, "end_ts": end_ts, "interval_us": interval_us},
+                    source="api-server",
+                )
+                response = await asyncio.wait_for(
+                    self.analytics_client.send_message(request), timeout=10.0
+                )
+                if response:
+                    return response.payload
+                raise HTTPException(status_code=500, detail="Invalid response")
+            except asyncio.TimeoutError:
+                raise HTTPException(status_code=504, detail="Request timeout")
+
+        # ----------------------------------------------------------------
+        # Volume Profile endpoint
+        # ----------------------------------------------------------------
+        @app.get("/api/v1/volume-profile")
+        async def get_volume_profile(
+            symbol: str = Query(...),
+            start_ts: int = Query(...),
+            end_ts: int = Query(...),
+            price_tick: int = Query(10),
+        ):
+            """Get Volume Profile via IPC to analytics worker."""
+            if not self.analytics_client:
+                raise HTTPException(status_code=503, detail="Analytics worker unavailable")
+            try:
+                request = IPCMessage(
+                    message_type="request",
+                    payload={"type": "get_volume_profile", "symbol": symbol,
+                             "start_ts": start_ts, "end_ts": end_ts, "price_tick": price_tick},
+                    source="api-server",
+                )
+                response = await asyncio.wait_for(
+                    self.analytics_client.send_message(request), timeout=10.0
+                )
+                if response:
+                    return response.payload
+                raise HTTPException(status_code=500, detail="Invalid response")
+            except asyncio.TimeoutError:
+                raise HTTPException(status_code=504, detail="Request timeout")
+
+        # ----------------------------------------------------------------
+        # Orderflow endpoints (proxy → orderflow-worker)
+        # ----------------------------------------------------------------
+
+        def _require_orderflow():
+            if not self.orderflow_client:
+                raise HTTPException(status_code=503, detail="Orderflow worker unavailable")
+
+        async def _orderflow_request(payload: dict, timeout: float = 5.0):
+            _require_orderflow()
+            try:
+                request = IPCMessage(message_type="request", payload=payload, source="api-server")
+                response = await asyncio.wait_for(
+                    self.orderflow_client.send_message(request), timeout=timeout
+                )
+                if response:
+                    return JSONResponse(content=response.payload)
+                raise HTTPException(status_code=500, detail="No response")
+            except asyncio.TimeoutError:
+                raise HTTPException(status_code=504, detail="Orderflow timeout")
+            except Exception as exc:
+                raise HTTPException(status_code=500, detail=str(exc))
+
+        @app.get("/api/v1/orderflow/features")
+        async def get_orderflow_features(
+            symbol: str = Query(...),
+            active_only: bool = Query(False),
+        ):
+            """Orderflow features via IPC to orderflow-worker."""
+            return await _orderflow_request({"type": "get_features", "symbol": symbol})
+
+        @app.get("/api/v1/orderflow/regime")
+        async def get_orderflow_regime(symbol: str = Query(...)):
+            """Market regime via IPC to orderflow-worker."""
+            return await _orderflow_request({"type": "get_regime", "symbol": symbol})
+
+        @app.get("/api/v1/orderflow/sweeps")
+        async def get_orderflow_sweeps(symbol: str = Query(...)):
+            """Recent sweep events via IPC to orderflow-worker."""
+            return await _orderflow_request({"type": "get_sweeps", "symbol": symbol})
+
+        @app.get("/api/v1/orderflow/cascades")
+        async def get_orderflow_cascades(symbol: str = Query(...)):
+            """Recent liquidation cascades via IPC to orderflow-worker."""
+            return await _orderflow_request({"type": "get_cascades", "symbol": symbol})
+
+        @app.get("/api/v1/orderflow/walls")
+        async def get_orderflow_walls(symbol: str = Query(...)):
+            """Active orderbook walls via IPC to orderflow-worker."""
+            return await _orderflow_request({"type": "get_walls", "symbol": symbol})
+
+        @app.get("/api/v1/analytics/heatmap")
+        async def get_heatmap(symbol: str = Query(...)):
+            """Heatmap tiles via IPC to orderflow-worker."""
+            return await _orderflow_request({"type": "get_heatmap", "symbol": symbol})
+
+        # ----------------------------------------------------------------
+        # snapshot/streamEpoch (Этап 4: derived checkpoints)
+        # ----------------------------------------------------------------
+        @app.get("/api/v1/stream/{symbol}/snapshot")
+        async def get_stream_snapshot(symbol: str):
+            """Полное состояние orderflow для символа (snapshot для WebSocket clients).
+
+            Возвращает текущий epoch + полный снапшот всех features.
+            Клиент использует это для начальной синхронизации, затем patch events.
+            """
+            return await _orderflow_request({"type": "get_features", "symbol": symbol})
+
+        @app.get("/api/v1/stream/{symbol}/epoch")
+        async def get_stream_epoch(symbol: str):
+            """Текущий epoch для символа (для streamEpoch invalidation).
+
+            Клиент сравнивает epoch с кешированным — если изменился, делает /snapshot.
+            """
+            result = await _orderflow_request({"type": "get_features", "symbol": symbol})
+            content = result.body if hasattr(result, "body") else {}
+            import json
+            try:
+                data = json.loads(result.body) if hasattr(result, "body") else {}
+            except Exception:
+                data = {}
+            return JSONResponse(content={
+                "symbol": symbol,
+                "epoch": data.get("book", {}).get("update_id", 0),
+                "book_status": data.get("book", {}).get("status", "unknown"),
+            })
 
         return app
 
