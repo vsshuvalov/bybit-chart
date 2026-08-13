@@ -2,19 +2,24 @@
  * ChartPanel Component (Roadmap §11.1, §11.5).
  *
  * Center panel: TradingView Advanced Charts with drawing tools.
- * Replaces lightweight-charts for built-in drawing support.
+ * Includes overlay modules: CVD, OrderFlow Imbalance.
  *
- * Includes overlay modules: CVD, OrderFlow Imbalance
+ * Two visualization modes:
+ * - 'overlay': Modules as info boxes over chart
+ * - 'panel': Modules as mini-charts in BottomDock
  */
 
 import { useState } from 'react'
 import { useViewStore } from '../store'
+import { useModuleVisualizationStore } from '../store/moduleVisualizationStore'
 import TradingViewChart from './TradingViewChart'
 import CVDModule from '../modules/CVDModule'
 import OrderFlowModule from '../modules/OrderFlowModule'
+import BottomDockModules from './BottomDockModules'
 
 export default function ChartPanel() {
   const { symbol } = useViewStore()
+  const { mode } = useModuleVisualizationStore()
 
   // Module settings (later: load from workspace)
   const [cvdSettings] = useState({
@@ -37,12 +42,21 @@ export default function ChartPanel() {
   })
 
   return (
-    <div className="chart-panel">
-      <TradingViewChart />
+    <>
+      <div className="chart-panel" style={{ flex: mode === 'panel' ? '1' : undefined }}>
+        <TradingViewChart />
 
-      {/* Overlay Modules */}
-      <CVDModule symbol={symbol} settings={cvdSettings} />
-      <OrderFlowModule symbol={symbol} settings={orderFlowSettings} />
-    </div>
+        {/* Overlay Mode: Info boxes */}
+        {mode === 'overlay' && (
+          <>
+            <CVDModule symbol={symbol} settings={cvdSettings} />
+            <OrderFlowModule symbol={symbol} settings={orderFlowSettings} />
+          </>
+        )}
+      </div>
+
+      {/* Panel Mode: BottomDock with charts */}
+      {mode === 'panel' && <BottomDockModules />}
+    </>
   )
 }

@@ -15,6 +15,7 @@
 
 import { useState } from 'react'
 import { useViewStore, Timeframe, Environment, TradingState } from '../store'
+import { useModuleVisualizationStore } from '../store/moduleVisualizationStore'
 import DiagnosticsPanel from './DiagnosticsPanel'
 import SettingsPanel from './SettingsPanel'
 import WorkspaceSelector from './WorkspaceSelector'
@@ -173,6 +174,8 @@ export default function TopBar() {
         >
           ⚙️
         </button>
+
+        <ModuleVisualizationToggle />
 
         <button
           className={`mode-toggle ${isReplayMode ? 'replay' : 'live'}`}
@@ -402,5 +405,38 @@ export default function TopBar() {
         />
       )}
     </div>
+  )
+}
+
+// ========== Module Visualization Toggle ==========
+
+function ModuleVisualizationToggle() {
+  const { mode, setMode } = useModuleVisualizationStore()
+
+  return (
+    <button
+      className="viz-toggle"
+      onClick={() => setMode(mode === 'overlay' ? 'panel' : 'overlay')}
+      title={`Visualization: ${mode === 'overlay' ? 'Overlay' : 'Panel'}`}
+    >
+      {mode === 'overlay' ? '📊' : '📈'}
+      <style>{`
+        .viz-toggle {
+          background: var(--bg-tertiary);
+          border: 1px solid var(--border-default);
+          color: var(--text-primary);
+          padding: 6px 12px;
+          border-radius: var(--radius-sm);
+          font-size: 18px;
+          cursor: pointer;
+          transition: all 0.2s;
+        }
+
+        .viz-toggle:hover {
+          background: var(--bg-primary);
+          border-color: var(--border-highlight);
+        }
+      `}</style>
+    </button>
   )
 }
