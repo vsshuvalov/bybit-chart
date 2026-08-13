@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Lightweight Charts Test</title>
+  <script src="https://unpkg.com/lightweight-charts@4.2.3/dist/lightweight-charts.standalone.production.js"></script>
+</head>
+<body style="margin: 0; padding: 20px; background: #0B0F14;">
+  <h1 style="color: white;">Lightweight Charts 4.2.3 Test</h1>
+  <div id="chart" style="width: 800px; height: 500px; background: #131722;"></div>
+
+  <script>
+    const chart = LightweightCharts.createChart(document.getElementById('chart'), {
+      width: 800,
+      height: 500,
+      layout: {
+        background: { color: '#0B0F14' },
+        textColor: '#E6EDF3',
+      },
+      grid: {
+        vertLines: { color: '#26313C' },
+        horzLines: { color: '#26313C' },
+      },
+    });
+
+    const candlestickSeries = chart.addCandlestickSeries({
+      upColor: '#00C087',
+      downColor: '#F6465D',
+      borderUpColor: '#00C087',
+      borderDownColor: '#F6465D',
+      wickUpColor: '#00C087',
+      wickDownColor: '#F6465D',
+    });
+
+    // Test with string dates (should work)
+    const testData1 = [
+      { time: '2023-01-01', open: 63300, high: 63400, low: 63200, close: 63350 },
+      { time: '2023-01-02', open: 63350, high: 63450, low: 63300, close: 63400 },
+      { time: '2023-01-03', open: 63400, high: 63500, low: 63350, close: 63450 },
+      { time: '2023-01-04', open: 63450, high: 63550, low: 63400, close: 63500 },
+      { time: '2023-01-05', open: 63500, high: 63600, low: 63450, close: 63550 },
+    ];
+
+    // Test with Unix timestamps (might not work)
+    const testData2 = [
+      { time: 1786621860, open: 63300, high: 63400, low: 63200, close: 63350 },
+      { time: 1786621920, open: 63350, high: 63450, low: 63300, close: 63400 },
+      { time: 1786621980, open: 63400, high: 63500, low: 63350, close: 63450 },
+      { time: 1786622040, open: 63450, high: 63550, low: 63400, close: 63500 },
+      { time: 1786622100, open: 63500, high: 63600, low: 63450, close: 63550 },
+    ];
+
+    // Use testData1 first
+    candlestickSeries.setData(testData1);
+    chart.timeScale().fitContent();
+
+    console.log('Chart created with', testData1.length, 'candles');
+    console.log('Change to testData2 after 3 seconds...');
+
+    // Switch to timestamps after 3 seconds
+    setTimeout(() => {
+      console.log('Switching to Unix timestamps...');
+      candlestickSeries.setData(testData2);
+      chart.timeScale().fitContent();
+    }, 3000);
+  </script>
+</body>
+</html>
