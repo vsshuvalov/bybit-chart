@@ -208,8 +208,15 @@ export default function MainChart({
       close: candle.close_ticks * tickSize,
     }))
 
-    console.log('[MainChart] Setting candle data:', candleData.length, 'candles')
+    console.log('[MainChart] Candle data prepared:', {
+      count: candleData.length,
+      first: candleData[0],
+      last: candleData[candleData.length - 1],
+      sample: candleData.slice(0, 3),
+    })
+
     candlestickSeriesRef.current.setData(candleData)
+    console.log('[MainChart] Data set, calling fitContent()')
     chartRef.current?.timeScale().fitContent()
   }, [ohlcData])
 
