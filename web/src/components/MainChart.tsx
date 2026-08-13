@@ -208,7 +208,7 @@ export default function MainChart({
         low: candle.low_ticks * tickSize,
         close: candle.close_ticks * tickSize,
       }))
-      .sort((a, b) => (a.time as number) - (b.time as number)) // Sort by time ascending
+      .sort((a: any, b: any) => (a.time as number) - (b.time as number)) // Sort by time ascending
 
     console.log('[MainChart] Candle data prepared:', {
       count: candleData.length,
