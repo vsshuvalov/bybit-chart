@@ -31,7 +31,7 @@ export default function App() {
       <TopBar />
 
       <div className="app-body">
-        {leftToolbarVisible && <LeftToolbar />}
+        {/* LeftToolbar removed - TradingView has built-in drawing tools */}
 
         <div className="center-container">
           <ChartPanel />
@@ -62,6 +62,14 @@ export default function App() {
           display: flex;
           flex-direction: column;
           flex: 1;
+          overflow: hidden;
+        }
+
+        .chart-panel {
+          flex: 1;
+          width: 100%;
+          height: 100%;
+          position: relative;
           overflow: hidden;
         }
       `}</style>
