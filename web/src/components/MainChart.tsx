@@ -29,11 +29,11 @@ import { useViewStore } from '../store'
 
 interface OHLCCandle {
   timestamp_us: number
-  open: number
-  high: number
-  low: number
-  close: number
-  volume: number
+  open_ticks: number
+  high_ticks: number
+  low_ticks: number
+  close_ticks: number
+  volume_steps: number
 }
 
 interface Trade {
@@ -65,7 +65,7 @@ export default function MainChart({
     queryKey: ['ohlc', symbol, timeframe],
     queryFn: async () => {
       const response = await axios.get(`http://83.147.234.167/api/v1/ohlc`, {
-        params: { symbol, timeframe, limit: 500 },
+        params: { symbol, interval: timeframe, limit: 500 },
       })
       return response.data
     },
@@ -191,12 +191,15 @@ export default function MainChart({
   useEffect(() => {
     if (!ohlcData?.candles || !candlestickSeriesRef.current) return
 
+    // BTCUSDT tick_size = 0.1, so divide ticks by 10
+    const tickSize = 0.1
+
     const candleData: CandlestickData[] = ohlcData.candles.map((candle: OHLCCandle) => ({
       time: Math.floor(candle.timestamp_us / 1000000) as any,
-      open: candle.open,
-      high: candle.high,
-      low: candle.low,
-      close: candle.close,
+      open: candle.open_ticks * tickSize,
+      high: candle.high_ticks * tickSize,
+      low: candle.low_ticks * tickSize,
+      close: candle.close_ticks * tickSize,
     }))
 
     candlestickSeriesRef.current.setData(candleData)
