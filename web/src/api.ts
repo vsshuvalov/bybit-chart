@@ -98,9 +98,16 @@ export const getOHLC = async (
   end_ts: number,
   interval: string
 ): Promise<OHLCResponse> => {
+  console.log('[API] getOHLC request:', { symbol, start_ts, end_ts, interval })
   const { data } = await apiClient.get('/ohlc', {
-    params: { symbol, start_ts, end_ts, interval },
+    params: {
+      symbol,
+      start_us: start_ts,  // Backend expects start_us, not start_ts
+      end_us: end_ts,      // Backend expects end_us, not end_ts
+      interval
+    },
   })
+  console.log('[API] getOHLC response:', data)
   return data
 }
 

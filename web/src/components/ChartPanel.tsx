@@ -19,16 +19,17 @@ export default function ChartPanel() {
   const lastCandleRef = useRef<CandlestickData | null>(null)
 
   const { symbol, timeframe, isReplayMode } = useViewStore()
-  const recentTrades = useMarketDataStore((state) =>
-    state.recentTrades?.get(symbol) ?? []
-  )
+
+  // 🔥 FIX: Подписываемся на весь recentTrades Map, чтобы триггерить ре-рендер
+  const recentTradesMap = useMarketDataStore((state) => state.recentTrades)
+  const recentTrades = recentTradesMap.get(symbol) || []
 
   // Fetch OHLC data - отключаем polling в live mode
   const { data: ohlcData, error } = useQuery({
     queryKey: ['ohlc', symbol, timeframe],
     queryFn: async () => {
       const now = Date.now() * 1000 // microseconds
-      const start = now - 24 * 60 * 60 * 1000000 // last 24h
+      const start = now - 7 * 24 * 60 * 60 * 1000000 // last 7 days
       return getOHLC(symbol, start, now, timeframe)
     },
     refetchInterval: isReplayMode ? 10000 : false, // только в replay mode
@@ -99,17 +100,22 @@ export default function ChartPanel() {
   useEffect(() => {
     if (!candleSeriesRef.current) return
 
+    console.log('[ChartPanel] ohlcData:', ohlcData)
+    console.log('[ChartPanel] useMockData:', useMockData)
+
     let candles: CandlestickData[] = []
 
     if (ohlcData && ohlcData.count > 0) {
       // Real data from API
+      console.log('[ChartPanel] Using real data, candles count:', ohlcData.candles.length)
       candles = ohlcData.candles.map((c) => ({
         time: Math.floor(c.timestamp_us / 1000000) as any, // seconds
-        open: c.open_ticks / 100, // ticks to price (assuming 0.01 tick size)
-        high: c.high_ticks / 100,
-        low: c.low_ticks / 100,
-        close: c.close_ticks / 100,
+        open: c.open_ticks / 10, // ticks to price (BTCUSDT tick size = 0.1)
+        high: c.high_ticks / 10,
+        low: c.low_ticks / 10,
+        close: c.close_ticks / 10,
       }))
+      console.log('[ChartPanel] Transformed candles sample:', candles.slice(0, 3))
     } else {
       // Mock data for demo (no backend data available)
       const now = Math.floor(Date.now() / 1000)
@@ -135,10 +141,18 @@ export default function ChartPanel() {
     }
 
     candleSeriesRef.current.setData(candles)
+    console.log('[ChartPanel] setData called with', candles.length, 'candles')
+
+    // Fit content to visible range
+    if (chartRef.current && candles.length > 0) {
+      chartRef.current.timeScale().fitContent()
+      console.log('[ChartPanel] fitContent called')
+    }
 
     // Сохраняем последнюю свечу для обновления
     if (candles.length > 0) {
       lastCandleRef.current = candles[candles.length - 1]
+      console.log('[ChartPanel] Last candle saved:', lastCandleRef.current)
     }
   }, [ohlcData, symbol, timeframe, useMockData])
 
@@ -164,8 +178,13 @@ export default function ChartPanel() {
 
     const intervalSeconds = getIntervalSeconds()
     const lastTrade = recentTrades[recentTrades.length - 1]
+
+    if (!lastTrade || !lastTrade.time || !lastTrade.price) {
+      return
+    }
+
     const tradeTime = Math.floor(lastTrade.time / 1000) // seconds
-    const tradePrice = lastTrade.price / 100 // ticks to price
+    const tradePrice = lastTrade.price / 10 // ticks to price (BTCUSDT tick size = 0.1)
 
     // Определяем время текущей свечи
     const currentCandleTime = Math.floor(tradeTime / intervalSeconds) * intervalSeconds
