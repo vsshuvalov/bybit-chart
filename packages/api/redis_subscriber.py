@@ -43,23 +43,40 @@ async def redis_subscriber_task(
         symbols: список symbols для подписки (BTCUSDT, ETHUSDT, XRPUSDT)
         live_feed_manager: LiveFeedManager instance для broadcast
     """
+    import sys
+    print(f"[DEBUG] redis_subscriber_task started, REDIS_AVAILABLE={REDIS_AVAILABLE}", file=sys.stderr, flush=True)
+
     if not REDIS_AVAILABLE:
         logger.warning("Redis not available, falling back to polling")
         return
 
+    redis_client = None
+    pubsub = None
+
     try:
+        print("[DEBUG] Creating Redis client...", file=sys.stderr, flush=True)
         # Подключаемся к Redis
         redis_client = await aioredis.from_url(redis_url, decode_responses=True)
+        print("[DEBUG] Redis client created", file=sys.stderr, flush=True)
+
         pubsub = redis_client.pubsub()
+        print("[DEBUG] PubSub created", file=sys.stderr, flush=True)
 
         # Подписываемся на все channels
         channels = [f"bybit:live:{symbol}" for symbol in symbols]
         await pubsub.subscribe(*channels)
-        logger.info(f"Redis subscriber connected, channels: {channels}")
+        logger.info(f"[REDIS_SUBSCRIBER] Connected, listening on: {channels}")
+        print(f"[DEBUG] Subscribed to: {channels}", file=sys.stderr, flush=True)
 
-        # Слушаем сообщения
-        async for message in pubsub.listen():
+        # Слушаем сообщения (используем polling вместо async generator)
+        while True:
             try:
+                message = await pubsub.get_message(ignore_subscribe_messages=True, timeout=1.0)
+
+                if message is None:
+                    await asyncio.sleep(0.01)  # Small delay to prevent busy loop
+                    continue
+
                 if message["type"] == "message":
                     channel = message["channel"]
                     data = message["data"]
@@ -68,22 +85,46 @@ async def redis_subscriber_task(
                     symbol = channel.replace("bybit:live:", "")
 
                     # Парсим JSON
-                    event = json.loads(data)
+                    try:
+                        event = json.loads(data)
+                        # Broadcast всем WebSocket подписчикам
+                        await live_feed_manager.broadcast(symbol, event)
+                        logger.debug(f"[REDIS_SUBSCRIBER] Broadcast {symbol}: {event.get('eventType')}")
+                    except json.JSONDecodeError as exc:
+                        logger.error(f"[REDIS_SUBSCRIBER] Invalid JSON: {exc}")
 
-                    # Broadcast всем WebSocket подписчикам
-                    await live_feed_manager.broadcast(symbol, event)
-
-                    logger.debug(f"Broadcasted event from Redis: {symbol}, type={event.get('type')}")
-
+            except asyncio.CancelledError:
+                logger.info("[REDIS_SUBSCRIBER] Cancelled")
+                break
             except Exception as exc:
-                logger.error(f"Error processing Redis message: {exc}", exc_info=True)
+                logger.error(f"[REDIS_SUBSCRIBER] Error in loop: {exc}", exc_info=True)
+                await asyncio.sleep(1)  # Brief pause before retry
 
+    except asyncio.CancelledError:
+        logger.info("[REDIS_SUBSCRIBER] Task cancelled (shutdown)")
     except Exception as exc:
-        logger.error(f"Redis subscriber error: {exc}", exc_info=True)
+        logger.error(f"[REDIS_SUBSCRIBER] Fatal error: {exc}", exc_info=True)
+        print(f"[DEBUG] Fatal error: {exc}", file=sys.stderr, flush=True)
+        import traceback
+        traceback.print_exc(file=sys.stderr)
     finally:
+        # Cleanup
+        print("[DEBUG] Cleanup started", file=sys.stderr, flush=True)
+        if pubsub:
+            try:
+                await pubsub.unsubscribe()
+                await pubsub.close()
+            except Exception:
+                pass
+
         if redis_client:
-            await redis_client.close()
-            logger.info("Redis subscriber closed")
+            try:
+                await redis_client.close()
+            except Exception:
+                pass
+
+        logger.info("[REDIS_SUBSCRIBER] Closed")
+        print("[DEBUG] redis_subscriber_task finished", file=sys.stderr, flush=True)
 
 
 def register_redis_subscriber(app, live_feed_manager, redis_url: str = "redis://localhost:6379/0"):
@@ -100,15 +141,21 @@ def register_redis_subscriber(app, live_feed_manager, redis_url: str = "redis://
     @app.on_event("startup")
     async def start_redis_subscriber():
         """Запустить Redis subscriber при startup."""
+        import sys
+        print("[DEBUG] start_redis_subscriber called!", file=sys.stderr, flush=True)
+
         symbols = ["BTCUSDT", "ETHUSDT", "XRPUSDT"]
+
+        logger.info(f"[REDIS_SUBSCRIBER] Initializing... REDIS_AVAILABLE={REDIS_AVAILABLE}")
 
         if REDIS_AVAILABLE:
             # Redis pub/sub (zero-latency)
-            asyncio.create_task(
+            task = asyncio.create_task(
                 redis_subscriber_task(redis_url, symbols, live_feed_manager)
             )
-            logger.info("Started Redis subscriber (zero-latency mode)")
+            logger.info(f"[REDIS_SUBSCRIBER] Started Redis subscriber task (zero-latency mode), channels: {symbols}")
+            print(f"[DEBUG] Task created: {task}", file=sys.stderr, flush=True)
         else:
             # Fallback: polling mode
-            logger.warning("Redis not available, using polling mode")
+            logger.warning("[REDIS_SUBSCRIBER] Redis not available, using polling mode")
             # Polling задачи уже зарегистрированы в websocket.py
