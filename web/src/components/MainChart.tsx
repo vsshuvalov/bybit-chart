@@ -14,24 +14,14 @@
  */
 
 import { useEffect, useRef } from 'react'
-// Use global LightweightCharts from CDN instead of npm
-declare global {
-  interface Window {
-    LightweightCharts: any
-  }
-}
-
-const {
+import {
   createChart,
-  CrosshairMode,
-} = window.LightweightCharts || {}
-
-import type {
   IChartApi,
   ISeriesApi,
   CandlestickData,
   LineData,
   HistogramData,
+  CrosshairMode,
 } from 'lightweight-charts'
 import { useQuery } from '@tanstack/react-query'
 import axios from 'axios'
@@ -144,20 +134,11 @@ export default function MainChart({
     chartRef.current = chart
     candlestickSeriesRef.current = candlestickSeries
 
-    // Debug: intercept setData calls
-    const originalSetData = candlestickSeries.setData.bind(candlestickSeries)
-    candlestickSeries.setData = (data: any) => {
-      console.log('[MainChart] setData intercepted:', data.length, 'candles')
-      console.trace('[MainChart] setData call stack')
-      return originalSetData(data)
-    }
-
     // Handle resize
     const handleResize = () => {
       if (container && chart) {
         const newWidth = container.clientWidth || 600
         const newHeight = container.clientHeight || 400
-        console.log('[MainChart] Resizing to:', newWidth, 'x', newHeight)
         chart.applyOptions({
           width: newWidth,
           height: newHeight,
@@ -166,13 +147,22 @@ export default function MainChart({
     }
 
     // Initial resize after mount
-    setTimeout(handleResize, 100)
+    const resizeTimeout = setTimeout(handleResize, 100)
 
     window.addEventListener('resize', handleResize)
 
     return () => {
-      console.log('[MainChart] UNMOUNTING chart component')
+      clearTimeout(resizeTimeout)
       window.removeEventListener('resize', handleResize)
+
+      // Clear refs before removing chart
+      if (chartRef.current === chart) {
+        chartRef.current = null
+        candlestickSeriesRef.current = null
+        cvdSeriesRef.current = null
+        orderFlowSeriesRef.current = null
+      }
+
       chart.remove()
     }
   }, [])
@@ -185,8 +175,18 @@ export default function MainChart({
       cvdSeriesRef.current = chartRef.current.addLineSeries({
         color: '#00C087',
         lineWidth: 2,
-        priceScaleId: 'right',
+        priceScaleId: 'cvd', // Separate scale for CVD (cumulative qty_steps)
         title: 'CVD',
+        priceLineVisible: false,
+        lastValueVisible: false,
+      })
+
+      // Configure CVD scale margins (overlay above candles)
+      chartRef.current.priceScale('cvd').applyOptions({
+        scaleMargins: {
+          top: 0.70,
+          bottom: 0.05,
+        },
       })
     }
 
@@ -204,11 +204,21 @@ export default function MainChart({
 
     if (!orderFlowSeriesRef.current) {
       orderFlowSeriesRef.current = chartRef.current.addHistogramSeries({
-        priceScaleId: 'left',
+        priceScaleId: 'orderflow', // Separate scale for OrderFlow
         priceFormat: {
           type: 'volume',
         },
         title: 'OrderFlow',
+        priceLineVisible: false,
+        lastValueVisible: false,
+      })
+
+      // Configure OrderFlow scale margins (overlay below candles)
+      chartRef.current.priceScale('orderflow').applyOptions({
+        scaleMargins: {
+          top: 0.05,
+          bottom: 0.75,
+        },
       })
     }
 
@@ -220,23 +230,17 @@ export default function MainChart({
     }
   }, [showOrderFlowOverlay])
 
+  // Track fitted symbol/timeframe to avoid repeated fitContent
+  const fittedKeyRef = useRef<string | null>(null)
+
   // Update candlestick data
   useEffect(() => {
     if (!ohlcData?.candles || !candlestickSeriesRef.current) return
 
-    // Guard against empty array (GPT-5.6Sol recommendation)
-    if (ohlcData.candles.length === 0) {
-      console.warn('[MainChart] Skipping empty candle snapshot')
-      return
-    }
-
-    console.log('[MainChart] OHLC data received:', {
-      count: ohlcData.candles.length,
-      first: ohlcData.candles[0],
-      last: ohlcData.candles[ohlcData.candles.length - 1],
-    })
+    if (ohlcData.candles.length === 0) return
 
     // BTCUSDT tick_size = 0.1, so divide ticks by 10
+    // TODO: Get tick_size from instrument metadata API
     const tickSize = 0.1
 
     const candleData: CandlestickData[] = ohlcData.candles
@@ -247,41 +251,47 @@ export default function MainChart({
         low: candle.low_ticks * tickSize,
         close: candle.close_ticks * tickSize,
       }))
-      .sort((a: any, b: any) => (a.time as number) - (b.time as number)) // Sort by time ascending
+      .sort((a: any, b: any) => (a.time as number) - (b.time as number))
 
-    console.log('[MainChart] Candle data prepared:', {
-      count: candleData.length,
-      first: candleData[0],
-      last: candleData[candleData.length - 1],
-      sample: candleData.slice(0, 3),
-    })
+    candlestickSeriesRef.current.setData(candleData)
 
-    if (candleData.length > 0) {
-      console.log('[MainChart] Calling setData with', candleData.length, 'candles')
-      candlestickSeriesRef.current.setData(candleData)
-      console.log('[MainChart] Data set, calling fitContent()')
+    // Only fitContent on first load or symbol/timeframe change
+    const fitKey = `${symbol}:${timeframe}`
+    if (fittedKeyRef.current !== fitKey) {
       chartRef.current?.timeScale().fitContent()
+      fittedKeyRef.current = fitKey
     }
-  }, [ohlcData])
+  }, [ohlcData, symbol, timeframe])
 
   // Update CVD data
   useEffect(() => {
     if (!tradesData?.events || !cvdSeriesRef.current || !showCVDOverlay) return
 
-    let cvd = 0
-    const cvdData: LineData[] = []
+    // Aggregate delta by second to ensure unique timestamps
+    const deltaBySecond = new Map<number, number>()
 
     tradesData.events.forEach((trade: Trade) => {
-      const delta = trade.takerSide === 'Buy' ? trade.qtySteps : -trade.qtySteps
-      cvd += delta
+      if (!Number.isSafeInteger(trade.timestampUs) || !Number.isFinite(trade.qtySteps)) {
+        return
+      }
 
-      cvdData.push({
-        time: Math.floor(trade.timestampUs / 1000000) as any,
-        value: cvd,
-      })
+      const second = Math.floor(trade.timestampUs / 1000000)
+      const delta = trade.takerSide === 'Buy' ? trade.qtySteps : -trade.qtySteps
+      deltaBySecond.set(second, (deltaBySecond.get(second) ?? 0) + delta)
     })
 
-    cvdSeriesRef.current.setData(cvdData)
+    // Build cumulative CVD with sorted unique timestamps
+    let cumulative = 0
+    const cvdData: LineData[] = [...deltaBySecond.entries()]
+      .sort(([a], [b]) => a - b)
+      .map(([time, delta]) => ({
+        time: time as any,
+        value: (cumulative += delta),
+      }))
+
+    if (cvdData.length > 0) {
+      cvdSeriesRef.current.setData(cvdData)
+    }
   }, [tradesData, showCVDOverlay])
 
   // Update OrderFlow data
@@ -302,16 +312,20 @@ export default function MainChart({
       }
     })
 
-    const histogramData: HistogramData[] = Object.entries(grouped).map(([time, volumes]) => {
-      const imbalance = volumes.buy - volumes.sell
-      return {
-        time: parseInt(time) as any,
-        value: imbalance,
-        color: imbalance > 0 ? '#00C087' : '#F6465D',
-      }
-    })
+    const histogramData: HistogramData[] = Object.entries(grouped)
+      .map(([time, volumes]) => {
+        const imbalance = volumes.buy - volumes.sell
+        return {
+          time: parseInt(time) as any,
+          value: imbalance,
+          color: imbalance > 0 ? '#00C087' : '#F6465D',
+        }
+      })
+      .sort((a, b) => (a.time as number) - (b.time as number))
 
-    orderFlowSeriesRef.current.setData(histogramData)
+    if (histogramData.length > 0) {
+      orderFlowSeriesRef.current.setData(histogramData)
+    }
   }, [tradesData, showOrderFlowOverlay])
 
   return <div ref={chartContainerRef} style={{ width: '100%', height: '100%' }} />

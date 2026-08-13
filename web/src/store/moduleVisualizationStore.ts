@@ -16,7 +16,7 @@ interface ModuleVisualizationState {
 }
 
 export const useModuleVisualizationStore = create<ModuleVisualizationState>((set) => ({
-  mode: (localStorage.getItem('moduleVisualizationMode') as VisualizationMode) || 'overlay',
+  mode: (localStorage.getItem('moduleVisualizationMode') as VisualizationMode) || 'panel',
   setMode: (mode) => {
     localStorage.setItem('moduleVisualizationMode', mode)
     set({ mode })
