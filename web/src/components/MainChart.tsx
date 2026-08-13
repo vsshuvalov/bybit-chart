@@ -14,14 +14,24 @@
  */
 
 import { useEffect, useRef } from 'react'
-import {
+// Use global LightweightCharts from CDN instead of npm
+declare global {
+  interface Window {
+    LightweightCharts: any
+  }
+}
+
+const {
   createChart,
+  CrosshairMode,
+} = window.LightweightCharts || {}
+
+import type {
   IChartApi,
   ISeriesApi,
   CandlestickData,
   LineData,
   HistogramData,
-  CrosshairMode,
 } from 'lightweight-charts'
 import { useQuery } from '@tanstack/react-query'
 import axios from 'axios'
