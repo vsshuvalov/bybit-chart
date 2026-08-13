@@ -9,7 +9,6 @@
  * - Separate: CVD/OrderFlow in BottomDock panels
  */
 
-import { useState } from 'react'
 import { useModuleVisualizationStore } from '../store/moduleVisualizationStore'
 import MainChart from './MainChart'
 import BottomDockModules from './BottomDockModules'
@@ -17,9 +16,9 @@ import BottomDockModules from './BottomDockModules'
 export default function ChartPanel() {
   const { mode } = useModuleVisualizationStore()
 
-  // Module settings (later: load from workspace)
-  const [showCVDOverlay] = useState(mode === 'overlay')
-  const [showOrderFlowOverlay] = useState(mode === 'overlay')
+  // Module settings — derive from mode, don't use useState
+  const showCVDOverlay = mode === 'overlay'
+  const showOrderFlowOverlay = mode === 'overlay'
 
   return (
     <>
