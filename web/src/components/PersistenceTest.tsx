@@ -69,8 +69,18 @@ export default function PersistenceTest() {
   }
 
   return (
-    <div style={{ padding: '20px', backgroundColor: '#1a1a1a', color: '#fff' }}>
-      <h2>🧪 Persistence API Test</h2>
+    <div style={{
+      padding: '20px',
+      backgroundColor: '#1a1a1a',
+      color: '#fff',
+      maxWidth: '800px',
+      margin: '20px auto',
+      borderRadius: '8px',
+      border: '2px solid #333',
+      maxHeight: '400px',
+      overflowY: 'auto'
+    }}>
+      <h2 style={{ margin: '0 0 15px 0', fontSize: '18px' }}>🧪 Persistence API Test</h2>
 
       {/* Drawings Section */}
       <div style={{ marginBottom: '30px' }}>

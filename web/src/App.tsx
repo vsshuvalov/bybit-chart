@@ -35,10 +35,15 @@ export default function App() {
         {leftToolbarVisible && <LeftToolbar />}
 
         <div className="center-container">
-          {/* Temporary: Persistence Test Component */}
-          <PersistenceTest />
-
           <ChartPanel />
+
+          {/* Temporary: Persistence Test Component (overlay) */}
+          <div style={{ position: 'absolute', top: 0, left: 0, right: 0, zIndex: 1000, pointerEvents: 'none' }}>
+            <div style={{ pointerEvents: 'auto' }}>
+              <PersistenceTest />
+            </div>
+          </div>
+
           {bottomDockVisible && <BottomDock />}
         </div>
 
