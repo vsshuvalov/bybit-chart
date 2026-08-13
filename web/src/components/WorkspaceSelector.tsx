@@ -92,10 +92,12 @@ export default function WorkspaceSelector({
                 setIsOpen(false)
               }}
             >
-              <span className="workspace-name">{workspace.name}</span>
-              {workspace.id === currentWorkspaceId && (
-                <span className="checkmark">✓</span>
-              )}
+              <div className="workspace-name">
+                <span>{workspace.name}</span>
+                {workspace.id === currentWorkspaceId && (
+                  <span className="checkmark">✓</span>
+                )}
+              </div>
               <div className="workspace-meta">
                 {workspace.symbol} • {workspace.timeframe}
               </div>
@@ -168,15 +170,17 @@ export default function WorkspaceSelector({
           background: none;
           border: none;
           color: var(--text-primary);
-          padding: 10px 14px;
+          padding: 12px 14px;
           text-align: left;
           cursor: pointer;
           display: flex;
-          align-items: center;
-          justify-content: space-between;
+          flex-direction: column;
+          align-items: flex-start;
+          gap: 4px;
           transition: background 0.15s;
           font-size: 14px;
           position: relative;
+          min-height: 50px;
         }
 
         .dropdown-item:hover {
@@ -199,14 +203,16 @@ export default function WorkspaceSelector({
 
         .workspace-name {
           font-weight: 500;
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          width: 100%;
+          justify-content: space-between;
         }
 
         .workspace-meta {
           font-size: 11px;
           color: var(--text-secondary);
-          position: absolute;
-          left: 14px;
-          bottom: 6px;
         }
 
         .checkmark {
