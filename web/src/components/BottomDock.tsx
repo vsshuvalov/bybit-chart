@@ -8,7 +8,10 @@
  * - Replay metrics: playback speed, event rate, time range
  */
 
+import { useState } from 'react'
 import { useUIStore } from '../store'
+import CVDChart from './CVDChart'
+import OrderFlowChart from './OrderFlowChart'
 
 export default function BottomDock() {
   const { bottomDockTab, setBottomDockTab } = useUIStore()
@@ -43,7 +46,7 @@ export default function BottomDock() {
 
       <style>{`
         .bottom-dock {
-          height: 200px;
+          height: 250px;
           background: var(--bg-secondary);
           border-top: 1px solid var(--border-default);
           display: flex;
@@ -82,30 +85,48 @@ export default function BottomDock() {
 
         .dock-content {
           flex: 1;
-          overflow: auto;
+          overflow: hidden;
+          position: relative;
         }
       `}</style>
     </div>
   )
 }
 
-// Placeholder panels
+// ========== Tab Panels ==========
 
 function DeltaCVDPanel() {
+  const [subTab, setSubTab] = useState<'cvd' | 'delta'>('cvd')
+
   return (
-    <div style={{ padding: 'var(--spacing-md)', color: 'var(--text-muted)' }}>
-      Delta / CVD Panel — TODO
-      <div style={{ marginTop: '8px', fontSize: '12px' }}>
-        GET /api/v1/analytics/delta + /api/v1/analytics/cvd
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+      <div style={{ display: 'flex', gap: '4px', padding: '4px 12px', background: 'var(--bg-primary)', borderBottom: '1px solid var(--border-default)' }}>
+        <button
+          onClick={() => setSubTab('cvd')}
+          style={{ fontSize: '12px', padding: '2px 10px', background: subTab === 'cvd' ? 'var(--bg-secondary)' : 'none', border: 'none', color: subTab === 'cvd' ? 'var(--accent-blue)' : 'var(--text-secondary)', cursor: 'pointer', borderRadius: '4px' }}
+        >
+          CVD
+        </button>
+        <button
+          onClick={() => setSubTab('delta')}
+          style={{ fontSize: '12px', padding: '2px 10px', background: subTab === 'delta' ? 'var(--bg-secondary)' : 'none', border: 'none', color: subTab === 'delta' ? 'var(--accent-blue)' : 'var(--text-secondary)', cursor: 'pointer', borderRadius: '4px' }}
+        >
+          OrderFlow
+        </button>
+      </div>
+      <div style={{ flex: 1, overflow: 'hidden' }}>
+        {subTab === 'cvd' && <CVDChart />}
+        {subTab === 'delta' && <OrderFlowChart />}
       </div>
     </div>
   )
 }
 
+// simple marker so reader knows panels below are separate functions
 function OIFundingPanel() {
   return (
     <div style={{ padding: 'var(--spacing-md)', color: 'var(--text-muted)' }}>
-      OI / Funding Panel — TODO
+      OI / Funding — TODO
       <div style={{ marginTop: '8px', fontSize: '12px' }}>
         Open Interest + Funding Rate (backend endpoint pending)
       </div>
@@ -116,7 +137,7 @@ function OIFundingPanel() {
 function StrategyLogPanel() {
   return (
     <div style={{ padding: 'var(--spacing-md)', color: 'var(--text-muted)' }}>
-      Strategy Log Panel — TODO
+      Strategy Log — TODO
       <div style={{ marginTop: '8px', fontSize: '12px' }}>
         Signal events, entry/exit markers, performance metrics
       </div>
@@ -127,7 +148,7 @@ function StrategyLogPanel() {
 function ReplayMetricsPanel() {
   return (
     <div style={{ padding: 'var(--spacing-md)', color: 'var(--text-muted)' }}>
-      Replay Metrics Panel — TODO
+      Replay Metrics — TODO
       <div style={{ marginTop: '8px', fontSize: '12px' }}>
         Playback speed, event rate, time range selector
       </div>
