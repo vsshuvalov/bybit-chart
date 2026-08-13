@@ -17,7 +17,6 @@ import RightSidebar from './components/RightSidebar'
 import BottomDock from './components/BottomDock'
 import StatusBar from './components/StatusBar'
 import ChartPanel from './components/ChartPanel'
-import PersistenceTest from './components/PersistenceTest'
 import { useWebSocket } from './hooks/useWebSocket'
 
 export default function App() {
@@ -36,14 +35,6 @@ export default function App() {
 
         <div className="center-container">
           <ChartPanel />
-
-          {/* Temporary: Persistence Test Component (overlay) */}
-          <div style={{ position: 'absolute', top: 0, left: 0, right: 0, zIndex: 1000, pointerEvents: 'none' }}>
-            <div style={{ pointerEvents: 'auto' }}>
-              <PersistenceTest />
-            </div>
-          </div>
-
           {bottomDockVisible && <BottomDock />}
         </div>
 
