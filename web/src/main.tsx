@@ -9,7 +9,8 @@ const queryClient = new QueryClient({
     queries: {
       refetchOnWindowFocus: false,
       retry: 1,
-      staleTime: 5000,
+      staleTime: 60000, // 1 минута - данные считаются свежими
+      gcTime: 300000, // 5 минут - garbage collection time (renamed from cacheTime)
     },
   },
 })

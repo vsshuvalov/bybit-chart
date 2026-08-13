@@ -26,7 +26,20 @@ export function useWebSocket(symbol: string, enabled: boolean = true) {
   const setMarkPrice = useMarketDataStore((state) => state.setMarkPrice)
 
   useEffect(() => {
-    if (!enabled || !symbol) {
+    // 🔥 CRITICAL FIX: Если disabled - сразу закрываем соединение
+    if (!enabled) {
+      console.log('[WebSocket] Disabled, closing connection')
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current)
+      }
+      if (wsRef.current) {
+        wsRef.current.close()
+        wsRef.current = null
+      }
+      return
+    }
+
+    if (!symbol) {
       return
     }
 
@@ -84,9 +97,9 @@ export function useWebSocket(symbol: string, enabled: boolean = true) {
       ws.onclose = (event) => {
         console.log('[WebSocket] Closed:', event.code, event.reason)
 
-        // Auto-reconnect after 3 seconds
+        // Auto-reconnect только если enabled
         if (enabled) {
-          reconnectTimeoutRef.current = setTimeout(() => {
+          reconnectTimeoutRef.current = window.setTimeout(() => {
             console.log('[WebSocket] Reconnecting...')
             connect()
           }, 3000)
@@ -106,7 +119,7 @@ export function useWebSocket(symbol: string, enabled: boolean = true) {
         wsRef.current = null
       }
     }
-  }, [symbol, enabled, addTrade, setMarkPrice])
+  }, [symbol, enabled]) // 🔥 FIX: убрали addTrade, setMarkPrice из dependencies
 
   return {
     connected: wsRef.current?.readyState === WebSocket.OPEN,

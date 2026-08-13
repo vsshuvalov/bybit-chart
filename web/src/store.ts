@@ -129,7 +129,7 @@ interface UIState {
 
   // Active panels
   rightSidebarTab: 'watchlist' | 'dom' | 'tape' | 'levels'
-  bottomDockTab: 'delta' | 'oi' | 'strategy' | 'replay'
+  bottomDockTab: 'delta' | 'cvd' | 'oi' | 'strategy' | 'replay'
 
   // Drawing tool
   activeTool:

@@ -9,17 +9,19 @@
 import { useEffect, useRef } from 'react'
 import { createChart, IChartApi, ISeriesApi, CandlestickData } from 'lightweight-charts'
 import { useQuery } from '@tanstack/react-query'
-import { useViewStore } from '../store'
+import { useViewStore, useMarketDataStore } from '../store'
 import { getOHLC } from '../api'
 
 export default function ChartPanel() {
   const chartContainerRef = useRef<HTMLDivElement>(null)
   const chartRef = useRef<IChartApi | null>(null)
   const candleSeriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null)
+  const lastCandleRef = useRef<CandlestickData | null>(null)
 
-  const { symbol, timeframe } = useViewStore()
+  const { symbol, timeframe, isReplayMode } = useViewStore()
+  const recentTrades = useMarketDataStore((state) => state.recentTrades.get(symbol) || [])
 
-  // Fetch OHLC data
+  // Fetch OHLC data - отключаем polling в live mode
   const { data: ohlcData, error } = useQuery({
     queryKey: ['ohlc', symbol, timeframe],
     queryFn: async () => {
@@ -27,7 +29,7 @@ export default function ChartPanel() {
       const start = now - 24 * 60 * 60 * 1000000 // last 24h
       return getOHLC(symbol, start, now, timeframe)
     },
-    refetchInterval: 10000, // refresh every 10s
+    refetchInterval: isReplayMode ? 10000 : false, // только в replay mode
   })
 
   // Mock data fallback if API returns no candles
@@ -131,7 +133,71 @@ export default function ChartPanel() {
     }
 
     candleSeriesRef.current.setData(candles)
+
+    // Сохраняем последнюю свечу для обновления
+    if (candles.length > 0) {
+      lastCandleRef.current = candles[candles.length - 1]
+    }
   }, [ohlcData, symbol, timeframe, useMockData])
+
+  // 🔥 NEW: Update chart from WebSocket trades in real-time
+  useEffect(() => {
+    if (!candleSeriesRef.current || !lastCandleRef.current || isReplayMode || recentTrades.length === 0) {
+      return
+    }
+
+    // Получаем интервал свечи в секундах
+    const getIntervalSeconds = () => {
+      switch (timeframe) {
+        case '1m': return 60
+        case '5m': return 300
+        case '15m': return 900
+        case '30m': return 1800
+        case '1h': return 3600
+        case '4h': return 14400
+        case '1d': return 86400
+        default: return 60
+      }
+    }
+
+    const intervalSeconds = getIntervalSeconds()
+    const lastTrade = recentTrades[recentTrades.length - 1]
+    const tradeTime = Math.floor(lastTrade.time / 1000) // seconds
+    const tradePrice = lastTrade.price / 100 // ticks to price
+
+    // Определяем время текущей свечи
+    const currentCandleTime = Math.floor(tradeTime / intervalSeconds) * intervalSeconds
+    const lastCandleTime = lastCandleRef.current.time as number
+
+    if (currentCandleTime === lastCandleTime) {
+      // Обновляем текущую свечу
+      const updatedCandle: CandlestickData = {
+        ...lastCandleRef.current,
+        high: Math.max(lastCandleRef.current.high, tradePrice),
+        low: Math.min(lastCandleRef.current.low, tradePrice),
+        close: tradePrice,
+      }
+
+      lastCandleRef.current = updatedCandle
+      candleSeriesRef.current.update(updatedCandle)
+
+      console.log('[ChartPanel] Updated candle:', updatedCandle)
+    } else if (currentCandleTime > lastCandleTime) {
+      // Создаём новую свечу
+      const newCandle: CandlestickData = {
+        time: currentCandleTime as any,
+        open: tradePrice,
+        high: tradePrice,
+        low: tradePrice,
+        close: tradePrice,
+      }
+
+      lastCandleRef.current = newCandle
+      candleSeriesRef.current.update(newCandle)
+
+      console.log('[ChartPanel] New candle:', newCandle)
+    }
+  }, [recentTrades, timeframe, isReplayMode])
 
   return (
     <div className="chart-panel">
@@ -140,6 +206,12 @@ export default function ChartPanel() {
       {useMockData && (
         <div className="mock-data-badge">
           ⚠️ Mock Data (no backend data)
+        </div>
+      )}
+
+      {!isReplayMode && (
+        <div className="live-indicator">
+          🔴 LIVE
         </div>
       )}
 
@@ -202,6 +274,26 @@ export default function ChartPanel() {
           font-size: 12px;
           font-weight: 500;
           z-index: 10;
+        }
+
+        .live-indicator {
+          position: absolute;
+          top: var(--spacing-md);
+          left: var(--spacing-md);
+          padding: 6px 12px;
+          background: rgba(239, 83, 80, 0.15);
+          border: 1px solid #ef5350;
+          border-radius: var(--radius-sm);
+          color: #ef5350;
+          font-size: 12px;
+          font-weight: 500;
+          z-index: 10;
+          animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.6; }
         }
       `}</style>
     </div>

@@ -1,0 +1,1385 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <meta name="theme-color" content="#080b12">
+  <title>Arbitrage Lab — PAPER</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #070a10;
+      --surface: rgba(17, 22, 34, .86);
+      --surface-solid: #111622;
+      --surface-2: #171d2b;
+      --line: rgba(148, 163, 184, .14);
+      --line-strong: rgba(148, 163, 184, .24);
+      --text: #f1f5f9;
+      --muted: #8d98aa;
+      --subtle: #5d6879;
+      --green: #32d399;
+      --green-soft: rgba(50, 211, 153, .12);
+      --red: #fb7185;
+      --red-soft: rgba(251, 113, 133, .12);
+      --amber: #fbbf24;
+      --amber-soft: rgba(251, 191, 36, .12);
+      --blue: #60a5fa;
+      --blue-soft: rgba(96, 165, 250, .12);
+      --violet: #a78bfa;
+      --radius-lg: 18px;
+      --radius-md: 12px;
+      --shadow: 0 24px 80px rgba(0, 0, 0, .28);
+    }
+
+    * { box-sizing: border-box; }
+
+    html { min-width: 320px; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background:
+        radial-gradient(900px 520px at 76% -10%, rgba(37, 99, 235, .11), transparent 68%),
+        radial-gradient(700px 500px at -6% 14%, rgba(52, 211, 153, .08), transparent 66%),
+        var(--bg);
+      color: var(--text);
+      font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    body::before {
+      position: fixed;
+      inset: 0;
+      z-index: -1;
+      content: "";
+      opacity: .18;
+      pointer-events: none;
+      background-image:
+        linear-gradient(var(--line) 1px, transparent 1px),
+        linear-gradient(90deg, var(--line) 1px, transparent 1px);
+      background-size: 42px 42px;
+      mask-image: linear-gradient(to bottom, #000, transparent 72%);
+    }
+
+    button, input, select { font: inherit; }
+    button { color: inherit; }
+
+    .shell {
+      width: min(1540px, 100%);
+      margin: 0 auto;
+      padding: 22px clamp(16px, 3vw, 38px) 42px;
+    }
+
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 20px;
+      margin-bottom: 26px;
+    }
+
+    .brand { display: flex; align-items: center; gap: 12px; min-width: 0; }
+    .brand-mark {
+      position: relative;
+      width: 38px;
+      height: 38px;
+      flex: 0 0 auto;
+      border: 1px solid rgba(50, 211, 153, .32);
+      border-radius: 11px;
+      background: linear-gradient(145deg, rgba(50, 211, 153, .18), rgba(96, 165, 250, .08));
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.08), 0 10px 34px rgba(50, 211, 153, .08);
+    }
+
+    .brand-mark::before,
+    .brand-mark::after {
+      position: absolute;
+      left: 9px;
+      width: 18px;
+      height: 7px;
+      content: "";
+      border: 2px solid var(--green);
+      transform: skewX(-24deg);
+    }
+    .brand-mark::before { top: 9px; border-left: 0; border-bottom: 0; }
+    .brand-mark::after { bottom: 9px; border-right: 0; border-top: 0; }
+
+    .brand-name { font-size: 16px; font-weight: 700; letter-spacing: -.015em; white-space: nowrap; }
+    .brand-sub { margin-top: 2px; color: var(--muted); font-size: 11px; letter-spacing: .035em; }
+
+    .mode-strip { display: flex; align-items: center; justify-content: flex-end; gap: 7px; flex-wrap: wrap; }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      min-height: 28px;
+      padding: 5px 9px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: rgba(17, 22, 34, .68);
+      color: var(--muted);
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: .055em;
+      text-transform: uppercase;
+    }
+    .badge-paper { border-color: rgba(251,191,36,.27); background: var(--amber-soft); color: #ffd66b; }
+    .badge-public { border-color: rgba(96,165,250,.24); background: var(--blue-soft); color: #9dc7ff; }
+    .strategy-link { text-decoration: none; border-color: rgba(50,211,153,.28); color: #7ce7bd; transition: .18s ease; }
+    .strategy-link:hover { border-color: rgba(50,211,153,.55); background: rgba(50,211,153,.09); color: #a2f3d4; }
+    .mini-lock { font-size: 11px; line-height: 1; }
+
+    .connection {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      padding-left: 6px;
+      color: var(--muted);
+      font-size: 11px;
+      white-space: nowrap;
+    }
+    .connection-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--subtle);
+      box-shadow: 0 0 0 4px rgba(93,104,121,.1);
+      transition: .2s ease;
+    }
+    .connection.online .connection-dot { background: var(--green); box-shadow: 0 0 0 4px rgba(50,211,153,.1); }
+    .connection.error .connection-dot { background: var(--red); box-shadow: 0 0 0 4px rgba(251,113,133,.1); }
+
+    .hero {
+      display: flex;
+      align-items: end;
+      justify-content: space-between;
+      gap: 28px;
+      margin: 8px 0 20px;
+    }
+    .eyebrow { color: var(--green); font-size: 11px; font-weight: 800; letter-spacing: .13em; text-transform: uppercase; }
+    h1 { max-width: 760px; margin: 8px 0 7px; font-size: clamp(27px, 4vw, 43px); line-height: 1.08; letter-spacing: -.045em; }
+    .hero-copy { max-width: 720px; margin: 0; color: var(--muted); font-size: 13px; line-height: 1.65; }
+    .updated { flex: 0 0 auto; padding-bottom: 4px; color: var(--subtle); font-size: 11px; text-align: right; }
+    .updated strong { display: block; margin-top: 4px; color: var(--muted); font-size: 12px; font-weight: 600; }
+
+    .panel {
+      position: relative;
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: var(--radius-lg);
+      background: var(--surface);
+      box-shadow: var(--shadow), inset 0 1px 0 rgba(255,255,255,.025);
+      backdrop-filter: blur(18px);
+    }
+    .panel-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+      min-height: 58px;
+      padding: 15px 18px;
+      border-bottom: 1px solid var(--line);
+    }
+    .panel-title { margin: 0; font-size: 13px; font-weight: 700; letter-spacing: -.01em; }
+    .panel-note { color: var(--subtle); font-size: 10px; }
+
+    .control-panel { margin-bottom: 16px; }
+    .control-grid {
+      display: grid;
+      grid-template-columns: repeat(6, minmax(130px, 1fr));
+      align-items: end;
+      gap: 12px;
+      padding: 16px 18px 18px;
+    }
+
+    .field label {
+      display: block;
+      margin: 0 0 7px 2px;
+      color: var(--muted);
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: .065em;
+      text-transform: uppercase;
+    }
+    .field input,
+    .field select {
+      width: 100%;
+      height: 43px;
+      outline: none;
+      border: 1px solid var(--line-strong);
+      border-radius: 10px;
+      background: #0b0f18;
+      color: var(--text);
+      padding: 0 12px;
+      font-size: 13px;
+      font-variant-numeric: tabular-nums;
+      transition: border-color .18s, box-shadow .18s;
+    }
+    .field input:focus,
+    .field select:focus { border-color: rgba(50,211,153,.55); box-shadow: 0 0 0 3px rgba(50,211,153,.08); }
+    .field input:disabled,
+    .field select:disabled { cursor: not-allowed; opacity: .46; }
+    .field.auto-only.auto-inactive label { color: var(--subtle); }
+
+    .switch-wrap {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      height: 43px;
+      padding: 0 12px;
+      border: 1px solid var(--line-strong);
+      border-radius: 10px;
+      background: #0b0f18;
+      cursor: pointer;
+    }
+    .switch-copy { min-width: 0; }
+    .switch-copy strong { display: block; font-size: 11px; }
+    .switch-copy small { display: block; margin-top: 2px; color: var(--subtle); font-size: 9px; white-space: nowrap; }
+    .switch { position: relative; width: 34px; height: 20px; flex: 0 0 auto; }
+    .switch input { position: absolute; opacity: 0; pointer-events: none; }
+    .switch-track { position: absolute; inset: 0; border-radius: 999px; background: #242b39; transition: .2s; }
+    .switch-track::after { position: absolute; top: 3px; left: 3px; width: 14px; height: 14px; border-radius: 50%; background: #8791a2; content: ""; transition: .2s; }
+    .switch input:checked + .switch-track { background: rgba(50,211,153,.26); }
+    .switch input:checked + .switch-track::after { background: var(--green); transform: translateX(14px); }
+    .switch input:focus-visible + .switch-track { outline: 2px solid var(--blue); outline-offset: 2px; }
+
+    .actions { display: flex; grid-column: 1 / -1; gap: 8px; }
+    .auto-budget {
+      grid-column: 1 / -1;
+      margin-top: -2px;
+      padding: 8px 10px;
+      border: 1px solid rgba(96,165,250,.16);
+      border-radius: 9px;
+      background: rgba(96,165,250,.045);
+      color: #92a8c7;
+      font-size: 10px;
+      line-height: 1.45;
+    }
+    .auto-budget.invalid { border-color: rgba(251,113,133,.3); background: var(--red-soft); color: #f6a2af; }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      height: 43px;
+      border: 1px solid transparent;
+      border-radius: 10px;
+      padding: 0 17px;
+      cursor: pointer;
+      font-size: 11px;
+      font-weight: 750;
+      white-space: nowrap;
+      transition: transform .16s, background .16s, border-color .16s, opacity .16s;
+    }
+    .btn:hover:not(:disabled) { transform: translateY(-1px); }
+    .btn:active:not(:disabled) { transform: translateY(0); }
+    .btn:disabled { cursor: wait; opacity: .5; }
+    .btn-primary { background: var(--green); color: #032017; box-shadow: 0 8px 26px rgba(50,211,153,.13); }
+    .btn-primary:hover:not(:disabled) { background: #48e1aa; }
+    .btn-secondary { border-color: rgba(96,165,250,.25); background: var(--blue-soft); color: #a8d0ff; }
+    .btn-secondary:hover:not(:disabled) { border-color: rgba(96,165,250,.45); background: rgba(96,165,250,.18); }
+    .btn-stop { border-color: rgba(251,191,36,.22); background: var(--amber-soft); color: #f8cf62; }
+    .btn-stop:hover:not(:disabled) { border-color: rgba(251,191,36,.4); background: rgba(251,191,36,.17); }
+    .btn-ghost { width: 43px; padding: 0; border-color: var(--line-strong); background: #0b0f18; color: var(--muted); }
+    .btn-ghost:hover:not(:disabled) { border-color: rgba(251,113,133,.35); color: var(--red); }
+    .spinner { width: 12px; height: 12px; border: 2px solid rgba(3,32,23,.3); border-top-color: #032017; border-radius: 50%; animation: spin .7s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .paper-note {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      margin: 0 18px 16px;
+      padding: 9px 11px;
+      border: 1px solid rgba(251,191,36,.16);
+      border-radius: 9px;
+      background: rgba(251,191,36,.045);
+      color: #a99c77;
+      font-size: 10px;
+      line-height: 1.45;
+    }
+    .paper-note strong { color: #d7bd74; }
+
+    .stats-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; margin-bottom: 16px; }
+    .stat { min-height: 94px; padding: 15px 17px; }
+    .stat-label { color: var(--muted); font-size: 10px; font-weight: 700; letter-spacing: .045em; text-transform: uppercase; }
+    .stat-value { margin-top: 13px; font-size: 21px; font-weight: 700; letter-spacing: -.035em; font-variant-numeric: tabular-nums; }
+    .stat-value small { margin-left: 4px; color: var(--subtle); font-size: 10px; font-weight: 600; letter-spacing: 0; }
+    .stat-detail { margin-top: 5px; color: var(--subtle); font-size: 10px; }
+
+    .main-grid { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(330px, .75fr); gap: 16px; align-items: start; }
+    .stack { display: grid; gap: 16px; min-width: 0; }
+
+    .opportunity { min-height: 365px; }
+    .opportunity-body { padding: 18px; }
+    .route {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 64px minmax(0, 1fr);
+      align-items: stretch;
+      gap: 12px;
+    }
+    .route-leg { position: relative; min-width: 0; padding: 16px; border: 1px solid var(--line); border-radius: 13px; background: rgba(7,10,16,.46); }
+    .route-leg.buy { border-color: rgba(50,211,153,.19); background: linear-gradient(145deg, rgba(50,211,153,.065), rgba(7,10,16,.4)); }
+    .route-leg.sell { border-color: rgba(96,165,250,.19); background: linear-gradient(145deg, rgba(96,165,250,.065), rgba(7,10,16,.4)); }
+    .leg-label { display: flex; align-items: center; gap: 7px; color: var(--muted); font-size: 9px; font-weight: 800; letter-spacing: .09em; text-transform: uppercase; }
+    .leg-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--green); }
+    .sell .leg-dot { background: var(--blue); }
+    .venue-name { overflow: hidden; margin-top: 10px; font-size: 22px; font-weight: 720; letter-spacing: -.035em; text-overflow: ellipsis; white-space: nowrap; }
+    .leg-price { margin-top: 16px; color: var(--muted); font-size: 10px; }
+    .leg-price strong { display: block; margin-top: 4px; color: var(--text); font-size: 16px; font-weight: 650; font-variant-numeric: tabular-nums; }
+    .route-arrow { display: grid; place-items: center; color: var(--subtle); }
+    .route-arrow span { display: grid; place-items: center; width: 38px; height: 38px; border: 1px solid var(--line); border-radius: 50%; background: #0c111b; font-size: 17px; }
+
+    .edge-grid { display: grid; grid-template-columns: repeat(3, 1fr); margin-top: 15px; border: 1px solid var(--line); border-radius: 13px; background: rgba(7,10,16,.38); }
+    .edge-item { min-width: 0; padding: 14px 15px; border-right: 1px solid var(--line); }
+    .edge-item:last-child { border-right: 0; }
+    .edge-item span { color: var(--muted); font-size: 9px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; }
+    .edge-item strong { display: block; overflow: hidden; margin-top: 7px; font-size: 18px; letter-spacing: -.025em; text-overflow: ellipsis; font-variant-numeric: tabular-nums; }
+    .positive { color: var(--green) !important; }
+    .negative { color: var(--red) !important; }
+
+    .edge-meter { margin-top: 14px; }
+    .meter-label { display: flex; justify-content: space-between; gap: 8px; margin-bottom: 7px; color: var(--subtle); font-size: 9px; }
+    .meter { position: relative; overflow: hidden; height: 5px; border-radius: 999px; background: #252b38; }
+    .meter-fill { width: 0; height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--amber), var(--green)); transition: width .35s ease; }
+
+    .empty {
+      display: grid;
+      place-items: center;
+      min-height: 282px;
+      padding: 32px;
+      text-align: center;
+    }
+    .empty-icon { display: grid; place-items: center; width: 48px; height: 48px; margin: 0 auto 13px; border: 1px solid var(--line); border-radius: 14px; background: #0b1019; color: var(--subtle); font-size: 19px; }
+    .empty h3 { margin: 0 0 7px; font-size: 13px; }
+    .empty p { max-width: 390px; margin: 0; color: var(--muted); font-size: 11px; line-height: 1.55; }
+
+    .venue-list, .balance-list { padding: 5px 18px 11px; }
+    .venue-row, .balance-row {
+      display: grid;
+      align-items: center;
+      min-height: 51px;
+      border-bottom: 1px solid var(--line);
+      font-size: 11px;
+    }
+    .venue-row:last-child, .balance-row:last-child { border-bottom: 0; }
+    .venue-row { grid-template-columns: minmax(80px, 1fr) auto auto; gap: 10px; }
+    .venue-id { overflow: hidden; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
+    .venue-latency { color: var(--muted); font-variant-numeric: tabular-nums; }
+    .status-pill { display: inline-flex; align-items: center; gap: 5px; min-width: 72px; justify-content: center; padding: 5px 7px; border-radius: 999px; background: var(--green-soft); color: var(--green); font-size: 9px; font-weight: 750; }
+    .status-pill::before { width: 5px; height: 5px; border-radius: 50%; background: currentColor; content: ""; }
+    .status-pill.warn { background: var(--amber-soft); color: var(--amber); }
+    .status-pill.down { background: var(--red-soft); color: var(--red); }
+
+    .balance-row { grid-template-columns: minmax(80px, 1fr) auto; gap: 14px; }
+    .balance-venue { color: var(--muted); }
+    .balance-assets { display: flex; justify-content: flex-end; gap: 14px; flex-wrap: wrap; }
+    .asset { font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .asset strong { color: var(--text); font-weight: 650; }
+    .asset span { margin-left: 3px; color: var(--subtle); font-size: 9px; }
+
+    .table-wrap { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; font-size: 10px; }
+    th { padding: 10px 18px; border-bottom: 1px solid var(--line); color: var(--subtle); font-size: 9px; font-weight: 700; letter-spacing: .055em; text-align: left; text-transform: uppercase; white-space: nowrap; }
+    td { padding: 12px 18px; border-bottom: 1px solid var(--line); color: var(--muted); white-space: nowrap; }
+    tbody tr:last-child td { border-bottom: 0; }
+    tbody tr:hover { background: rgba(255,255,255,.015); }
+    td strong { color: var(--text); font-weight: 620; }
+    .journal-empty { padding: 28px 18px; color: var(--subtle); font-size: 11px; text-align: center; }
+
+    .universe-panel { min-width: 0; }
+    .universe-copy { max-width: 560px; color: var(--subtle); font-size: 9px; line-height: 1.45; text-align: right; }
+    .universe-head-actions { display: flex; align-items: center; justify-content: flex-end; gap: 10px; min-width: 0; }
+    .universe-toggle {
+      min-height: 30px;
+      padding: 5px 10px;
+      border: 1px solid var(--line-strong);
+      border-radius: 8px;
+      background: rgba(7,10,16,.46);
+      color: var(--muted);
+      cursor: pointer;
+      font-size: 9px;
+      font-weight: 700;
+      white-space: nowrap;
+      transition: border-color .18s, color .18s, background .18s;
+    }
+    .universe-toggle:hover { border-color: rgba(167,139,250,.42); background: rgba(167,139,250,.09); color: #d8ccff; }
+    .universe-toggle:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+    .universe-symbol { display: inline-flex; align-items: center; gap: 7px; }
+    .inventory-chip { display: inline-flex; padding: 3px 6px; border: 1px solid rgba(50,211,153,.2); border-radius: 999px; background: var(--green-soft); color: #7ce7bd; font-size: 8px; font-weight: 750; letter-spacing: .035em; text-transform: uppercase; }
+    .evidence-chip { display: inline-flex; padding: 3px 6px; border: 1px solid rgba(251,191,36,.2); border-radius: 999px; background: rgba(251,191,36,.08); color: #f5d36c; font-size: 8px; font-weight: 700; }
+    .universe-rank { display: inline-grid; place-items: center; width: 20px; height: 20px; border: 1px solid var(--line); border-radius: 6px; background: rgba(7,10,16,.42); color: var(--subtle); font-size: 8px; font-variant-numeric: tabular-nums; }
+    .volatility-chip { display: inline-flex; min-width: 66px; justify-content: flex-end; padding: 4px 7px; border: 1px solid rgba(167,139,250,.2); border-radius: 999px; background: rgba(167,139,250,.09); color: #c4b5fd; font-weight: 650; font-variant-numeric: tabular-nums; }
+    .liquidity-value { color: var(--text); font-variant-numeric: tabular-nums; }
+    .venue-chip { display: inline-flex; min-width: 48px; justify-content: center; padding: 4px 7px; border-radius: 999px; background: var(--blue-soft); color: #9dc7ff; font-size: 9px; font-weight: 700; }
+    .universe-empty { padding: 32px 18px; color: var(--subtle); font-size: 11px; line-height: 1.5; text-align: center; }
+
+    .fee-breakdown { display: grid; gap: 3px; min-width: 126px; font-size: 9px; line-height: 1.25; }
+    .fee-leg { display: flex; justify-content: space-between; gap: 8px; }
+    .fee-leg span { overflow: hidden; max-width: 68px; color: var(--subtle); text-overflow: ellipsis; }
+    .fee-leg b { color: var(--muted); font-weight: 600; font-variant-numeric: tabular-nums; }
+    .fee-total { display: flex; justify-content: space-between; gap: 8px; padding-top: 3px; border-top: 1px solid var(--line); color: var(--text); font-weight: 650; font-variant-numeric: tabular-nums; }
+
+    .errors { border-color: rgba(251,113,133,.2); }
+    .error-list { display: grid; gap: 8px; padding: 13px 18px 16px; }
+    .error-item { display: grid; grid-template-columns: auto 1fr; gap: 9px; padding: 9px 10px; border-radius: 9px; background: var(--red-soft); color: #f6a2af; font-size: 10px; line-height: 1.45; }
+    .error-time { color: var(--muted); font-variant-numeric: tabular-nums; }
+
+    .skeleton { overflow: hidden; position: relative; border-radius: 6px; background: #202735; color: transparent !important; }
+    .skeleton::after { position: absolute; inset: 0; content: ""; background: linear-gradient(90deg, transparent, rgba(255,255,255,.045), transparent); animation: shimmer 1.4s infinite; transform: translateX(-100%); }
+    @keyframes shimmer { to { transform: translateX(100%); } }
+
+    .toast-region { position: fixed; right: 18px; bottom: 18px; z-index: 20; display: grid; gap: 8px; width: min(340px, calc(100vw - 36px)); }
+    .toast { padding: 11px 13px; border: 1px solid var(--line-strong); border-radius: 11px; background: #161c29; box-shadow: 0 18px 48px rgba(0,0,0,.38); color: var(--text); font-size: 11px; line-height: 1.45; animation: toast-in .2s ease-out; }
+    .toast.error { border-color: rgba(251,113,133,.35); }
+    @keyframes toast-in { from { opacity: 0; transform: translateY(8px); } }
+
+    .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
+
+    @media (max-width: 1120px) {
+      .control-grid { grid-template-columns: repeat(3, 1fr); }
+      .actions .btn-primary { flex: 1; }
+      .stats-grid { grid-template-columns: repeat(3, 1fr); }
+      .main-grid { grid-template-columns: 1fr; }
+      .side-stack { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+
+    @media (max-width: 760px) {
+      .shell { padding-top: 15px; }
+      .topbar, .hero { align-items: flex-start; flex-direction: column; }
+      .mode-strip { justify-content: flex-start; }
+      .hero { gap: 11px; }
+      .updated { text-align: left; }
+      .control-grid { grid-template-columns: 1fr 1fr; }
+      .actions { flex-wrap: wrap; }
+      .actions .btn { flex: 1 1 calc(50% - 4px); }
+      .actions .btn-ghost { flex: 0 0 43px; }
+      .stats-grid { grid-template-columns: 1fr 1fr; }
+      .side-stack { grid-template-columns: 1fr; }
+      .route { grid-template-columns: 1fr; }
+      .route-arrow { height: 32px; transform: rotate(90deg); }
+      .edge-grid { grid-template-columns: 1fr; }
+      .edge-item { border-right: 0; border-bottom: 1px solid var(--line); }
+      .edge-item:last-child { border-bottom: 0; }
+    }
+
+    @media (max-width: 440px) {
+      .brand-sub { display: none; }
+      .badge-no-key { display: none; }
+      .control-grid { grid-template-columns: 1fr; }
+      .field, .actions { grid-column: auto; }
+      .actions .btn { flex-basis: 100%; }
+      .actions .btn-ghost { flex-basis: 43px; }
+      .stats-grid { grid-template-columns: 1fr; }
+      .stat { min-height: 82px; }
+      .panel-head { align-items: flex-start; }
+      .universe-copy { display: none; }
+      .universe-head-actions { flex: 0 0 auto; }
+      .balance-row { grid-template-columns: 1fr; padding: 10px 0; }
+      .balance-assets { justify-content: flex-start; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+    }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true"></div>
+        <div>
+          <div class="brand-name">Arbitrage Lab</div>
+          <div class="brand-sub">VENUE-NEUTRAL RESEARCH TERMINAL</div>
+        </div>
+      </div>
+      <div class="mode-strip" aria-label="Режим терминала">
+        <a class="badge strategy-link" href="/triangular.html">Треугольный контур →</a>
+        <span class="badge badge-paper">● PAPER</span>
+        <span class="badge badge-public">Публичные данные</span>
+        <span class="badge badge-no-key"><span class="mini-lock" aria-hidden="true">◇</span> Без API-ключей</span>
+        <span class="connection" id="connectionState" role="status"><span class="connection-dot"></span><span id="connectionText">Подключение…</span></span>
+      </div>
+    </header>
+
+    <section class="hero" aria-labelledby="pageTitle">
+      <div>
+        <div class="eyebrow">Проверка гипотезы</div>
+        <h1 id="pageTitle">Межбиржевой арбитраж без привязки к площадке</h1>
+        <p class="hero-copy">Сравнение исполнимых цен, комиссий и виртуальных балансов всех подключённых venue. AUTO-universe отбирает до 50 общих USDT-пар по волатильности за 24 часа, но сохраняет фильтр ликвидности и доступности на нескольких площадках. Реальные ордера, переводы и приватные API здесь недоступны.</p>
+      </div>
+      <div class="updated">Последнее обновление<strong id="lastUpdated">ещё не получено</strong></div>
+    </section>
+
+    <section class="panel control-panel" aria-labelledby="controlsTitle">
+      <div class="panel-head">
+        <h2 class="panel-title" id="controlsTitle">Параметры сканирования</h2>
+        <span class="badge" id="monitorState">Монитор остановлен</span>
+      </div>
+      <form id="scanForm" class="control-grid">
+        <div class="field">
+          <label for="symbol">Инструмент</label>
+          <select id="symbol" name="symbol" aria-label="Торговый инструмент">
+            <option value="AUTO" selected>Авто: 50 волатильных ликвидных</option>
+            <option value="BTCUSDT">BTC / USDT</option>
+            <option value="ETHUSDT">ETH / USDT</option>
+            <option value="SOLUSDT">SOL / USDT</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="notional" id="notionalLabel">Лимит сделки, USDT</label>
+          <input id="notional" name="notional" type="number" min="10" max="500" step="5" value="25" inputmode="decimal" required>
+        </div>
+        <div class="field">
+          <label for="minEdge">Мин. net edge, bps</label>
+          <input id="minEdge" name="min_net_edge_bps" type="number" min="0" max="1000" step="0.1" value="5" inputmode="decimal" required>
+        </div>
+        <div class="field">
+          <label for="riskBuffer">Risk buffer, bps</label>
+          <input id="riskBuffer" name="risk_buffer_bps" type="number" min="0" max="1000" step="0.1" value="2" inputmode="decimal" required>
+        </div>
+        <div class="field">
+          <label for="intervalMs">Интервал монитора</label>
+          <select id="intervalMs" name="interval_ms" aria-label="Интервал PAPER-монитора">
+            <option value="1000">1 секунда</option>
+            <option value="2000" selected>2 секунды</option>
+            <option value="5000">5 секунд</option>
+            <option value="10000">10 секунд</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="autoExecute">Исполнение</label>
+          <label class="switch-wrap" for="autoExecute">
+            <span class="switch-copy"><strong>Auto-paper</strong><small>Только виртуальный журнал</small></span>
+            <span class="switch">
+              <input id="autoExecute" name="auto_execute" type="checkbox">
+              <span class="switch-track" aria-hidden="true"></span>
+            </span>
+          </label>
+        </div>
+        <div class="field auto-only" data-auto-control>
+          <label for="activationObservations">Сигналов для активации</label>
+          <input id="activationObservations" name="activation_observations" type="number" min="1" max="100" step="1" value="5" inputmode="numeric" required>
+        </div>
+        <div class="field auto-only" data-auto-control>
+          <label for="evidenceWindowMinutes">Окно сигналов и выход, мин</label>
+          <input id="evidenceWindowMinutes" name="evidence_window_minutes" type="number" min="1" max="1440" step="1" value="60" inputmode="numeric" required>
+        </div>
+        <div class="field auto-only" data-auto-control>
+          <label for="maxActiveSymbols">Активных токенов, макс.</label>
+          <input id="maxActiveSymbols" name="max_active_symbols" type="number" min="1" max="50" step="1" value="2" inputmode="numeric" required>
+        </div>
+        <div class="field auto-only" data-auto-control>
+          <label for="allocationPerSymbol">Лимит токена/venue, USDT</label>
+          <input id="allocationPerSymbol" name="allocation_per_symbol_venue_usdt" type="number" min="10" max="500" step="5" value="50" inputmode="decimal" required>
+        </div>
+        <div class="auto-budget" id="autoBudgetHint" role="status" aria-live="polite"></div>
+        <div class="actions">
+          <button class="btn btn-primary" id="scanButton" type="submit"><span id="scanButtonIcon">↗</span><span id="scanButtonText">Запустить скан</span></button>
+          <button class="btn btn-secondary" id="startButton" type="button"><span aria-hidden="true">▶</span><span>Старт монитора</span></button>
+          <button class="btn btn-stop" id="stopButton" type="button" disabled><span aria-hidden="true">■</span><span>Стоп монитора</span></button>
+          <button class="btn btn-ghost" id="resetButton" type="button" title="Сбросить виртуальный портфель" aria-label="Сбросить виртуальный портфель">↺</button>
+        </div>
+      </form>
+      <div class="paper-note"><span aria-hidden="true">△</span><span><strong>PAPER-режим:</strong> <span id="paperPolicyNote"></span> Расчёты используют публичные BBO-котировки; реальные средства не задействованы.</span></div>
+    </section>
+
+    <section class="stats-grid" aria-label="Сводные показатели">
+      <article class="panel stat">
+        <div class="stat-label">Paper P&amp;L</div>
+        <div class="stat-value" id="totalPnl">$0,00</div>
+        <div class="stat-detail" id="pnlDetail">весь портфель по bid</div>
+      </article>
+      <article class="panel stat">
+        <div class="stat-label">Сканирований</div>
+        <div class="stat-value" id="scanCount">0</div>
+        <div class="stat-detail">за текущую сессию</div>
+      </article>
+      <article class="panel stat">
+        <div class="stat-label">Universe пар</div>
+        <div class="stat-value" id="symbolCount">— <small>из 50</small></div>
+        <div class="stat-detail" id="symbolCoverage">сканировано — · оценено —</div>
+      </article>
+      <article class="panel stat">
+        <div class="stat-label">Paper-сделок</div>
+        <div class="stat-value" id="tradeCount">0</div>
+        <div class="stat-detail" id="winRate">win rate —</div>
+      </article>
+      <article class="panel stat">
+        <div class="stat-label">Активных venue</div>
+        <div class="stat-value" id="venueCount">— <small>из —</small></div>
+        <div class="stat-detail" id="venueLatency">медианная задержка —</div>
+      </article>
+    </section>
+
+    <div class="main-grid">
+      <div class="stack">
+        <section class="panel opportunity" aria-labelledby="opportunityTitle">
+          <div class="panel-head">
+            <h2 class="panel-title" id="opportunityTitle">Лучшая возможность</h2>
+            <span class="badge" id="opportunitySymbol">Ожидание</span>
+          </div>
+          <div id="opportunityEmpty" class="empty">
+            <div>
+              <div class="empty-icon" aria-hidden="true">⌁</div>
+              <h3>Запустите первый скан</h3>
+              <p>Движок сопоставит все направления venue → venue и покажет вариант с максимальным ожидаемым net P&amp;L после комиссий.</p>
+            </div>
+          </div>
+          <div id="opportunityBody" class="opportunity-body" hidden>
+            <div class="route">
+              <article class="route-leg buy">
+                <div class="leg-label"><span class="leg-dot"></span>Купить</div>
+                <div class="venue-name" id="buyVenue">—</div>
+                <div class="leg-price">Исполнимая цена<strong id="buyPrice">—</strong></div>
+              </article>
+              <div class="route-arrow" aria-hidden="true"><span>→</span></div>
+              <article class="route-leg sell">
+                <div class="leg-label"><span class="leg-dot"></span>Продать</div>
+                <div class="venue-name" id="sellVenue">—</div>
+                <div class="leg-price">Исполнимая цена<strong id="sellPrice">—</strong></div>
+              </article>
+            </div>
+            <div class="edge-grid">
+              <div class="edge-item"><span>Gross edge</span><strong id="grossEdge">—</strong></div>
+              <div class="edge-item"><span>Net edge</span><strong id="netEdge">—</strong></div>
+              <div class="edge-item"><span>Ожидаемый P&amp;L</span><strong id="expectedPnl">—</strong></div>
+            </div>
+            <div class="edge-meter">
+              <div class="meter-label"><span id="edgeThreshold">Порог: 5,0 bps</span><span id="opportunityMeta">—</span></div>
+              <div class="meter" aria-hidden="true"><div class="meter-fill" id="edgeMeter"></div></div>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel universe-panel" aria-labelledby="universeTitle">
+          <div class="panel-head">
+            <h2 class="panel-title" id="universeTitle">AUTO-universe: волатильные ликвидные пары</h2>
+            <div class="universe-head-actions">
+              <span class="universe-copy">Рейтинг учитывает абсолютное изменение за 24 часа, USDT-ликвидность и число venue</span>
+              <button class="universe-toggle" id="universeToggle" type="button" aria-expanded="false" aria-controls="universeTableWrap" hidden>Показать все</button>
+            </div>
+          </div>
+          <div class="table-wrap" id="universeTableWrap">
+            <table aria-describedby="universeTitle">
+              <thead><tr><th>Пара</th><th>Волатильность 24ч</th><th>Ликвидность</th><th>Доступность</th></tr></thead>
+              <tbody id="universeBody"><tr><td colspan="4" class="universe-empty">Universe появится после первого AUTO-сканирования</td></tr></tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="panel" aria-labelledby="journalTitle">
+          <div class="panel-head">
+            <h2 class="panel-title" id="journalTitle">Журнал PAPER-сделок</h2>
+            <span class="panel-note" id="journalCount">0 записей</span>
+          </div>
+          <div class="table-wrap">
+            <table aria-describedby="journalTitle">
+              <thead><tr><th>Время</th><th>Инструмент</th><th>Маршрут</th><th>Объём</th><th>Комиссии</th><th>Net edge</th><th>P&amp;L</th><th>Статус</th></tr></thead>
+              <tbody id="journalBody"><tr><td colspan="8" class="journal-empty">Виртуальных исполнений пока нет</td></tr></tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="panel errors" id="errorsPanel" aria-labelledby="errorsTitle" hidden>
+          <div class="panel-head">
+            <h2 class="panel-title" id="errorsTitle">Ошибки и предупреждения</h2>
+            <span class="panel-note" id="errorCount">0</span>
+          </div>
+          <div class="error-list" id="errorList"></div>
+        </section>
+      </div>
+
+      <div class="stack side-stack">
+        <section class="panel" aria-labelledby="venuesTitle">
+          <div class="panel-head">
+            <h2 class="panel-title" id="venuesTitle">Состояние venue</h2>
+            <span class="panel-note">Public market data</span>
+          </div>
+          <div class="venue-list" id="venueList">
+            <div class="venue-row"><span class="venue-id skeleton">Загрузка данных</span><span class="venue-latency skeleton">000 ms</span><span class="status-pill warn">ожидание</span></div>
+          </div>
+        </section>
+
+        <section class="panel" aria-labelledby="balancesTitle">
+          <div class="panel-head">
+            <h2 class="panel-title" id="balancesTitle">Виртуальные балансы</h2>
+            <span class="badge badge-paper">PAPER</span>
+          </div>
+          <div class="balance-list" id="balanceList">
+            <div class="journal-empty">Балансы появятся после ответа API</div>
+          </div>
+        </section>
+      </div>
+    </div>
+  </main>
+
+  <div class="toast-region" id="toastRegion" role="status" aria-live="polite"></div>
+
+  <script>
+    'use strict';
+
+    // Nginx serves UI and API on one origin. During the documented local
+    // two-process setup, the static server is on :8080 and FastAPI on :8000.
+    const LOCAL_STATIC_PORTS = new Set(['8080', '5500']);
+    const API_ORIGIN = location.protocol === 'file:' || LOCAL_STATIC_PORTS.has(location.port)
+      ? 'http://127.0.0.1:8000'
+      : '';
+    const API_ROOT = `${API_ORIGIN}/api/v1/arbitrage`;
+    const STATUS_ENDPOINT = `${API_ROOT}/status`; // '/api/v1/arbitrage/status'
+    const SCAN_ENDPOINT = `${API_ROOT}/scan`; // '/api/v1/arbitrage/scan'
+    const START_ENDPOINT = `${API_ROOT}/start`; // '/api/v1/arbitrage/start'
+    const STOP_ENDPOINT = `${API_ROOT}/stop`; // '/api/v1/arbitrage/stop'
+    const RESET_ENDPOINT = `${API_ROOT}/reset`; // '/api/v1/arbitrage/reset'
+    const POLL_INTERVAL_MS = 2000;
+    const AUTO_PAPER_BALANCE_USDT = 500;
+
+    const $ = (id) => document.getElementById(id);
+    const state = { pollInFlight: false, localScanInFlight: false, remoteScanning: false, monitorActionInFlight: false, running: false, initialLoad: true, settingsHydrated: false, universeExpanded: false, universe: [], activeSymbols: new Set(), candidateEvidence: new Map() };
+    const money = new Intl.NumberFormat('ru-RU', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 4 });
+    const compact = new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 4 });
+    const compactMoney = new Intl.NumberFormat('ru-RU', { style: 'currency', currency: 'USD', notation: 'compact', maximumFractionDigits: 2 });
+
+    function escapeHTML(value) {
+      return String(value ?? '').replace(/[&<>"']/g, (char) => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;'
+      })[char]);
+    }
+
+    function first(source, keys, fallback = null) {
+      if (!source || typeof source !== 'object') return fallback;
+      for (const key of keys) {
+        if (source[key] !== undefined && source[key] !== null) return source[key];
+      }
+      return fallback;
+    }
+
+    function finite(value, fallback = 0) {
+      const number = Number(value);
+      return Number.isFinite(number) ? number : fallback;
+    }
+
+    function toArray(value) {
+      if (Array.isArray(value)) return value;
+      if (value && typeof value === 'object') return Object.entries(value).map(([name, item]) => {
+        if (item && typeof item === 'object' && !Array.isArray(item)) return { name, ...item };
+        return { name, value: item };
+      });
+      return [];
+    }
+
+    function formatPrice(value) {
+      if (value === null || value === undefined || value === '') return '—';
+      const number = Number(value);
+      if (!Number.isFinite(number)) return '—';
+      const decimals = number >= 1000 ? 2 : number >= 1 ? 4 : 6;
+      return new Intl.NumberFormat('ru-RU', { minimumFractionDigits: 2, maximumFractionDigits: decimals }).format(number) + ' USDT';
+    }
+
+    function formatBps(value) {
+      if (value === null || value === undefined || value === '') return '—';
+      const number = Number(value);
+      return Number.isFinite(number) ? `${number > 0 ? '+' : ''}${compact.format(number)} bps` : '—';
+    }
+
+    function formatMoney(value) {
+      if (value === null || value === undefined || value === '') return '—';
+      const number = Number(value);
+      return Number.isFinite(number) ? money.format(number) : '—';
+    }
+
+    function formatLiquidity(value) {
+      if (value === null || value === undefined || value === '') return '—';
+      const number = Number(value);
+      return Number.isFinite(number) ? compactMoney.format(number) : '—';
+    }
+
+    function formatPercent(value) {
+      if (value === null || value === undefined || value === '') return '—';
+      const number = Number(value);
+      return Number.isFinite(number) ? `${compact.format(Math.abs(number))}%` : '—';
+    }
+
+    function formatTime(value, withDate = false) {
+      if (!value) return '—';
+      let date;
+      if (typeof value === 'number' || /^\d+$/.test(String(value))) {
+        const number = Number(value);
+        date = new Date(number < 1e12 ? number * 1000 : number);
+      } else date = new Date(value);
+      if (Number.isNaN(date.getTime())) return String(value);
+      return new Intl.DateTimeFormat('ru-RU', {
+        ...(withDate ? { day: '2-digit', month: '2-digit' } : {}),
+        hour: '2-digit', minute: '2-digit', second: '2-digit'
+      }).format(date);
+    }
+
+    function setConnection(kind, text) {
+      $('connectionState').className = `connection ${kind || ''}`;
+      $('connectionText').textContent = text;
+    }
+
+    function setSignedClass(element, value) {
+      element.classList.remove('positive', 'negative');
+      const number = Number(value);
+      if (Number.isFinite(number)) element.classList.add(number >= 0 ? 'positive' : 'negative');
+    }
+
+    function showToast(message, kind = '') {
+      const toast = document.createElement('div');
+      toast.className = `toast ${kind}`;
+      toast.textContent = message;
+      $('toastRegion').appendChild(toast);
+      window.setTimeout(() => toast.remove(), 4600);
+    }
+
+    async function requestJSON(url, options = {}) {
+      const controller = new AbortController();
+      const timeout = window.setTimeout(() => controller.abort(), 7500);
+      try {
+        const response = await fetch(url, {
+          ...options,
+          signal: controller.signal,
+          headers: { 'Accept': 'application/json', ...(options.body ? { 'Content-Type': 'application/json' } : {}), ...(options.headers || {}) }
+        });
+        const contentType = response.headers.get('content-type') || '';
+        const data = contentType.includes('application/json') ? await response.json() : null;
+        if (!response.ok) {
+          const detail = first(data, ['detail', 'message', 'error'], `${response.status} ${response.statusText}`);
+          throw new Error(typeof detail === 'string' ? detail : JSON.stringify(detail));
+        }
+        return data || {};
+      } finally {
+        window.clearTimeout(timeout);
+      }
+    }
+
+    function normalizeOpportunity(data) {
+      const best = first(data, ['best_opportunity', 'opportunity', 'best'], null);
+      if (best && typeof best === 'object') return best;
+      const opportunities = toArray(first(data, ['opportunities', 'candidates'], []));
+      return opportunities[0] || null;
+    }
+
+    function opportunityEdgeBps(opportunity, bpsKeys, ratioKeys) {
+      const bps = first(opportunity, bpsKeys, null);
+      if (bps !== null) return bps;
+      const ratio = first(opportunity, ratioKeys, null);
+      return ratio === null ? null : finite(ratio) * 10000;
+    }
+
+    function normalizeUniverse(data) {
+      const raw = first(data, ['universe', 'symbol_universe', 'symbols'], []);
+      let entries;
+      if (Array.isArray(raw)) entries = raw;
+      else if (raw && typeof raw === 'object' && Array.isArray(raw.items)) entries = raw.items;
+      else if (raw && typeof raw === 'object' && Array.isArray(raw.symbols)) entries = raw.symbols;
+      else if (raw && typeof raw === 'object') {
+        entries = Object.entries(raw).map(([symbol, stats]) => (
+          stats && typeof stats === 'object' && !Array.isArray(stats)
+            ? { symbol, ...stats }
+            : { symbol, value: stats }
+        ));
+      } else entries = [];
+      return entries.slice(0, 50).map((entry) => typeof entry === 'string' ? { symbol: entry } : entry);
+    }
+
+    function renderStats(data, venues, journal, universe) {
+      const metrics = first(data, ['metrics', 'stats', 'summary'], {});
+      const strategyPnl = first(metrics, ['strategy_pnl_usdt'], first(data, ['strategy_pnl_usdt'], null));
+      const pnl = finite(strategyPnl === null ? first(metrics, ['realized_pnl', 'realized_pnl_usdt', 'total_pnl_usdt', 'paper_pnl_usdt'], first(data, ['realized_pnl', 'realized_pnl_usdt', 'paper_pnl_usdt'], 0)) : strategyPnl);
+      const scans = finite(first(metrics, ['scan_count', 'scans'], first(data, ['scan_count'], 0)));
+      const trades = finite(first(metrics, ['trade_count', 'executions'], journal.length));
+      const wins = finite(first(metrics, ['winning_trades', 'wins'], journal.filter((item) => finite(first(item, ['pnl_usdt', 'expected_pnl_usdt', 'pnl'], 0)) > 0).length));
+      const selected = finite(first(metrics, ['symbol_count', 'selected_symbol_count'], universe.length), universe.length);
+      const scanned = finite(first(metrics, ['scanned_symbol_count', 'symbols_scanned', 'candidate_symbol_count'], selected), selected);
+      const evaluated = finite(first(metrics, ['evaluated_symbol_count', 'symbols_evaluated', 'evaluated_count'], selected), selected);
+      const healthy = venues.filter((venue) => venueHealthy(venue)).length;
+      const latencies = venues.map((venue) => finite(first(venue, ['latency_ms', 'latency', 'age_ms'], NaN), NaN)).filter(Number.isFinite).sort((a, b) => a - b);
+      const median = latencies.length ? latencies[Math.floor(latencies.length / 2)] : null;
+
+      $('totalPnl').textContent = formatMoney(pnl);
+      setSignedClass($('totalPnl'), pnl);
+      $('scanCount').textContent = compact.format(scans);
+      $('tradeCount').textContent = compact.format(trades);
+      $('winRate').textContent = trades ? `win rate ${compact.format((wins / trades) * 100)}%` : 'win rate —';
+      $('symbolCount').innerHTML = `${escapeHTML(compact.format(selected))} <small>из 50</small>`;
+      $('symbolCoverage').textContent = `сканировано ${compact.format(scanned)} · оценено ${compact.format(evaluated)}`;
+      $('venueCount').innerHTML = `${escapeHTML(healthy)} <small>из ${escapeHTML(venues.length)}</small>`;
+      $('venueLatency').textContent = median === null ? 'медианная задержка —' : `медианная задержка ${compact.format(median)} ms`;
+    }
+
+    function normalizeActiveSymbols(data) {
+      const inventory = first(data, ['active_inventory'], []);
+      const raw = Array.isArray(inventory)
+        ? inventory
+        : first(inventory, ['active_symbols', 'items'], first(data, ['active_symbols'], []));
+      const entries = Array.isArray(raw) ? raw : raw && typeof raw === 'object' ? Object.keys(raw) : [];
+      return new Set(entries.map((item) => String(typeof item === 'object' ? first(item, ['symbol', 'instrument', 'pair'], '') : item).toUpperCase()).filter(Boolean));
+    }
+
+    function normalizeCandidateEvidence(data) {
+      const rows = toArray(first(data, ['candidate_evidence', 'signal_evidence'], []));
+      return new Map(rows.map((item) => [String(first(item, ['symbol', 'instrument', 'pair'], '')).toUpperCase(), item]).filter(([symbol]) => symbol));
+    }
+
+    function renderUniverse(universe, activeSymbols = state.activeSymbols, candidateEvidence = state.candidateEvidence) {
+      state.universe = universe;
+      state.activeSymbols = activeSymbols;
+      state.candidateEvidence = candidateEvidence;
+      const toggle = $('universeToggle');
+      const hasMore = universe.length > 5;
+      toggle.hidden = !hasMore;
+      toggle.setAttribute('aria-expanded', String(state.universeExpanded));
+      toggle.textContent = state.universeExpanded ? 'Свернуть до 5' : `Показать все (${universe.length})`;
+      if (!universe.length) {
+        $('universeBody').innerHTML = '<tr><td colspan="4" class="universe-empty">Universe появится после первого AUTO-сканирования</td></tr>';
+        return;
+      }
+      const visibleUniverse = state.universeExpanded ? universe : universe.slice(0, 5);
+      $('universeBody').innerHTML = visibleUniverse.map((item, index) => {
+        const symbol = first(item, ['symbol', 'instrument', 'pair'], '—');
+        const normalizedSymbol = String(symbol).toUpperCase();
+        const active = activeSymbols.has(normalizedSymbol);
+        const evidence = candidateEvidence.get(normalizedSymbol) || {};
+        const observations = finite(first(evidence, ['qualifying_observations', 'observations'], 0));
+        const required = finite(first(evidence, ['required_observations', 'required'], 5), 5);
+        const evidenceChip = observations > 0 && !active ? `<span class="evidence-chip" title="Независимые положительные BBO-снимки">сигналы ${escapeHTML(observations)}/${escapeHTML(required)}</span>` : '';
+        const volatility = first(item, ['volatility_24h_pct', 'volatility_pct', 'range_24h_pct'], null);
+        const liquidity = first(item, ['liquidity_usdt', 'quote_volume_usdt', 'volume_24h_usdt', 'min_liquidity_usdt'], null);
+        const venues = first(item, ['venues', 'exchanges'], []);
+        const venueCount = finite(first(item, ['venue_count', 'exchange_count'], Array.isArray(venues) ? venues.length : 0));
+        const venueTitle = Array.isArray(venues) && venues.length ? venues.join(', ') : `${venueCount} venue`;
+        return `<tr>
+          <td><span class="universe-symbol"><span class="universe-rank">${index + 1}</span><strong>${escapeHTML(symbol)}</strong>${active ? '<span class="inventory-chip">активна</span>' : evidenceChip}</span></td>
+          <td><span class="volatility-chip">${escapeHTML(formatPercent(volatility))}</span></td>
+          <td><span class="liquidity-value">${escapeHTML(formatLiquidity(liquidity))}</span></td>
+          <td><span class="venue-chip" title="${escapeHTML(venueTitle)}">${escapeHTML(venueCount || '—')} venue</span></td>
+        </tr>`;
+      }).join('');
+    }
+
+    function venueHealthy(venue) {
+      const raw = first(venue, ['healthy', 'online', 'connected', 'ok', 'status'], false);
+      if (typeof raw === 'string') return ['ok', 'healthy', 'online', 'connected', 'up', 'ready'].includes(raw.toLowerCase());
+      return Boolean(raw);
+    }
+
+    function renderVenues(venues) {
+      if (!venues.length) {
+        $('venueList').innerHTML = '<div class="journal-empty">Нет подключённых источников</div>';
+        return;
+      }
+      $('venueList').innerHTML = venues.map((venue) => {
+        const name = first(venue, ['name', 'venue', 'exchange', 'id'], 'Неизвестно');
+        const rawStatus = first(venue, ['status'], '');
+        const healthy = venueHealthy(venue);
+        const degraded = !healthy && ['stale', 'degraded', 'warning', 'connecting'].includes(String(rawStatus).toLowerCase());
+        const statusClass = healthy ? '' : degraded ? 'warn' : 'down';
+        const statusText = healthy ? 'online' : degraded ? 'задержка' : 'offline';
+        const latency = first(venue, ['latency_ms', 'latency', 'age_ms'], null);
+        const selected = first(venue, ['selected_ticker_count', 'selected_symbol_count'], null);
+        const latencyText = latency === null ? '—' : `${compact.format(finite(latency))} ms`;
+        return `<div class="venue-row">
+          <span class="venue-id" title="${escapeHTML(name)}">${escapeHTML(name)}</span>
+          <span class="venue-latency">${selected === null ? '' : `${escapeHTML(compact.format(finite(selected)))} пар · `}${escapeHTML(latencyText)}</span>
+          <span class="status-pill ${statusClass}">${statusText}</span>
+        </div>`;
+      }).join('');
+    }
+
+    function normalizeBalances(rawBalances) {
+      if (Array.isArray(rawBalances)) return rawBalances;
+      if (!rawBalances || typeof rawBalances !== 'object') return [];
+      return Object.entries(rawBalances).map(([venue, balances]) => ({ venue, balances }));
+    }
+
+    function extractAssets(row) {
+      const nested = first(row, ['balances', 'assets', 'wallet'], null);
+      if (nested && typeof nested === 'object' && !Array.isArray(nested)) return Object.entries(nested).map(([asset, amount]) => ({ asset, amount: typeof amount === 'object' ? first(amount, ['available', 'free', 'total'], 0) : amount }));
+      if (Array.isArray(nested)) return nested.map((item) => ({ asset: first(item, ['asset', 'currency', 'symbol'], '—'), amount: first(item, ['available', 'free', 'total', 'balance'], 0) }));
+      const ignored = new Set(['venue', 'name', 'exchange', 'id']);
+      return Object.entries(row).filter(([key, value]) => !ignored.has(key) && (typeof value === 'number' || !Number.isNaN(Number(value)))).map(([asset, amount]) => ({ asset, amount }));
+    }
+
+    function renderBalances(rawBalances) {
+      const balances = normalizeBalances(rawBalances);
+      if (!balances.length) {
+        $('balanceList').innerHTML = '<div class="journal-empty">Виртуальные балансы пока недоступны</div>';
+        return;
+      }
+      $('balanceList').innerHTML = balances.map((row) => {
+        const venue = first(row, ['venue', 'name', 'exchange', 'id'], 'Venue');
+        const assets = extractAssets(row);
+        const ordered = assets.slice().sort((left, right) => String(left.asset).toUpperCase() === 'USDT' ? -1 : String(right.asset).toUpperCase() === 'USDT' ? 1 : String(left.asset).localeCompare(String(right.asset)));
+        const visible = ordered.slice(0, 12);
+        const more = ordered.length - visible.length;
+        const assetsHTML = visible.length ? visible.map(({ asset, amount }) => `<span class="asset"><strong>${escapeHTML(compact.format(finite(amount)))}</strong><span>${escapeHTML(String(asset).toUpperCase())}</span></span>`).join('') + (more > 0 ? `<span class="asset"><strong>+${more}</strong><span>активов</span></span>` : '') : '<span class="asset">—</span>';
+        return `<div class="balance-row"><span class="balance-venue">${escapeHTML(venue)}</span><span class="balance-assets">${assetsHTML}</span></div>`;
+      }).join('');
+    }
+
+    function renderOpportunity(opportunity) {
+      if (!opportunity || typeof opportunity !== 'object') {
+        $('opportunityBody').hidden = true;
+        $('opportunityEmpty').hidden = false;
+        $('opportunitySymbol').textContent = 'Нет сигнала';
+        return;
+      }
+      const buyVenue = first(opportunity, ['buy_venue', 'buy_exchange', 'buyVenue'], '—');
+      const sellVenue = first(opportunity, ['sell_venue', 'sell_exchange', 'sellVenue'], '—');
+      const buyPrice = first(opportunity, ['executable_buy_price', 'buy_vwap', 'buy_price', 'ask'], null);
+      const sellPrice = first(opportunity, ['executable_sell_price', 'sell_vwap', 'sell_price', 'bid'], null);
+      const gross = opportunityEdgeBps(opportunity, ['gross_edge_bps', 'gross_bps', 'gross_spread_bps'], ['gross_edge']);
+      const net = opportunityEdgeBps(opportunity, ['net_edge_bps', 'net_bps', 'net_spread_bps'], ['net_edge']);
+      const pnl = first(opportunity, ['expected_pnl_usdt', 'expected_pnl', 'pnl_usdt', 'net_profit', 'expected_net_profit'], null);
+      const symbol = first(opportunity, ['symbol', 'instrument'], $('symbol').value);
+      const notional = first(opportunity, ['notional_usdt', 'notional', 'size_usdt', 'buy_notional'], Number($('notional').value));
+      const quantity = first(opportunity, ['quantity', 'qty', 'size'], null);
+      const threshold = finite($('minEdge').value, 0);
+      const netNumber = finite(net, 0);
+
+      $('opportunityEmpty').hidden = true;
+      $('opportunityBody').hidden = false;
+      $('opportunitySymbol').textContent = symbol;
+      $('buyVenue').textContent = buyVenue;
+      $('sellVenue').textContent = sellVenue;
+      $('buyPrice').textContent = formatPrice(buyPrice);
+      $('sellPrice').textContent = formatPrice(sellPrice);
+      $('grossEdge').textContent = formatBps(gross);
+      $('netEdge').textContent = formatBps(net);
+      $('expectedPnl').textContent = formatMoney(pnl);
+      setSignedClass($('grossEdge'), gross);
+      setSignedClass($('netEdge'), net);
+      setSignedClass($('expectedPnl'), pnl);
+      $('edgeThreshold').textContent = `Порог: ${compact.format(threshold)} bps`;
+      $('opportunityMeta').textContent = `${formatMoney(notional)}${quantity === null ? '' : ` · ${compact.format(finite(quantity))} ${String(symbol).replace(/USDT$/i, '')}`}`;
+      $('edgeMeter').style.width = `${Math.max(0, Math.min(100, threshold > 0 ? (netNumber / threshold) * 72 : netNumber > 0 ? 100 : 0))}%`;
+    }
+
+    function normalizeJournal(data) {
+      return toArray(first(data, ['journal', 'trades', 'executions', 'paper_trades'], []));
+    }
+
+    function renderJournal(journal) {
+      $('journalCount').textContent = `${journal.length} ${journal.length === 1 ? 'запись' : 'записей'}`;
+      if (!journal.length) {
+        $('journalBody').innerHTML = '<tr><td colspan="8" class="journal-empty">Виртуальных исполнений пока нет</td></tr>';
+        return;
+      }
+      $('journalBody').innerHTML = journal.slice().reverse().slice(0, 50).map((item) => {
+        const buyLeg = first(item, ['buy_leg'], {});
+        const sellLeg = first(item, ['sell_leg'], {});
+        const buy = first(item, ['buy_venue', 'buy_exchange', 'buyVenue'], first(buyLeg, ['venue', 'exchange'], '—'));
+        const sell = first(item, ['sell_venue', 'sell_exchange', 'sellVenue'], first(sellLeg, ['venue', 'exchange'], '—'));
+        const buyFee = first(item, ['buy_fee_usdt'], first(buyLeg, ['fee_usdt', 'fee'], null));
+        const sellFee = first(item, ['sell_fee_usdt'], first(sellLeg, ['fee_usdt', 'fee'], null));
+        const buyFeeBps = first(item, ['buy_fee_rate_bps'], first(buyLeg, ['fee_rate_bps'], null));
+        const sellFeeBps = first(item, ['sell_fee_rate_bps'], first(sellLeg, ['fee_rate_bps'], null));
+        const computedTotalFee = buyFee === null && sellFee === null ? null : finite(buyFee) + finite(sellFee);
+        const totalFee = first(item, ['total_fee_usdt'], computedTotalFee);
+        const pnl = first(item, ['pnl_usdt', 'realized_pnl_usdt', 'realized_pnl', 'expected_pnl_usdt', 'expected_net_profit', 'pnl'], null);
+        const directEdge = first(item, ['net_edge_bps', 'net_bps'], null);
+        const legNotional = first(buyLeg, ['notional'], null);
+        const edge = directEdge !== null ? directEdge : (legNotional !== null && finite(legNotional) !== 0 ? finite(pnl) / finite(legNotional) * 10000 : null);
+        const notional = first(item, ['notional_usdt', 'notional', 'size_usdt'], legNotional);
+        const status = first(item, ['status', 'result'], 'paper');
+        return `<tr>
+          <td>${escapeHTML(formatTime(first(item, ['timestamp', 'timestamp_ms', 'created_at', 'executed_at', 'ts'], null), true))}</td>
+          <td><strong>${escapeHTML(first(item, ['symbol', 'instrument'], '—'))}</strong></td>
+          <td>${escapeHTML(buy)} → ${escapeHTML(sell)}</td>
+          <td>${escapeHTML(formatMoney(notional))}</td>
+          <td><div class="fee-breakdown">
+            <div class="fee-leg"><span title="${escapeHTML(buy)}">${escapeHTML(buy)}${buyFeeBps === null ? '' : ` · ${escapeHTML(compact.format(finite(buyFeeBps)))} bps`}</span><b>${escapeHTML(formatMoney(buyFee))}</b></div>
+            <div class="fee-leg"><span title="${escapeHTML(sell)}">${escapeHTML(sell)}${sellFeeBps === null ? '' : ` · ${escapeHTML(compact.format(finite(sellFeeBps)))} bps`}</span><b>${escapeHTML(formatMoney(sellFee))}</b></div>
+            <div class="fee-total"><span>Итого</span><b>${escapeHTML(formatMoney(totalFee))}</b></div>
+          </div></td>
+          <td class="${finite(edge) >= 0 ? 'positive' : 'negative'}">${escapeHTML(formatBps(edge))}</td>
+          <td class="${finite(pnl) >= 0 ? 'positive' : 'negative'}">${escapeHTML(formatMoney(pnl))}</td>
+          <td>${escapeHTML(status)}</td>
+        </tr>`;
+      }).join('');
+    }
+
+    function normalizeErrors(data) {
+      const raw = first(data, ['errors', 'warnings'], []);
+      return toArray(raw);
+    }
+
+    function renderErrors(errors) {
+      $('errorsPanel').hidden = !errors.length;
+      $('errorCount').textContent = String(errors.length);
+      $('errorList').innerHTML = errors.map((error) => {
+        const rawMessage = typeof error === 'string' ? error : first(error, ['message', 'detail', 'error', 'value'], JSON.stringify(error));
+        const source = typeof error === 'object' ? first(error, ['venue', 'exchange', 'name'], null) : null;
+        const message = source ? `${source}: ${rawMessage}` : rawMessage;
+        const timestamp = typeof error === 'object' ? first(error, ['timestamp', 'ts', 'created_at'], null) : null;
+        return `<div class="error-item"><span class="error-time">${escapeHTML(timestamp ? formatTime(timestamp) : '!')}</span><span>${escapeHTML(message)}</span></div>`;
+      }).join('');
+    }
+
+    function setMonitorState(running) {
+      state.running = Boolean(running);
+      $('monitorState').textContent = state.running ? '● Монитор работает' : 'Монитор остановлен';
+      $('monitorState').className = state.running ? 'badge badge-public' : 'badge';
+      $('startButton').disabled = state.running || state.monitorActionInFlight;
+      $('stopButton').disabled = !state.running || state.monitorActionInFlight;
+      syncControlAvailability();
+      updateScanLoading();
+    }
+
+    function syncControlAvailability() {
+      const auto = $('symbol').value === 'AUTO';
+      const locked = state.running || state.monitorActionInFlight;
+      ['symbol', 'notional', 'minEdge', 'riskBuffer', 'intervalMs', 'autoExecute'].forEach((id) => {
+        $(id).disabled = locked;
+      });
+      document.querySelectorAll('[data-auto-control]').forEach((field) => {
+        field.hidden = !auto;
+        field.classList.toggle('auto-inactive', !auto);
+        const input = field.querySelector('input');
+        if (input) input.disabled = locked || !auto;
+      });
+    }
+
+    function updatePaperPolicyNote() {
+      const auto = $('symbol').value === 'AUTO';
+      if (!auto) {
+        $('paperPolicyNote').textContent = `ручной инструмент с объёмом сделки ${compact.format(finite($('notional').value))} USDT; AUTO-параметры отключены.`;
+        return;
+      }
+      const active = compact.format(finite($('maxActiveSymbols').value));
+      const allocation = compact.format(finite($('allocationPerSymbol').value));
+      const notional = compact.format(finite($('notional').value));
+      const observations = compact.format(finite($('activationObservations').value));
+      const minutes = compact.format(finite($('evidenceWindowMinutes').value));
+      $('paperPolicyNote').textContent = `500 USDT на venue; до ${active} активных токенов с лимитом ${allocation} USDT на токен/venue; лимит сделки ${notional} USDT. Активация: ${observations} сигналов за ${minutes} мин; выход — после ${minutes} мин без сигнала.`;
+    }
+
+    function validateAutoBudget({ report = false } = {}) {
+      const auto = $('symbol').value === 'AUTO';
+      const hint = $('autoBudgetHint');
+      const notionalInput = $('notional');
+      const activeInput = $('maxActiveSymbols');
+      const allocationInput = $('allocationPerSymbol');
+      allocationInput.setCustomValidity('');
+      hint.hidden = !auto;
+      updatePaperPolicyNote();
+      if (!auto) {
+        hint.classList.remove('invalid');
+        hint.textContent = '';
+        return true;
+      }
+
+      const notional = finite(notionalInput.value);
+      const maxActive = finite(activeInput.value);
+      const allocation = finite(allocationInput.value);
+      const required = maxActive * allocation + notional;
+      const allocationCoversTrade = allocation >= notional;
+      const valid = allocationCoversTrade && required <= AUTO_PAPER_BALANCE_USDT;
+      if (valid) {
+        hint.classList.remove('invalid');
+        hint.textContent = `AUTO-бюджет на биржу: ${compact.format(maxActive)} × ${compact.format(allocation)} + ${compact.format(notional)} = ${compact.format(required)} из ${AUTO_PAPER_BALANCE_USDT} USDT; свободный резерв ${compact.format(AUTO_PAPER_BALANCE_USDT - required)} USDT.`;
+      } else {
+        const message = allocationCoversTrade
+          ? `AUTO-бюджет превышен: ${compact.format(maxActive)} × ${compact.format(allocation)} + ${compact.format(notional)} = ${compact.format(required)} USDT, доступно ${AUTO_PAPER_BALANCE_USDT} USDT на биржу. Уменьшите количество токенов, лимит токена или сумму сделки.`
+          : `Лимит токена на биржу (${compact.format(allocation)} USDT) не может быть меньше суммы одной сделки (${compact.format(notional)} USDT).`;
+        hint.classList.add('invalid');
+        hint.textContent = message;
+        allocationInput.setCustomValidity(message);
+        if (report) allocationInput.reportValidity();
+      }
+      return valid;
+    }
+
+    function syncSettingsFromStatus(data) {
+      const settings = first(data, ['settings'], null);
+      const running = Boolean(first(data, ['running'], false));
+      if (!settings || typeof settings !== 'object' || (state.settingsHydrated && !running)) return;
+      const assign = (id, key) => {
+        const value = first(settings, [key], null);
+        if (value !== null && value !== undefined) $(id).value = value;
+      };
+      const symbol = first(settings, ['symbol'], null);
+      if (symbol !== null && [...$('symbol').options].some((option) => option.value === symbol)) $('symbol').value = symbol;
+      assign('notional', 'notional');
+      assign('minEdge', 'min_net_edge_bps');
+      assign('riskBuffer', 'risk_buffer_bps');
+      assign('intervalMs', 'interval_ms');
+      assign('activationObservations', 'activation_observations');
+      assign('evidenceWindowMinutes', 'evidence_window_minutes');
+      assign('maxActiveSymbols', 'max_active_symbols');
+      assign('allocationPerSymbol', 'allocation_per_symbol_venue_usdt');
+      const autoExecute = first(settings, ['auto_execute'], null);
+      if (autoExecute !== null) $('autoExecute').checked = Boolean(autoExecute);
+      state.settingsHydrated = true;
+      syncSymbolMode();
+    }
+
+    function renderStatus(rawData) {
+      const data = first(rawData, ['status'], rawData) || {};
+      syncSettingsFromStatus(data);
+      const venues = toArray(first(data, ['venues', 'venue_health', 'exchanges'], []));
+      const universe = normalizeUniverse(data);
+      const journal = normalizeJournal(data);
+      renderVenues(venues);
+      renderUniverse(universe, normalizeActiveSymbols(data), normalizeCandidateEvidence(data));
+      renderBalances(first(data, ['balances', 'virtual_balances', 'paper_balances'], []));
+      renderOpportunity(normalizeOpportunity(data));
+      renderJournal(journal);
+      renderErrors(normalizeErrors(data));
+      renderStats(data, venues, journal, universe);
+      setMonitorState(first(data, ['running'], false));
+      state.remoteScanning = Boolean(first(data, ['scanning'], false));
+      updateScanLoading();
+      const updated = first(data, ['updated_at', 'timestamp', 'last_updated', 'last_scan_ms', 'ts'], Date.now());
+      $('lastUpdated').textContent = formatTime(updated);
+    }
+
+    async function refreshStatus({ quiet = true } = {}) {
+      if (state.pollInFlight) return;
+      state.pollInFlight = true;
+      try {
+        const data = await requestJSON(STATUS_ENDPOINT);
+        renderStatus(data);
+        setConnection('online', 'API online');
+        state.initialLoad = false;
+      } catch (error) {
+        setConnection('error', 'API недоступен');
+        $('lastUpdated').textContent = 'ошибка соединения';
+        if (!quiet || state.initialLoad) showToast(`Не удалось получить статус: ${error.message}`, 'error');
+        state.initialLoad = false;
+      } finally {
+        state.pollInFlight = false;
+      }
+    }
+
+    function updateScanLoading() {
+      const loading = state.localScanInFlight || state.remoteScanning;
+      $('scanButton').disabled = loading || state.running;
+      $('scanButtonIcon').innerHTML = loading ? '<span class="spinner" aria-hidden="true"></span>' : '↗';
+      $('scanButtonText').textContent = loading ? 'Сканирование…' : 'Запустить скан';
+    }
+
+    function currentPayload() {
+      const symbol = $('symbol').value;
+      return {
+        symbol,
+        ...(symbol === 'AUTO' ? {
+          max_symbols: 50,
+          activation_observations: Math.trunc(finite($('activationObservations').value)),
+          evidence_window_minutes: Math.trunc(finite($('evidenceWindowMinutes').value)),
+          max_active_symbols: Math.trunc(finite($('maxActiveSymbols').value)),
+          allocation_per_symbol_venue_usdt: finite($('allocationPerSymbol').value)
+        } : {}),
+        notional: finite($('notional').value),
+        min_net_edge_bps: finite($('minEdge').value),
+        risk_buffer_bps: finite($('riskBuffer').value),
+        auto_execute: $('autoExecute').checked
+      };
+    }
+
+    $('scanForm').addEventListener('submit', async (event) => {
+      event.preventDefault();
+      if (state.localScanInFlight || state.remoteScanning || state.running) return;
+      if (!validateAutoBudget({ report: true })) {
+        showToast('Проверьте AUTO-бюджет: на каждой бирже доступно 500 USDT.', 'error');
+        return;
+      }
+      const payload = currentPayload();
+      state.localScanInFlight = true;
+      updateScanLoading();
+      try {
+        const result = await requestJSON(SCAN_ENDPOINT, { method: 'POST', body: JSON.stringify(payload) });
+        renderStatus(result && Object.keys(result).length ? result : await requestJSON(STATUS_ENDPOINT));
+        setConnection('online', 'API online');
+        showToast(payload.auto_execute ? 'Скан завершён: PAPER-исполнение обработано' : 'Сканирование завершено');
+      } catch (error) {
+        showToast(`Скан не выполнен: ${error.message}`, 'error');
+      } finally {
+        state.localScanInFlight = false;
+        updateScanLoading();
+      }
+    });
+
+    async function changeMonitor(action) {
+      if (state.monitorActionInFlight) return;
+      const starting = action === 'start';
+      if (starting) {
+        validateAutoBudget();
+        if (!$('scanForm').reportValidity()) {
+          showToast('Проверьте параметры AUTO перед запуском монитора.', 'error');
+          return;
+        }
+      }
+      state.monitorActionInFlight = true;
+      setMonitorState(state.running);
+      try {
+        const payload = starting ? { ...currentPayload(), interval_ms: finite($('intervalMs').value, 2000) } : {};
+        const result = await requestJSON(starting ? START_ENDPOINT : STOP_ENDPOINT, { method: 'POST', body: JSON.stringify(payload) });
+        renderStatus(result);
+        showToast(starting ? 'Непрерывный PAPER-монитор запущен' : 'PAPER-монитор остановлен');
+      } catch (error) {
+        showToast(`Монитор: ${error.message}`, 'error');
+      } finally {
+        state.monitorActionInFlight = false;
+        setMonitorState(state.running);
+      }
+    }
+
+    $('startButton').addEventListener('click', () => changeMonitor('start'));
+    $('stopButton').addEventListener('click', () => changeMonitor('stop'));
+
+    $('resetButton').addEventListener('click', async () => {
+      if (!window.confirm('Сбросить виртуальные балансы, P&L и журнал PAPER-сделок?')) return;
+      $('resetButton').disabled = true;
+      try {
+        const result = await requestJSON(RESET_ENDPOINT, { method: 'POST', body: JSON.stringify({}) });
+        renderStatus(result && Object.keys(result).length ? result : await requestJSON(STATUS_ENDPOINT));
+        showToast('Виртуальный портфель сброшен');
+      } catch (error) {
+        showToast(`Сброс не выполнен: ${error.message}`, 'error');
+      } finally {
+        $('resetButton').disabled = false;
+      }
+    });
+
+    $('minEdge').addEventListener('input', () => {
+      $('edgeThreshold').textContent = `Порог: ${compact.format(finite($('minEdge').value))} bps`;
+    });
+
+    function syncSymbolMode() {
+      const auto = $('symbol').value === 'AUTO';
+      const oneSecond = $('intervalMs').querySelector('option[value="1000"]');
+      const notional = $('notional');
+      if (oneSecond) oneSecond.disabled = auto;
+      if (auto && finite($('intervalMs').value) < 2000) $('intervalMs').value = '2000';
+      notional.min = auto ? '10' : '1';
+      notional.max = auto ? '500' : '1000000';
+      $('notionalLabel').textContent = auto ? 'Лимит сделки, USDT' : 'Объём, USDT';
+      syncControlAvailability();
+      validateAutoBudget();
+    }
+
+    $('symbol').addEventListener('change', syncSymbolMode);
+    ['notional', 'activationObservations', 'evidenceWindowMinutes', 'maxActiveSymbols', 'allocationPerSymbol'].forEach((id) => {
+      $(id).addEventListener('input', () => validateAutoBudget());
+    });
+    syncSymbolMode();
+
+    $('universeToggle').addEventListener('click', () => {
+      state.universeExpanded = !state.universeExpanded;
+      renderUniverse(state.universe);
+    });
+
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden) refreshStatus({ quiet: true });
+    });
+
+    refreshStatus({ quiet: false });
+    window.setInterval(() => refreshStatus({ quiet: true }), POLL_INTERVAL_MS);
+  </script>
+</body>
+</html>

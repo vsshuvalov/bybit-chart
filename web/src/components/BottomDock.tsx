@@ -9,12 +9,15 @@
  */
 
 import { useUIStore } from '../store'
+import DeltaPanel from './DeltaPanel'
+import CVDPanel from './CVDPanel'
 
 export default function BottomDock() {
   const { bottomDockTab, setBottomDockTab } = useUIStore()
 
   const tabs = [
-    { id: 'delta', label: 'Delta / CVD' },
+    { id: 'delta', label: 'Delta' },
+    { id: 'cvd', label: 'CVD' },
     { id: 'oi', label: 'OI / Funding' },
     { id: 'strategy', label: 'Strategy Log' },
     { id: 'replay', label: 'Replay' },
@@ -27,7 +30,7 @@ export default function BottomDock() {
           <button
             key={tab.id}
             className={`dock-tab ${bottomDockTab === tab.id ? 'active' : ''}`}
-            onClick={() => setBottomDockTab(tab.id)}
+            onClick={() => setBottomDockTab(tab.id as any)}
           >
             {tab.label}
           </button>
@@ -35,7 +38,8 @@ export default function BottomDock() {
       </div>
 
       <div className="dock-content">
-        {bottomDockTab === 'delta' && <DeltaCVDPanel />}
+        {bottomDockTab === 'delta' && <DeltaPanel />}
+        {bottomDockTab === 'cvd' && <CVDPanel />}
         {bottomDockTab === 'oi' && <OIFundingPanel />}
         {bottomDockTab === 'strategy' && <StrategyLogPanel />}
         {bottomDockTab === 'replay' && <ReplayMetricsPanel />}
@@ -90,17 +94,6 @@ export default function BottomDock() {
 }
 
 // Placeholder panels
-
-function DeltaCVDPanel() {
-  return (
-    <div style={{ padding: 'var(--spacing-md)', color: 'var(--text-muted)' }}>
-      Delta / CVD Panel — TODO
-      <div style={{ marginTop: '8px', fontSize: '12px' }}>
-        GET /api/v1/analytics/delta + /api/v1/analytics/cvd
-      </div>
-    </div>
-  )
-}
 
 function OIFundingPanel() {
   return (
