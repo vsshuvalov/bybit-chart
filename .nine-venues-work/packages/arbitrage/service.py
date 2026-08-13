@@ -617,7 +617,12 @@ class ArbitragePaperService:
         venue = adapter.venue.lower()
         started = time.perf_counter_ns()
         try:
-            book = await adapter.fetch_order_book(symbol, depth=self.depth)
+            adapter_max_depth = getattr(adapter, "max_depth", self.depth)
+            requested_depth = min(self.depth, int(adapter_max_depth))
+            book = await adapter.fetch_order_book(
+                symbol,
+                depth=requested_depth,
+            )
             if book.venue != venue:
                 raise ValueError(
                     f"adapter {venue} returned a book for venue {book.venue}"
@@ -632,7 +637,13 @@ class ArbitragePaperService:
 
     async def _fetch_tickers(
         self, adapter: PublicVenueAdapter
-    ) -> tuple[str, tuple[MarketTicker, ...] | None, int, Exception | None]:
+    ) -> tuple[
+        str,
+        tuple[MarketTicker, ...] | None,
+        int,
+        int,
+        Exception | None,
+    ]:
         venue = adapter.venue.lower()
         started = time.perf_counter_ns()
         try:
@@ -641,11 +652,13 @@ class ArbitragePaperService:
                 raise ValueError("all-tickers response is empty")
             if any(ticker.venue != venue for ticker in tickers):
                 raise ValueError(f"adapter {venue} returned another venue's ticker")
-            latency_ms = (time.perf_counter_ns() - started) // 1_000_000
-            return venue, tickers, latency_ms, None
+            completed_ns = time.perf_counter_ns()
+            latency_ms = (completed_ns - started) // 1_000_000
+            return venue, tickers, latency_ms, completed_ns, None
         except Exception as exc:
-            latency_ms = (time.perf_counter_ns() - started) // 1_000_000
-            return venue, None, latency_ms, exc
+            completed_ns = time.perf_counter_ns()
+            latency_ms = (completed_ns - started) // 1_000_000
+            return venue, None, latency_ms, completed_ns, exc
 
     def _config(
         self,
@@ -1527,14 +1540,34 @@ class ArbitragePaperService:
         settings: ScanSettings,
         now_ms: int | None = None,
     ) -> dict[tuple[str, str], OrderBook]:
-        results = await asyncio.gather(
-            *(self._fetch_tickers(adapter) for adapter in self.adapters)
+        # Gate needs a bounded wave of real order books after its metadata
+        # request. Acquire it first, then take the lightweight all-ticker
+        # snapshots from the other venues so cross-venue receipt times remain
+        # close enough to represent the same REST observation window.
+        gate_adapters = tuple(
+            adapter for adapter in self.adapters
+            if adapter.venue.lower() == "gate"
         )
+        other_adapters = tuple(
+            adapter for adapter in self.adapters
+            if adapter.venue.lower() != "gate"
+        )
+        gate_results = await asyncio.gather(
+            *(self._fetch_tickers(adapter) for adapter in gate_adapters)
+        )
+        other_results = await asyncio.gather(
+            *(self._fetch_tickers(adapter) for adapter in other_adapters)
+        )
+        results = (*gate_results, *other_results)
         now_ms = self.clock_ms()
+        latest_completion_ns = max(
+            (completed_ns for *_head, completed_ns, _error in results),
+            default=time.perf_counter_ns(),
+        )
         fresh_by_venue: dict[str, tuple[MarketTicker, ...]] = {}
         latencies: dict[str, int] = {}
         raw_counts: dict[str, int] = {}
-        for venue, tickers, latency_ms, error in results:
+        for venue, tickers, latency_ms, completed_ns, error in results:
             latencies[venue] = latency_ms
             if error is not None:
                 message = f"{type(error).__name__}: {error}"
@@ -1552,11 +1585,17 @@ class ArbitragePaperService:
                 }
                 continue
             assert tickers is not None
+            receipt_ms = now_ms - max(
+                0,
+                (latest_completion_ns - completed_ns) // 1_000_000,
+            )
             raw_counts[venue] = len(tickers)
             fresh = tuple(
-                ticker
+                replace(ticker, timestamp_ms=receipt_ms)
                 for ticker in tickers
-                if 0 <= now_ms - ticker.timestamp_ms <= self.max_staleness_ms
+                if 0
+                <= receipt_ms - ticker.timestamp_ms
+                <= self.max_staleness_ms
             )
             fresh_by_venue[venue] = fresh
             stale_count = len(tickers) - len(fresh)

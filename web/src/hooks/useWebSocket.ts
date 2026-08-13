@@ -1,8 +1,8 @@
 /**
  * WebSocket hook for real-time market data.
  *
- * Подключается к /ws/live?symbol={symbol}
- * Обрабатывает RawTrade и BookSnapshot события
+ * Connects to /ws/live/{symbol}
+ * Handles RawTrade and BookSnapshot events
  */
 
 import { useEffect, useRef } from 'react'
@@ -17,6 +17,7 @@ interface WebSocketMessage {
   qty_steps?: number
   taker_side?: 'Buy' | 'Sell'
   exchange_timestamp_ms?: number
+  message?: string
 }
 
 export function useWebSocket(symbol: string, enabled: boolean = true) {
@@ -26,12 +27,9 @@ export function useWebSocket(symbol: string, enabled: boolean = true) {
   const setMarkPrice = useMarketDataStore((state) => state.setMarkPrice)
 
   useEffect(() => {
-    // 🔥 CRITICAL FIX: Если disabled - сразу закрываем соединение
+    // If disabled - close connection immediately
     if (!enabled) {
       console.log('[WebSocket] Disabled, closing connection')
-      if (reconnectTimeoutRef.current) {
-        clearTimeout(reconnectTimeoutRef.current)
-      }
       if (wsRef.current) {
         wsRef.current.close()
         wsRef.current = null
@@ -39,54 +37,52 @@ export function useWebSocket(symbol: string, enabled: boolean = true) {
       return
     }
 
-    if (!symbol) {
-      return
-    }
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+    const host = window.location.host
+    const wsUrl = `${protocol}//${host}/ws/live/${symbol}`
 
-    const connect = () => {
-      // WebSocket URL - используем относительный путь для прокси
-      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-      const wsUrl = `${protocol}//${window.location.host}/ws/live?symbol=${symbol}`
+    console.log('[WebSocket] Connecting to:', wsUrl)
 
-      console.log('[WebSocket] Connecting to:', wsUrl)
-
+    function connect() {
       const ws = new WebSocket(wsUrl)
       wsRef.current = ws
 
       ws.onopen = () => {
-        console.log('[WebSocket] Connected to', symbol)
+        console.log('[WebSocket] Connected:', symbol)
       }
 
       ws.onmessage = (event) => {
         try {
-          const msg: WebSocketMessage = JSON.parse(event.data)
+          const message: WebSocketMessage = JSON.parse(event.data)
 
-          // Приветственное сообщение
-          if (msg.type === 'connected') {
-            console.log('[WebSocket] Connection confirmed:', msg)
+          if (message.type === 'connected') {
+            console.log('[WebSocket] Server confirmed:', message.message)
             return
           }
 
-          // RawTrade события
-          if (msg.eventType === 'RawTrade' && msg.price_ticks && msg.qty_steps) {
-            const trade = {
-              time: msg.exchange_timestamp_ms || Date.now(),
-              price: msg.price_ticks,
-              volume: msg.qty_steps,
-              side: msg.taker_side || 'Buy',
-            }
-
-            addTrade(symbol, trade)
-            setMarkPrice(symbol, msg.price_ticks)
+          if (message.type === 'heartbeat' || message.type === 'pong') {
+            return
           }
 
-          // BookSnapshot события (будущая поддержка)
-          if (msg.eventType === 'BookSnapshot') {
-            console.log('[WebSocket] Book snapshot received')
+          if (message.type === 'trade' || message.eventType === 'RawTrade') {
+            const tickSize = 0.1 // TODO: Get from instrument metadata
+            addTrade(symbol, {
+              time: message.exchange_timestamp_ms || Date.now(),
+              price: (message.price_ticks || 0) * tickSize,
+              volume: message.qty_steps || 0,
+              side: message.taker_side || 'Buy',
+            })
+            return
           }
 
-        } catch (err) {
-          console.error('[WebSocket] Parse error:', err)
+          if (message.type === 'mark_price') {
+            setMarkPrice(symbol, message.price_ticks || 0)
+            return
+          }
+
+          console.warn('[WebSocket] Unknown message type:', message.type)
+        } catch (error) {
+          console.error('[WebSocket] Failed to parse message:', error)
         }
       }
 
@@ -97,7 +93,7 @@ export function useWebSocket(symbol: string, enabled: boolean = true) {
       ws.onclose = (event) => {
         console.log('[WebSocket] Closed:', event.code, event.reason)
 
-        // Auto-reconnect только если enabled
+        // Auto-reconnect only if enabled
         if (enabled) {
           reconnectTimeoutRef.current = window.setTimeout(() => {
             console.log('[WebSocket] Reconnecting...')
@@ -119,7 +115,7 @@ export function useWebSocket(symbol: string, enabled: boolean = true) {
         wsRef.current = null
       }
     }
-  }, [symbol, enabled]) // 🔥 FIX: убрали addTrade, setMarkPrice из dependencies
+  }, [symbol, enabled, addTrade, setMarkPrice])
 
   return {
     connected: wsRef.current?.readyState === WebSocket.OPEN,

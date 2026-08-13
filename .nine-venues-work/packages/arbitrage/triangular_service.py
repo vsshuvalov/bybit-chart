@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from contextlib import suppress
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from decimal import Decimal
 import time
 from typing import Any, Callable, Iterable, Mapping, Protocol, Sequence
@@ -254,7 +254,13 @@ class TriangularPaperService:
 
     async def _fetch_tickers(
         self, adapter: PublicTickerAdapter
-    ) -> tuple[str, tuple[MarketTicker, ...] | None, int, Exception | None]:
+    ) -> tuple[
+        str,
+        tuple[MarketTicker, ...] | None,
+        int,
+        int,
+        Exception | None,
+    ]:
         venue = adapter.venue.lower()
         started = time.perf_counter_ns()
         try:
@@ -263,11 +269,13 @@ class TriangularPaperService:
                 raise ValueError("all-tickers response is empty")
             if any(ticker.venue.lower() != venue for ticker in tickers):
                 raise ValueError(f"adapter {venue} returned a ticker for another venue")
-            latency = (time.perf_counter_ns() - started) // 1_000_000
-            return venue, tickers, latency, None
+            completed_ns = time.perf_counter_ns()
+            latency = (completed_ns - started) // 1_000_000
+            return venue, tickers, latency, completed_ns, None
         except Exception as exc:  # one venue must not cancel the whole round
-            latency = (time.perf_counter_ns() - started) // 1_000_000
-            return venue, None, latency, exc
+            completed_ns = time.perf_counter_ns()
+            latency = (completed_ns - started) // 1_000_000
+            return venue, None, latency, completed_ns, exc
 
     def _config(self, settings: TriangularScanSettings) -> TriangularConfig:
         return TriangularConfig(
@@ -311,9 +319,21 @@ class TriangularPaperService:
                         state["status"] = "not_selected"
                         self._venue_state[venue] = state
 
-                results = await asyncio.gather(
-                    *(self._fetch_tickers(adapter) for adapter in active_adapters)
+                gate_adapters = tuple(
+                    adapter for adapter in active_adapters
+                    if adapter.venue.lower() == "gate"
                 )
+                other_adapters = tuple(
+                    adapter for adapter in active_adapters
+                    if adapter.venue.lower() != "gate"
+                )
+                gate_results = await asyncio.gather(
+                    *(self._fetch_tickers(adapter) for adapter in gate_adapters)
+                )
+                other_results = await asyncio.gather(
+                    *(self._fetch_tickers(adapter) for adapter in other_adapters)
+                )
+                results = (*gate_results, *other_results)
                 if (
                     run_generation is not None
                     and run_generation != self._run_generation
@@ -321,11 +341,18 @@ class TriangularPaperService:
                     return self.status()
 
                 now_ms = self.clock_ms()
+                latest_completion_ns = max(
+                    (
+                        completed_ns
+                        for *_head, completed_ns, _error in results
+                    ),
+                    default=time.perf_counter_ns(),
+                )
                 selected_by_venue: dict[str, tuple[MarketTicker, ...]] = {}
                 opportunities: list[TriangularOpportunity] = []
                 engine = TriangularEngine(self._config(selected))
 
-                for venue, tickers, latency_ms, error in results:
+                for venue, tickers, latency_ms, completed_ns, error in results:
                     if error is not None:
                         message = f"{type(error).__name__}: {error}"
                         self._errors[venue] = message
@@ -339,10 +366,15 @@ class TriangularPaperService:
                         continue
 
                     assert tickers is not None
+                    receipt_ms = now_ms - max(
+                        0,
+                        (latest_completion_ns - completed_ns) // 1_000_000,
+                    )
                     fresh = tuple(
-                        ticker
+                        replace(ticker, timestamp_ms=receipt_ms)
                         for ticker in tickers
-                        if max(0, now_ms - ticker.timestamp_ms)
+                        if 0
+                        <= receipt_ms - ticker.timestamp_ms
                         <= self.max_staleness_ms
                     )
                     stale_count = len(tickers) - len(fresh)

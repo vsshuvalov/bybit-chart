@@ -37,6 +37,17 @@ class SlowAdapter(FakeAdapter):
         return await super().fetch_order_book(symbol, depth)
 
 
+class CappedDepthAdapter(FakeAdapter):
+    max_depth = 20
+
+    async def fetch_order_book(self, symbol: str, depth: int = 20) -> OrderBook:
+        assert depth == self.max_depth
+        if isinstance(self.book, Exception):
+            raise self.book
+        assert self.book.symbol == symbol
+        return self.book
+
+
 class AutoAdapter(FakeAdapter):
     def __init__(self, venue: str, rows: tuple[MarketTicker, ...]) -> None:
         self.venue = venue
@@ -146,6 +157,19 @@ async def test_scan_is_venue_neutral_and_does_not_execute_by_default() -> None:
     assert result["metrics"]["strategy_equity_usdt"] is None
     assert result["live_trading_enabled"] is False
     assert result["public_data_only"] is True
+
+
+@pytest.mark.asyncio
+async def test_manual_scan_respects_each_adapter_depth_cap() -> None:
+    service = service_with(
+        CappedDepthAdapter("capped", make_book("capped", "99", "100")),
+        FakeAdapter("full", make_book("full", "101", "102")),
+    )
+
+    result = await service.scan(ScanSettings(symbol="BTCUSDT"))
+
+    assert result["venues"][0]["status"] == "online"
+    assert result["venues"][1]["status"] == "online"
 
 
 @pytest.mark.asyncio
