@@ -7,7 +7,9 @@
 
 import axios from 'axios'
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+const API_BASE = (typeof window !== 'undefined' && (window as any).__VITE_API_URL__)
+  || (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_API_URL)
+  || 'http://83.147.234.167'
 
 // ========== Types (aligned с backend) ==========
 
@@ -228,7 +230,7 @@ export async function getWorkspaceDrawings(workspaceId: string): Promise<Drawing
  *
  * Call this on every drawing update to persist to server.
  */
-let saveTimeout: NodeJS.Timeout | null = null
+let saveTimeout: ReturnType<typeof setTimeout> | null = null
 export function autoSaveDrawing(drawingId: string, updates: UpdateDrawingRequest, delay = 500) {
   if (saveTimeout) clearTimeout(saveTimeout)
   saveTimeout = setTimeout(async () => {
@@ -246,7 +248,7 @@ export function autoSaveDrawing(drawingId: string, updates: UpdateDrawingRequest
  *
  * Call this on layout/indicator changes to persist to server.
  */
-let workspaceSaveTimeout: NodeJS.Timeout | null = null
+let workspaceSaveTimeout: ReturnType<typeof setTimeout> | null = null
 export function autoSaveWorkspace(
   workspaceId: string,
   updates: UpdateWorkspaceRequest,
