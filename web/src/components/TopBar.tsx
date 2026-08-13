@@ -16,6 +16,8 @@
 import { useState } from 'react'
 import { useViewStore, Timeframe, Environment, TradingState } from '../store'
 import DiagnosticsPanel from './DiagnosticsPanel'
+import SettingsPanel from './SettingsPanel'
+import { getModuleSchema } from '../schemas/moduleSchemas'
 
 export default function TopBar() {
   const {
@@ -33,6 +35,19 @@ export default function TopBar() {
 
   const [isRecording, setIsRecording] = useState(false)
   const [recordingStatus, setRecordingStatus] = useState<string>('')
+  const [settingsPanelOpen, setSettingsPanelOpen] = useState(false)
+  const [selectedModuleId, setSelectedModuleId] = useState<string | null>(null)
+
+  const handleOpenSettings = (moduleId: string) => {
+    setSelectedModuleId(moduleId)
+    setSettingsPanelOpen(true)
+  }
+
+  const handleSaveSettings = (settings: Record<string, any>) => {
+    console.log('[TopBar] Save settings:', settings)
+    // TODO: Save to workspace via persistence API
+    setSettingsPanelOpen(false)
+  }
 
   const toggleRecording = async () => {
     try {
@@ -136,6 +151,14 @@ export default function TopBar() {
       </div>
 
       <div className="top-bar-right">
+        <button
+          className="settings-btn"
+          onClick={() => handleOpenSettings('orderflow_imbalance')}
+          title="Module Settings"
+        >
+          ⚙️
+        </button>
+
         <button
           className={`mode-toggle ${isReplayMode ? 'replay' : 'live'}`}
           onClick={toggleReplayMode}
@@ -336,7 +359,33 @@ export default function TopBar() {
           outline: 2px solid var(--accent-blue);
           outline-offset: 2px;
         }
+
+        .settings-btn {
+          background: var(--bg-tertiary);
+          border: 1px solid var(--border-default);
+          color: var(--text-secondary);
+          padding: 6px 12px;
+          border-radius: var(--radius-sm);
+          font-size: 18px;
+          cursor: pointer;
+          transition: all 0.2s;
+        }
+
+        .settings-btn:hover {
+          background: var(--bg-primary);
+          color: var(--text-primary);
+          border-color: var(--border-highlight);
+        }
       `}</style>
+
+      {/* Settings Panel Overlay */}
+      {settingsPanelOpen && selectedModuleId && (
+        <SettingsPanel
+          schema={getModuleSchema(selectedModuleId)!}
+          onSave={handleSaveSettings}
+          onClose={() => setSettingsPanelOpen(false)}
+        />
+      )}
     </div>
   )
 }
