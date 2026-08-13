@@ -89,9 +89,15 @@ export default function MainChart({
   useEffect(() => {
     if (!chartContainerRef.current) return
 
-    const chart = createChart(chartContainerRef.current, {
-      width: chartContainerRef.current.clientWidth,
-      height: chartContainerRef.current.clientHeight,
+    const container = chartContainerRef.current
+    const width = container.clientWidth || 600
+    const height = container.clientHeight || 400
+
+    console.log('[MainChart] Creating chart with size:', width, 'x', height)
+
+    const chart = createChart(container, {
+      width,
+      height,
       layout: {
         background: { color: '#0B0F14' }, // Roadmap §10.1
         textColor: '#E6EDF3',
@@ -128,13 +134,19 @@ export default function MainChart({
 
     // Handle resize
     const handleResize = () => {
-      if (chartContainerRef.current && chartRef.current) {
+      if (container && chart) {
+        const newWidth = container.clientWidth || 600
+        const newHeight = container.clientHeight || 400
+        console.log('[MainChart] Resizing to:', newWidth, 'x', newHeight)
         chart.applyOptions({
-          width: chartContainerRef.current.clientWidth,
-          height: chartContainerRef.current.clientHeight,
+          width: newWidth,
+          height: newHeight,
         })
       }
     }
+
+    // Initial resize after mount
+    setTimeout(handleResize, 100)
 
     window.addEventListener('resize', handleResize)
 
