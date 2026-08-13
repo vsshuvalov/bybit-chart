@@ -22,10 +22,12 @@ import {
   LineData,
   HistogramData,
   CrosshairMode,
+  UTCTimestamp,
 } from 'lightweight-charts'
 import { useQuery } from '@tanstack/react-query'
 import { apiClient } from '../api/client'
-import { useViewStore } from '../store'
+import { useViewStore, useMarketDataStore } from '../store'
+import { useBybitWebSocket } from '../hooks/useBybitWebSocket'
 
 interface OHLCCandle {
   timestamp_us: number
@@ -58,9 +60,13 @@ export default function MainChart({
   const cvdSeriesRef = useRef<ISeriesApi<'Line'> | null>(null)
   const orderFlowSeriesRef = useRef<ISeriesApi<'Histogram'> | null>(null)
 
-  const { symbol, timeframe } = useViewStore()
+  const { symbol, timeframe, isReplayMode } = useViewStore()
+  const recentTrades = useMarketDataStore((state) => state.recentTrades.get(symbol) || [])
 
-  // Fetch OHLC candles
+  // Live mode: Connect to Bybit WebSocket
+  useBybitWebSocket(symbol, !isReplayMode)
+
+  // Replay mode: Fetch OHLC candles from database
   const { data: ohlcData } = useQuery({
     queryKey: ['ohlc', symbol, timeframe],
     queryFn: async () => {
@@ -69,10 +75,11 @@ export default function MainChart({
       })
       return response.data
     },
-    refetchInterval: 5000,
+    refetchInterval: isReplayMode ? 5000 : false, // Only refetch in replay mode
+    enabled: isReplayMode, // Only fetch in replay mode
   })
 
-  // Fetch trades for CVD/OrderFlow
+  // Replay mode: Fetch trades for CVD/OrderFlow from database
   const { data: tradesData } = useQuery({
     queryKey: ['trades', symbol, { limit: 1000 }],
     queryFn: async () => {
@@ -81,8 +88,8 @@ export default function MainChart({
       })
       return response.data
     },
-    refetchInterval: 5000,
-    enabled: showCVDOverlay || showOrderFlowOverlay,
+    refetchInterval: isReplayMode ? 5000 : false, // Only refetch in replay mode
+    enabled: isReplayMode && (showCVDOverlay || showOrderFlowOverlay), // Only fetch in replay mode
   })
 
   // Initialize chart
@@ -233,35 +240,97 @@ export default function MainChart({
   // Track fitted symbol/timeframe to avoid repeated fitContent
   const fittedKeyRef = useRef<string | null>(null)
 
-  // Update candlestick data
+  // Update candlestick data - Live mode: aggregate from trades
   useEffect(() => {
-    if (!ohlcData?.candles || !candlestickSeriesRef.current) return
+    if (!candlestickSeriesRef.current) return
 
-    if (ohlcData.candles.length === 0) return
+    // Live mode: build OHLC from recent trades in store
+    if (!isReplayMode && recentTrades.length > 0) {
+      // Get interval in seconds
+      let intervalSeconds = 60 // default 1m
 
-    // BTCUSDT tick_size = 0.1, so divide ticks by 10
-    // TODO: Get tick_size from instrument metadata API
-    const tickSize = 0.1
+      if (timeframe === '1m') intervalSeconds = 60
+      else if (timeframe === '5m') intervalSeconds = 300
+      else if (timeframe === '15m') intervalSeconds = 900
+      else if (timeframe === '30m') intervalSeconds = 1800
+      else if (timeframe === '1h') intervalSeconds = 3600
+      else if (timeframe === '4h') intervalSeconds = 14400
+      else if (timeframe === '1d') intervalSeconds = 86400
 
-    const candleData: CandlestickData[] = ohlcData.candles
-      .map((candle: OHLCCandle) => ({
-        time: Math.floor(candle.timestamp_us / 1000000) as any,
-        open: candle.open_ticks * tickSize,
-        high: candle.high_ticks * tickSize,
-        low: candle.low_ticks * tickSize,
-        close: candle.close_ticks * tickSize,
-      }))
-      .sort((a: any, b: any) => (a.time as number) - (b.time as number))
+      // Group trades by candle interval
+      const candleMap = new Map<number, { open: number; high: number; low: number; close: number; trades: number }>()
 
-    candlestickSeriesRef.current.setData(candleData)
+      recentTrades.forEach((trade) => {
+        const timestamp = Math.floor(trade.time / 1000) // Convert ms to seconds
+        const candleTime = Math.floor(timestamp / intervalSeconds) * intervalSeconds
 
-    // Only fitContent on first load or symbol/timeframe change
-    const fitKey = `${symbol}:${timeframe}`
-    if (fittedKeyRef.current !== fitKey) {
-      chartRef.current?.timeScale().fitContent()
-      fittedKeyRef.current = fitKey
+        if (!candleMap.has(candleTime)) {
+          candleMap.set(candleTime, {
+            open: trade.price,
+            high: trade.price,
+            low: trade.price,
+            close: trade.price,
+            trades: 1,
+          })
+        } else {
+          const candle = candleMap.get(candleTime)!
+          candle.high = Math.max(candle.high, trade.price)
+          candle.low = Math.min(candle.low, trade.price)
+          candle.close = trade.price // Last trade in this candle
+          candle.trades++
+        }
+      })
+
+      // Convert to CandlestickData array
+      const candleData: CandlestickData[] = Array.from(candleMap.entries())
+        .map(([time, candle]) => ({
+          time: time as UTCTimestamp,
+          open: candle.open,
+          high: candle.high,
+          low: candle.low,
+          close: candle.close,
+        }))
+        .sort((a, b) => (a.time as number) - (b.time as number))
+
+      if (candleData.length > 0) {
+        // Update only the last candle to avoid flickering
+        const lastCandle = candleData[candleData.length - 1]
+        candlestickSeriesRef.current.update(lastCandle)
+
+        console.log('[MainChart] Live mode: updated candle', lastCandle)
+      }
+
+      return
     }
-  }, [ohlcData, symbol, timeframe])
+
+    // Replay mode: use OHLC from database
+    if (isReplayMode && ohlcData?.candles && ohlcData.candles.length > 0) {
+      // BTCUSDT tick_size = 0.1, so divide ticks by 10
+      // TODO: Get tick_size from instrument metadata API
+      const tickSize = 0.1
+
+      const candleData: CandlestickData[] = ohlcData.candles
+        .map((candle: OHLCCandle) => ({
+          time: Math.floor(candle.timestamp_us / 1000000) as UTCTimestamp,
+          open: candle.open_ticks * tickSize,
+          high: candle.high_ticks * tickSize,
+          low: candle.low_ticks * tickSize,
+          close: candle.close_ticks * tickSize,
+        }))
+        .sort((a: CandlestickData, b: CandlestickData) => (a.time as number) - (b.time as number))
+
+      candlestickSeriesRef.current.setData(candleData)
+
+      // Only fitContent on first load or symbol/timeframe change
+      const fitKey = `${symbol}:${timeframe}`
+      if (fittedKeyRef.current !== fitKey) {
+        chartRef.current?.timeScale().fitContent()
+        fittedKeyRef.current = fitKey
+      }
+
+      console.log('[MainChart] Replay mode: set', candleData.length, 'candles')
+    }
+  }, [isReplayMode, recentTrades, ohlcData, symbol, timeframe])
 
   // Update CVD data
   useEffect(() => {
