@@ -206,6 +206,12 @@ export default function MainChart({
   useEffect(() => {
     if (!ohlcData?.candles || !candlestickSeriesRef.current) return
 
+    // Guard against empty array (GPT-5.6Sol recommendation)
+    if (ohlcData.candles.length === 0) {
+      console.warn('[MainChart] Skipping empty candle snapshot')
+      return
+    }
+
     console.log('[MainChart] OHLC data received:', {
       count: ohlcData.candles.length,
       first: ohlcData.candles[0],
@@ -233,6 +239,7 @@ export default function MainChart({
     })
 
     if (candleData.length > 0) {
+      console.log('[MainChart] Calling setData with', candleData.length, 'candles')
       candlestickSeriesRef.current.setData(candleData)
       console.log('[MainChart] Data set, calling fitContent()')
       chartRef.current?.timeScale().fitContent()
