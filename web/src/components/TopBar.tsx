@@ -17,6 +17,7 @@ import { useState } from 'react'
 import { useViewStore, Timeframe, Environment, TradingState } from '../store'
 import DiagnosticsPanel from './DiagnosticsPanel'
 import SettingsPanel from './SettingsPanel'
+import WorkspaceSelector from './WorkspaceSelector'
 import { getModuleSchema } from '../schemas/moduleSchemas'
 
 export default function TopBar() {
@@ -37,6 +38,17 @@ export default function TopBar() {
   const [recordingStatus, setRecordingStatus] = useState<string>('')
   const [settingsPanelOpen, setSettingsPanelOpen] = useState(false)
   const [selectedModuleId, setSelectedModuleId] = useState<string | null>(null)
+  const [currentWorkspaceId, setCurrentWorkspaceId] = useState<string>(() => {
+    // Load from localStorage
+    return localStorage.getItem('currentWorkspaceId') || ''
+  })
+
+  const handleSelectWorkspace = (workspaceId: string) => {
+    console.log('[TopBar] Switch to workspace:', workspaceId)
+    setCurrentWorkspaceId(workspaceId)
+    localStorage.setItem('currentWorkspaceId', workspaceId)
+    // TODO: Load workspace layout/indicators/drawings
+  }
 
   const handleOpenSettings = (moduleId: string) => {
     setSelectedModuleId(moduleId)
@@ -125,7 +137,10 @@ export default function TopBar() {
   return (
     <div className="top-bar">
       <div className="top-bar-left">
-        <button className="workspace-btn">Workspace ▾</button>
+        <WorkspaceSelector
+          currentWorkspaceId={currentWorkspaceId}
+          onSelectWorkspace={handleSelectWorkspace}
+        />
 
         <div className="separator" />
 
