@@ -86,7 +86,23 @@ async def redis_subscriber_task(
 
                     # Парсим JSON
                     try:
-                        event = json.loads(data)
+                        redis_event = json.loads(data)
+
+                        # Трансформируем формат: {"type": "trade", "data": {...}} -> {...}
+                        # EventCollector публикует в формате {"type": "trade", "data": RawTrade}
+                        if redis_event.get("type") == "trade" and "data" in redis_event:
+                            trade_data = redis_event["data"]
+                            # Добавляем eventType для совместимости с WebSocket API
+                            trade_data["eventType"] = "RawTrade"
+                            event = trade_data
+                        elif redis_event.get("type") == "book" and "data" in redis_event:
+                            book_data = redis_event["data"]
+                            book_data["eventType"] = "BookSnapshot"
+                            event = book_data
+                        else:
+                            # Неизвестный формат - используем как есть
+                            event = redis_event
+
                         # Broadcast всем WebSocket подписчикам
                         await live_feed_manager.broadcast(symbol, event)
                         logger.debug(f"[REDIS_SUBSCRIBER] Broadcast {symbol}: {event.get('eventType')}")
