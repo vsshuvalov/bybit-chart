@@ -191,6 +191,12 @@ export default function MainChart({
   useEffect(() => {
     if (!ohlcData?.candles || !candlestickSeriesRef.current) return
 
+    console.log('[MainChart] OHLC data received:', {
+      count: ohlcData.candles.length,
+      first: ohlcData.candles[0],
+      last: ohlcData.candles[ohlcData.candles.length - 1],
+    })
+
     // BTCUSDT tick_size = 0.1, so divide ticks by 10
     const tickSize = 0.1
 
@@ -202,6 +208,7 @@ export default function MainChart({
       close: candle.close_ticks * tickSize,
     }))
 
+    console.log('[MainChart] Setting candle data:', candleData.length, 'candles')
     candlestickSeriesRef.current.setData(candleData)
     chartRef.current?.timeScale().fitContent()
   }, [ohlcData])
