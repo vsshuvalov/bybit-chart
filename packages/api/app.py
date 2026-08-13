@@ -40,6 +40,34 @@ logger = logging.getLogger(__name__)
 DATA_DIR = Path("/tmp/bybit-chart-data")  # Переопределяется через env или config
 
 
+def resolve_time_range(
+    start_ts: int | None,
+    end_ts: int | None,
+    limit: int,
+    interval_us: int,
+) -> tuple[int, int]:
+    """Resolve time range from optional start_ts/end_ts or limit.
+
+    Args:
+        start_ts: Optional start timestamp (microseconds)
+        end_ts: Optional end timestamp (microseconds)
+        limit: Number of intervals to fetch if start_ts/end_ts not provided
+        interval_us: Interval duration in microseconds
+
+    Returns:
+        Tuple of (start_ts, end_ts) in microseconds
+    """
+    import time
+
+    if start_ts is not None and end_ts is not None:
+        return start_ts, end_ts
+
+    # Use limit to calculate time range from now
+    now_us = int(time.time() * 1_000_000)
+    lookback_us = limit * interval_us
+    return now_us - lookback_us, now_us
+
+
 def create_app(data_dir: Path | str | None = None) -> FastAPI:
     """Создать FastAPI приложение.
 
@@ -197,9 +225,9 @@ def create_app(data_dir: Path | str | None = None) -> FastAPI:
     @app.get("/api/v1/trades", response_model=TradesResponse)
     async def get_trades(
         symbol: str = Query(..., description="Symbol (BTCUSDT)"),
-        start_ts: int = Query(..., description="Начало диапазона (microseconds)", ge=0),
-        end_ts: int = Query(..., description="Конец диапазона (microseconds)", ge=0),
         limit: int = Query(1000, description="Максимальное количество событий", ge=1, le=10000),
+        start_ts: int | None = Query(None, description="Начало диапазона (microseconds)", ge=0),
+        end_ts: int | None = Query(None, description="Конец диапазона (microseconds)", ge=0),
         event_type: str | None = Query(None, description="Фильтр по eventType"),
     ):
         """Получить события (RawTrade/BookCheckpoint) из Parquet.
@@ -228,37 +256,27 @@ def create_app(data_dir: Path | str | None = None) -> FastAPI:
                 "has_more": true
             }
         """
-        # Валидация через Pydantic
+        # Resolve time range
+        if start_ts is None or end_ts is None:
+            # Default: last 1 minute of trades
+            start_ts, end_ts = resolve_time_range(start_ts, end_ts, limit=1, interval_us=60_000_000)
+
+        # Чтение из Parquet
         try:
-            params = TradesQueryParams(
+            events = reader.read_range(
                 symbol=symbol,
                 start_ts=start_ts,
                 end_ts=end_ts,
                 limit=limit,
                 event_type=event_type,
             )
-        except ValidationError as exc:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Некорректные параметры: {exc.errors()}",
-            )
 
-        # Чтение из Parquet
-        try:
-            events = reader.read_range(
-                symbol=params.symbol,
-                start_ts=params.start_ts,
-                end_ts=params.end_ts,
-                limit=params.limit,
-                event_type=params.event_type,
-            )
-
-            has_more = len(events) == params.limit
+            has_more = len(events) == limit
 
             return TradesResponse(
-                symbol=params.symbol,
-                start_ts=params.start_ts,
-                end_ts=params.end_ts,
+                symbol=symbol,
+                start_ts=start_ts,
+                end_ts=end_ts,
                 events=events,
                 count=len(events),
                 has_more=has_more,
@@ -373,9 +391,10 @@ def create_app(data_dir: Path | str | None = None) -> FastAPI:
     @app.get("/api/v1/analytics/delta")
     async def get_delta(
         symbol: str = Query(..., description="Symbol (BTCUSDT)"),
-        start_ts: int = Query(..., description="Начало диапазона (microseconds)", ge=0),
-        end_ts: int = Query(..., description="Конец диапазона (microseconds)", ge=0),
-        interval: str = Query(..., description="Интервал (1m, 5m, 15m, 1h, 4h, 1d)"),
+        interval: str = Query("1m", description="Интервал (1m, 5m, 15m, 1h, 4h, 1d)"),
+        limit: int = Query(100, description="Количество баров", ge=1, le=5000),
+        start_ts: int | None = Query(None, description="Начало диапазона (microseconds)", ge=0),
+        end_ts: int | None = Query(None, description="Конец диапазона (microseconds)", ge=0),
     ):
         """Получить Delta analytics (buy/sell pressure).
 
@@ -387,6 +406,9 @@ def create_app(data_dir: Path | str | None = None) -> FastAPI:
             interval_us = parse_interval(interval)
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc))
+
+        # Resolve time range
+        start_ts, end_ts = resolve_time_range(start_ts, end_ts, limit, interval_us)
 
         try:
             events = reader.read_range(
@@ -418,9 +440,10 @@ def create_app(data_dir: Path | str | None = None) -> FastAPI:
     @app.get("/api/v1/analytics/cvd")
     async def get_cvd(
         symbol: str = Query(..., description="Symbol (BTCUSDT)"),
-        start_ts: int = Query(..., description="Начало диапазона (microseconds)", ge=0),
-        end_ts: int = Query(..., description="Конец диапазона (microseconds)", ge=0),
-        interval: str = Query(..., description="Интервал (1m, 5m, 15m, 1h, 4h, 1d)"),
+        interval: str = Query("1m", description="Интервал (1m, 5m, 15m, 1h, 4h, 1d)"),
+        limit: int = Query(100, description="Количество баров", ge=1, le=5000),
+        start_ts: int | None = Query(None, description="Начало диапазона (microseconds)", ge=0),
+        end_ts: int | None = Query(None, description="Конец диапазона (microseconds)", ge=0),
     ):
         """Получить CVD analytics (Cumulative Volume Delta).
 
@@ -432,6 +455,8 @@ def create_app(data_dir: Path | str | None = None) -> FastAPI:
             interval_us = parse_interval(interval)
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc))
+
+        start_ts, end_ts = resolve_time_range(start_ts, end_ts, limit, interval_us)
 
         try:
             events = reader.read_range(
@@ -463,9 +488,10 @@ def create_app(data_dir: Path | str | None = None) -> FastAPI:
     @app.get("/api/v1/analytics/vwap")
     async def get_vwap(
         symbol: str = Query(..., description="Symbol (BTCUSDT)"),
-        start_ts: int = Query(..., description="Начало диапазона (microseconds)", ge=0),
-        end_ts: int = Query(..., description="Конец диапазона (microseconds)", ge=0),
-        interval: str = Query(..., description="Интервал (1m, 5m, 15m, 1h, 4h, 1d)"),
+        interval: str = Query("1m", description="Интервал (1m, 5m, 15m, 1h, 4h, 1d)"),
+        limit: int = Query(100, description="Количество баров", ge=1, le=5000),
+        start_ts: int | None = Query(None, description="Начало диапазона (microseconds)", ge=0),
+        end_ts: int | None = Query(None, description="Конец диапазона (microseconds)", ge=0),
     ):
         """Получить VWAP analytics (Volume Weighted Average Price).
 
@@ -477,6 +503,8 @@ def create_app(data_dir: Path | str | None = None) -> FastAPI:
             interval_us = parse_interval(interval)
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc))
+
+        start_ts, end_ts = resolve_time_range(start_ts, end_ts, limit, interval_us)
 
         try:
             events = reader.read_range(
@@ -508,8 +536,9 @@ def create_app(data_dir: Path | str | None = None) -> FastAPI:
     @app.get("/api/v1/analytics/volume-profile")
     async def get_volume_profile(
         symbol: str = Query(..., description="Symbol (BTCUSDT)"),
-        start_ts: int = Query(..., description="Начало диапазона (microseconds)", ge=0),
-        end_ts: int = Query(..., description="Конец диапазона (microseconds)", ge=0),
+        limit: int = Query(60, description="Минут данных", ge=1, le=1440),
+        start_ts: int | None = Query(None, description="Начало диапазона (microseconds)", ge=0),
+        end_ts: int | None = Query(None, description="Конец диапазона (microseconds)", ge=0),
         price_bin_ticks: int = Query(100, description="Размер ценового bin (ticks)", ge=1),
     ):
         """Получить Volume Profile (распределение объёма по ценам).
@@ -517,6 +546,8 @@ def create_app(data_dir: Path | str | None = None) -> FastAPI:
         Roadmap §9.2: POC, Value Area, HVN/LVN для определения ключевых уровней.
         """
         from packages.analytics.volume_profile import calculate_volume_profile, find_hvn_lvn
+
+        start_ts, end_ts = resolve_time_range(start_ts, end_ts, limit, 60_000_000)
 
         try:
             events = reader.read_range(
@@ -553,9 +584,9 @@ def create_app(data_dir: Path | str | None = None) -> FastAPI:
     @app.get("/api/v1/tape/{symbol}")
     async def get_tape(
         symbol: str,
-        start_ts: int = Query(..., description="Начало диапазона (microseconds)", ge=0),
-        end_ts: int = Query(..., description="Конец диапазона (microseconds)", ge=0),
         limit: int = Query(100, description="Максимум записей", ge=1, le=1000),
+        start_ts: int | None = Query(None, description="Начало диапазона (microseconds)", ge=0),
+        end_ts: int | None = Query(None, description="Конец диапазона (microseconds)", ge=0),
     ):
         """Получить Time & Sales tape (trade stream).
 
@@ -593,6 +624,8 @@ def create_app(data_dir: Path | str | None = None) -> FastAPI:
         """
         from packages.analytics.time_and_sales import create_tape_from_trades
 
+        start_ts, end_ts = resolve_time_range(start_ts, end_ts, limit=1, interval_us=60_000_000)
+
         try:
             events = reader.read_range(
                 symbol=symbol,
@@ -625,9 +658,10 @@ def create_app(data_dir: Path | str | None = None) -> FastAPI:
     @app.get("/api/v1/footprint/{symbol}")
     async def get_footprint(
         symbol: str,
-        start_ts: int = Query(..., description="Начало диапазона (microseconds)", ge=0),
-        end_ts: int = Query(..., description="Конец диапазона (microseconds)", ge=0),
-        interval: str = Query(..., description="Интервал (1m, 5m, 15m, 1h)"),
+        interval: str = Query("1m", description="Интервал (1m, 5m, 15m, 1h)"),
+        limit: int = Query(100, description="Количество свечей", ge=1, le=500),
+        start_ts: int | None = Query(None, description="Начало диапазона (microseconds)", ge=0),
+        end_ts: int | None = Query(None, description="Конец диапазона (microseconds)", ge=0),
     ):
         """Получить Footprint chart (volume distribution per price level).
 
@@ -674,6 +708,7 @@ def create_app(data_dir: Path | str | None = None) -> FastAPI:
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc))
 
+        start_ts, end_ts = resolve_time_range(start_ts, end_ts, limit, interval_us)
         interval_seconds = interval_us // 1_000_000
 
         try:
