@@ -134,6 +134,14 @@ export default function MainChart({
     chartRef.current = chart
     candlestickSeriesRef.current = candlestickSeries
 
+    // Debug: intercept setData calls
+    const originalSetData = candlestickSeries.setData.bind(candlestickSeries)
+    candlestickSeries.setData = (data: any) => {
+      console.log('[MainChart] setData intercepted:', data.length, 'candles')
+      console.trace('[MainChart] setData call stack')
+      return originalSetData(data)
+    }
+
     // Handle resize
     const handleResize = () => {
       if (container && chart) {
