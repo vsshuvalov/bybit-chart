@@ -275,17 +275,19 @@ def create_app(data_dir: Path | str | None = None) -> FastAPI:
     @app.get("/api/v1/ohlc", response_model=OHLCResponse)
     async def get_ohlc(
         symbol: str = Query(..., description="Symbol (BTCUSDT)"),
-        start_ts: int = Query(..., description="Начало диапазона (microseconds)", ge=0),
-        end_ts: int = Query(..., description="Конец диапазона (microseconds)", ge=0),
         interval: str = Query(..., description="Интервал candle (1m, 5m, 15m, 1h, 4h, 1d)"),
+        start_ts: int | None = Query(None, description="Начало диапазона (microseconds)", ge=0),
+        end_ts: int | None = Query(None, description="Конец диапазона (microseconds)", ge=0),
+        limit: int = Query(500, description="Количество последних candles", ge=1, le=5000),
     ):
         """Получить OHLC candles (агрегированные RawTrade).
 
         Query params:
             - symbol: идентификатор инструмента (BTCUSDT)
-            - start_ts: начало диапазона (microseconds, inclusive)
-            - end_ts: конец диапазона (microseconds, exclusive)
             - interval: интервал candle (1m, 5m, 15m, 30m, 1h, 2h, 4h, 1d)
+            - start_ts: начало диапазона (microseconds, inclusive) — опционально
+            - end_ts: конец диапазона (microseconds, exclusive) — опционально
+            - limit: количество последних candles (по умолчанию 500, если не указан start_ts/end_ts)
 
         Returns:
             200 OK: OHLCResponse с candles
@@ -293,65 +295,58 @@ def create_app(data_dir: Path | str | None = None) -> FastAPI:
             404 Not Found: symbol не существует
             500 Internal Server Error: ошибка чтения данных
 
-        Example:
+        Example 1 (last N candles):
+            GET /api/v1/ohlc?symbol=BTCUSDT&interval=1m&limit=100
+
+        Example 2 (time range):
             GET /api/v1/ohlc?symbol=BTCUSDT&start_ts=1786372648000000&end_ts=1786372650000000&interval=1m
-            Response: {
-                "symbol": "BTCUSDT",
-                "interval": "1m",
-                "candles": [
-                    {
-                        "timestamp_us": 1786372620000000,
-                        "open_ticks": 647780,
-                        "high_ticks": 647850,
-                        "low_ticks": 647750,
-                        "close_ticks": 647800,
-                        "volume_steps": 1500,
-                        "trade_count": 45
-                    }
-                ],
-                "count": 1
-            }
         """
-        # Валидация через Pydantic
-        try:
-            params = OHLCQueryParams(
-                symbol=symbol,
-                start_ts=start_ts,
-                end_ts=end_ts,
-                interval=interval,
-            )
-        except ValidationError as exc:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Некорректные параметры: {exc.errors()}",
-            )
+        import time
 
         # Парсинг interval → microseconds
         try:
-            interval_us = parse_interval(params.interval)
+            interval_us = parse_interval(interval)
         except ValueError as exc:
             raise HTTPException(
                 status_code=400,
                 detail=str(exc),
             )
 
+        # Если start_ts/end_ts не указаны, берём последние N candles
+        if start_ts is None or end_ts is None:
+            end_ts = int(time.time() * 1_000_000)  # текущее время в microseconds
+            start_ts = end_ts - (limit * interval_us)  # limit интервалов назад
+
         # Чтение RawTrade из Parquet
         try:
+            read_start = time.time()
             events = reader.read_range(
-                symbol=params.symbol,
-                start_ts=params.start_ts,
-                end_ts=params.end_ts,
+                symbol=symbol,
+                start_ts=start_ts,
+                end_ts=end_ts,
                 event_type="RawTrade",  # только trades для OHLC
             )
+            read_time = (time.time() - read_start) * 1000
 
             # Агрегация → candles
+            agg_start = time.time()
             candles = aggregate_ohlc(events, interval_us)
+            agg_time = (time.time() - agg_start) * 1000
+
+            logger.info(
+                f"[STEP:API→Parquet→OHLC] {symbol} {interval} read {len(events)} trades in {read_time:.1f}ms "
+                f"→ aggregated {len(candles)} candles in {agg_time:.1f}ms"
+            )
+
+            # Ограничить до limit последних candles
+            if len(candles) > limit:
+                candles = candles[-limit:]
 
             return OHLCResponse(
-                symbol=params.symbol,
-                interval=params.interval,
-                start_ts=params.start_ts,
-                end_ts=params.end_ts,
+                symbol=symbol,
+                interval=interval,
+                start_ts=start_ts,
+                end_ts=end_ts,
                 candles=candles,
                 count=len(candles),
             )
@@ -359,9 +354,10 @@ def create_app(data_dir: Path | str | None = None) -> FastAPI:
         except FileNotFoundError as exc:
             raise HTTPException(
                 status_code=404,
-                detail=f"Symbol не найден: {params.symbol}",
+                detail=f"Symbol не найден: {symbol}",
             )
         except Exception as exc:
+            logger.error(f"[STEP:API→Parquet→OHLC] ERROR: {symbol} {interval} failed: {exc}")
             raise HTTPException(
                 status_code=500,
                 detail=f"Ошибка чтения данных: {exc}",
