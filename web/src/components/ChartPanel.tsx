@@ -19,7 +19,9 @@ export default function ChartPanel() {
   const lastCandleRef = useRef<CandlestickData | null>(null)
 
   const { symbol, timeframe, isReplayMode } = useViewStore()
-  const recentTrades = useMarketDataStore((state) => state.recentTrades.get(symbol) || [])
+  const recentTrades = useMarketDataStore((state) =>
+    state.recentTrades?.get(symbol) ?? []
+  )
 
   // Fetch OHLC data - отключаем polling в live mode
   const { data: ohlcData, error } = useQuery({
@@ -142,7 +144,7 @@ export default function ChartPanel() {
 
   // 🔥 NEW: Update chart from WebSocket trades in real-time
   useEffect(() => {
-    if (!candleSeriesRef.current || !lastCandleRef.current || isReplayMode || recentTrades.length === 0) {
+    if (!candleSeriesRef.current || !lastCandleRef.current || isReplayMode || !recentTrades || recentTrades.length === 0) {
       return
     }
 
