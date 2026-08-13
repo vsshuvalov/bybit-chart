@@ -21,6 +21,8 @@ from packages.arbitrage.models import (
     normalize_venue,
 )
 
+BPS = Decimal("10000")
+
 
 def _asset_name(asset: str, *, name: str = "asset") -> str:
     if not isinstance(asset, str):
@@ -274,6 +276,16 @@ class TriangularLeg:
                 raise ValueError("snapshot_id must not be empty")
         object.__setattr__(self, "snapshot_id", snapshot_id)
 
+    @property
+    def fee_rate(self) -> Decimal:
+        """Effective fee fraction charged from this leg's gross output."""
+
+        return self.fee / self.output_before_fee
+
+    @property
+    def fee_rate_bps(self) -> Decimal:
+        return self.fee_rate * BPS
+
     def to_dict(self) -> dict[str, Any]:
         return {
             "venue": self.venue,
@@ -285,6 +297,10 @@ class TriangularLeg:
             "input_amount": decimal_string(self.input_amount),
             "output_before_fee": decimal_string(self.output_before_fee),
             "fee": decimal_string(self.fee),
+            "fee_amount": decimal_string(self.fee),
+            "fee_asset": self.to_asset,
+            "fee_rate": decimal_string(self.fee_rate),
+            "fee_rate_bps": decimal_string(self.fee_rate_bps),
             "output_amount": decimal_string(self.output_amount),
             "capacity_input": decimal_string(self.capacity_input),
             "timestamp_ms": self.timestamp_ms,
@@ -883,6 +899,7 @@ class TriangularPaperExecution:
     final_amount: Decimal
     realized_pnl: Decimal
     expected_net_profit: Decimal
+    legs: tuple[TriangularLeg, TriangularLeg, TriangularLeg]
     snapshot_key: str
     balances_after: Mapping[str, Mapping[str, Decimal]]
 
@@ -898,6 +915,7 @@ class TriangularPaperExecution:
             "final_amount": decimal_string(self.final_amount),
             "realized_pnl": decimal_string(self.realized_pnl),
             "expected_net_profit": decimal_string(self.expected_net_profit),
+            "legs": [leg.to_dict() for leg in self.legs],
             "snapshot_key": self.snapshot_key,
             "balances_after": _json_balances(self.balances_after),
         }
@@ -943,6 +961,7 @@ class TriangularPaperExecutor:
             final_amount=opportunity.final_amount,
             realized_pnl=realized,
             expected_net_profit=opportunity.net_profit,
+            legs=opportunity.legs,
             snapshot_key=opportunity.snapshot_key,
             balances_after={venue: dict(assets) for venue, assets in proposed.items()},
         )

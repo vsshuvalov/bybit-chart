@@ -6,7 +6,14 @@ from decimal import Decimal
 from typing import Any
 
 from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    StrictBool,
+    field_validator,
+    model_validator,
+)
 
 from packages.arbitrage.models import normalize_symbol
 from packages.arbitrage.service import (
@@ -40,7 +47,7 @@ class ArbitrageScanRequest(BaseModel):
     min_net_edge_bps: Decimal = Field(default=Decimal("5"), ge=0, lt=10_000)
     risk_buffer_bps: Decimal = Field(default=Decimal("2"), ge=0, lt=10_000)
     auto_execute: bool = False
-    use_fee_token_discounts: bool = True
+    use_fee_token_discounts: StrictBool = True
     interval_ms: int = Field(default=2000, ge=500, le=60_000)
     max_symbols: int = Field(default=DEFAULT_MAX_SYMBOLS, ge=1, le=50)
     activation_observations: int = Field(

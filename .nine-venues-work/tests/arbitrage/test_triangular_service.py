@@ -138,6 +138,11 @@ async def test_auto_paper_is_atomic_and_same_snapshot_is_not_reused() -> None:
     assert D(first["balances"]["alpha"]["USDT"]) > before
     assert first["journal"][0]["status"] == "paper_filled"
     assert first["journal"][0]["path"] == "USDT → BTC → ETH → USDT"
+    assert len(first["journal"][0]["legs"]) == 3
+    assert all(
+        D(leg["fee_rate_bps"]) == D("10")
+        for leg in first["journal"][0]["legs"]
+    )
     assert second["metrics"]["trade_count"] == 1
     assert "already executed" in second["errors"]["duplicate_snapshot"]
 
@@ -179,6 +184,7 @@ async def test_fee_token_toggle_applies_effective_rate_to_all_three_legs() -> No
 
     for leg in enabled["best_opportunity"]["legs"]:
         assert D(leg["fee"]) / D(leg["output_before_fee"]) == D("0.00075")
+        assert D(leg["fee_rate_bps"]) == D("7.5")
     for leg in disabled["best_opportunity"]["legs"]:
         assert D(leg["fee"]) / D(leg["output_before_fee"]) == D("0.001")
     assert D(enabled["metrics"]["realized_pnl"]) == D(
@@ -187,6 +193,10 @@ async def test_fee_token_toggle_applies_effective_rate_to_all_three_legs() -> No
     assert D(disabled["metrics"]["realized_pnl"]) == D("13.45654448500")
     assert enabled["fee_policy"]["binance"]["effective_taker_fee"] == (
         "0.00075"
+    )
+    assert all(
+        D(leg["fee_rate_bps"]) == D("7.5")
+        for leg in enabled["journal"][0]["legs"]
     )
 
 

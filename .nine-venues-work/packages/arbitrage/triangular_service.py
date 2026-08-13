@@ -668,7 +668,7 @@ class TriangularPaperService:
                     self._settings.use_fee_token_discounts
                 ),
             ),
-            "fee_token_balance_mode": "what_if_usdt_equivalent",
+            "fee_token_balance_mode": "what_if_economic_equivalent",
             "fee_token_balance_assumption": (
                 "enabled discounts assume a sufficient fee-token balance; "
                 "PAPER does not create, buy, hold, or debit fee tokens"

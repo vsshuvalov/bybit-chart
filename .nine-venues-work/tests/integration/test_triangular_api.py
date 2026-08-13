@@ -105,6 +105,8 @@ def test_triangular_api_rejects_unsafe_or_out_of_scope_inputs() -> None:
             {"max_tickers": 51},
             {"max_tickers": 2},
             {"interval_ms": 9_999},
+            {"use_fee_token_discounts": "yes"},
+            {"use_fee_token_discounts": 0},
             {"api_key": "must-not-exist"},
         )
         for payload in invalid_payloads:

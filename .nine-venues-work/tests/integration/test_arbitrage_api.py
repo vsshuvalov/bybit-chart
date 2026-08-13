@@ -177,6 +177,16 @@ def test_arbitrage_api_accepts_custom_auto_controls_and_rejects_bad_budget() -> 
             assert response.json()["balances"]["alpha"]["USDT"] == "10000"
             assert response.json()["balances"]["beta"]["USDT"] == "10000"
 
+            for invalid_toggle in ("yes", 0):
+                invalid_discount = client.post(
+                    "/api/v1/arbitrage/scan",
+                    json={
+                        "symbol": "AUTO",
+                        "use_fee_token_discounts": invalid_toggle,
+                    },
+                )
+                assert invalid_discount.status_code == 422
+
             invalid_budget = client.post(
                 "/api/v1/arbitrage/scan",
                 json={

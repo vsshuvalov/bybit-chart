@@ -95,10 +95,6 @@ async def lifespan(app: FastAPI):
     register_redis_subscriber(app, live_feed_manager)
     logger.info("Redis subscriber registered")
 
-    # Start WebSocket live feed manager
-    live_feed_manager.start()
-    logger.info("WebSocket live feed manager started")
-
     logger.info("Application startup complete")
 
     yield

@@ -565,7 +565,7 @@
           </label>
         </div>
         <div class="field">
-          <div class="field-label"><label for="useFeeTokenDiscounts">Комиссия</label><span class="info-tip"><button class="info-button" type="button" aria-label="Описание скидок токеном биржи" aria-describedby="tip-fee-token-discounts">?</button><span class="info-tooltip" id="tip-fee-token-discounts" role="tooltip">PAPER what-if: предполагается, что оплата комиссии токеном биржи включена и токена достаточно. Цена токена и его курсовой риск не моделируются; для Bybit, OKX и BingX скидка равна 0.</span></span></div>
+          <div class="field-label"><label for="useFeeTokenDiscounts">Комиссия</label><span class="info-tip"><button class="info-button" type="button" aria-label="Описание скидок токеном биржи" aria-describedby="tip-fee-token-discounts">?</button><span class="info-tooltip" id="tip-fee-token-discounts" role="tooltip">PAPER what-if: предполагается, что оплата комиссии токеном биржи включена и токена достаточно. Цена токена и его курсовой риск не моделируются; в автоматической/API-модели Bybit, OKX и BingX остаются без скидки.</span></span></div>
           <label class="switch-wrap" for="useFeeTokenDiscounts">
             <span class="switch-copy"><strong>Скидки токеном биржи</strong></span>
             <span class="switch"><input id="useFeeTokenDiscounts" name="use_fee_token_discounts" type="checkbox" aria-describedby="tip-fee-token-discounts" checked><span class="switch-track" aria-hidden="true"></span></span>
@@ -773,7 +773,7 @@
 
     function renderFeePolicy(data) {
       const rows = normalizeFeePolicy(first(data, ['fee_policy'], []));
-      const balanceMode = first(data, ['fee_token_balance_mode'], 'what_if_usdt_equivalent');
+      const balanceMode = first(data, ['fee_token_balance_mode'], 'what_if_economic_equivalent');
       const explanation = first(data, ['fee_token_balance_assumption'], first(data, ['fee_token_balance_explanation'], first(data, ['fee_policy_explanation'], '')));
       $('feePolicyPanel').dataset.balanceMode = String(balanceMode);
       if (!rows.length) {
@@ -783,7 +783,8 @@
       }
       const enabledCount = rows.filter((row) => Boolean(first(row, ['enabled'], false)) && finite(first(row, ['discount_bps'], 0)) > 0).length;
       $('feePolicySummary').textContent = `${enabledCount} ${pluralRu(enabledCount, 'скидка', 'скидки', 'скидок')} · PAPER what-if`;
-      $('feePolicySummary').title = String(explanation || (balanceMode === 'what_if_usdt_equivalent' ? 'Баланс токена комиссии моделируется как достаточный USDT-эквивалент.' : balanceMode));
+      const whatIfMode = ['what_if_economic_equivalent', 'what_if_usdt_equivalent'].includes(balanceMode);
+      $('feePolicySummary').title = String(explanation || (whatIfMode ? 'Баланс токена комиссии моделируется как достаточный стоимостной эквивалент.' : balanceMode));
       $('feePolicyList').innerHTML = rows.map((row) => {
         const venue = exchangeName(first(row, ['venue', 'exchange', 'name'], '—'));
         const token = first(row, ['token', 'fee_token'], null);
@@ -795,7 +796,19 @@
           : finite(first(row, ['discount_percent'], 0));
         const enabled = Boolean(first(row, ['enabled'], false)) && discountPercent > 0;
         const apiCompatible = first(row, ['api_compatible'], null);
-        const assumption = first(row, ['assumption'], enabled ? 'Опция оплаты комиссии токеном включена; токена достаточно.' : 'Скидка не применяется.');
+        const conditions = {
+          bybit: 'MNT даёт скидку в ручной spot-торговле, но API-ордера официально исключены.',
+          binance: 'Нужно включить оплату BNB и иметь достаточный баланс BNB.',
+          okx: 'OKB нельзя использовать для оплаты биржевой spot-комиссии.',
+          bitget: 'Нужно включить оплату BGB и иметь достаточный баланс BGB.',
+          huobi: 'Нужно включить HTX deduction; фактическая ставка зависит от Prime.',
+          kucoin: 'Нужно включить Pay Fees with KCS; возможны исключения для низких ставок.',
+          mexc: 'Нужно включить MX deduction; ставка зависит от региона и пары.',
+          bingx: 'Оплата spot-комиссии собственным токеном официально не подтверждена.',
+          gate: '10% — PAPER-предположение для VIP0; у других VIP ставка отличается.'
+        };
+        const venueKey = String(first(row, ['venue', 'exchange', 'name'], '')).toLowerCase();
+        const assumption = conditions[venueKey] || first(row, ['assumption'], enabled ? 'Опция оплаты комиссии токеном включена; токена достаточно.' : 'Скидка не применяется.');
         const compatibility = apiCompatible === false ? ' Нет универсальной API-настройки.' : '';
         return `<div class="fee-policy-row">
           <div class="fee-policy-head"><strong>${escapeHTML(venue)}</strong><span class="fee-policy-token">${escapeHTML(token || 'без токена')}</span></div>

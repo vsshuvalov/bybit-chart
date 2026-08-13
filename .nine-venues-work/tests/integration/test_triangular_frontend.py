@@ -72,7 +72,9 @@ def test_fee_token_discount_what_if_is_explicit_and_synced(html: str) -> None:
     assert "PAPER what-if" in html
     assert "токена достаточно" in html
     assert "Цена токена и его курсовой риск не моделируются" in html
-    assert "для Bybit, OKX и BingX скидка равна 0" in html
+    assert "Bybit, OKX и BingX остаются без скидки" in html
+    assert "API-ордера официально исключены" in html
+    assert "PAPER-предположение для VIP0" in html
     for contract_key in (
         "fee_policy",
         "fee_token_balance_mode",

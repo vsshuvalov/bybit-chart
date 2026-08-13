@@ -6,7 +6,7 @@ from decimal import Decimal
 from typing import Any
 
 from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, StrictBool, field_validator
 
 from packages.arbitrage.triangular_service import (
     SUPPORTED_START_ASSETS,
@@ -27,7 +27,7 @@ class TriangularScanRequest(BaseModel):
     min_net_edge_bps: Decimal = Field(default=Decimal("5"), ge=0, lt=10_000)
     risk_buffer_bps: Decimal = Field(default=Decimal("2"), ge=0, lt=10_000)
     auto_execute: bool = False
-    use_fee_token_discounts: bool = True
+    use_fee_token_discounts: StrictBool = True
     interval_ms: int = Field(default=10_000, ge=10_000, le=60_000)
     max_tickers: int = Field(default=50, ge=3, le=50)
 
