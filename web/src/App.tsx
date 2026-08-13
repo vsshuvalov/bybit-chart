@@ -10,16 +10,21 @@
  *   Status bar: feed ages | gaps | analytics lag | release/config hashes
  */
 
-import { useUIStore } from './store'
+import { useUIStore, useViewStore } from './store'
 import TopBar from './components/TopBar'
 import LeftToolbar from './components/LeftToolbar'
 import RightSidebar from './components/RightSidebar'
 import BottomDock from './components/BottomDock'
 import StatusBar from './components/StatusBar'
 import ChartPanel from './components/ChartPanel'
+import { useWebSocket } from './hooks/useWebSocket'
 
 export default function App() {
   const { leftToolbarVisible, rightSidebarVisible, bottomDockVisible } = useUIStore()
+  const { symbol, isReplayMode } = useViewStore()
+
+  // WebSocket connection for real-time data (disabled in replay mode)
+  useWebSocket(symbol, !isReplayMode)
 
   return (
     <div className="app-shell">
