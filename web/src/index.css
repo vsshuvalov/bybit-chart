@@ -6,34 +6,43 @@
  */
 
 :root {
-  /* Core colors */
-  --bg-primary: #131722;
-  --bg-secondary: #1e222d;
-  --bg-tertiary: #2a2e39;
+  /* Core colors - Roadmap §10.1 */
+  --bg-primary: #0B0F14;         /* Chart background */
+  --bg-secondary: #111820;       /* Panel background */
+  --bg-tertiary: #17212B;        /* Controls */
 
-  --text-primary: #d1d4dc;
-  --text-secondary: #787b86;
-  --text-muted: #434651;
+  --text-primary: #E6EDF3;
+  --text-secondary: #8B98A5;
+  --text-muted: #56616D;
 
-  --border-default: #2a2e39;
+  --border-default: #26313C;     /* Grid */
   --border-highlight: #434651;
 
   /* Accent colors */
-  --accent-blue: #2962ff;
-  --accent-green: #26a69a;
-  --accent-red: #ef5350;
-  --accent-orange: #ff9800;
+  --accent-blue: #2196F3;        /* Volume */
+  --accent-green: #00C087;       /* Taker Buy / positive */
+  --accent-red: #F6465D;         /* Taker Sell / negative */
+  --accent-orange: #FFB020;      /* Absorption */
+  --accent-purple: #E040FB;      /* Sweep */
 
   /* Chart colors */
-  --chart-up: #26a69a;
-  --chart-down: #ef5350;
-  --chart-grid: #2a2e39;
+  --chart-up: #00C087;           /* Taker Buy */
+  --chart-down: #F6465D;         /* Taker Sell */
+  --chart-grid: #26313C;
+  --chart-neutral: #56616D;
+
+  /* Special indicators */
+  --poc: #FFB300;                /* Point of Control */
+  --vah-val: #AB47BC;            /* Value Area High/Low */
+  --volume: #2196F3;
+  --absorption: #FFB020;
+  --sweep: #E040FB;
 
   /* Status colors */
-  --status-success: #26a69a;
-  --status-warning: #ff9800;
-  --status-error: #ef5350;
-  --status-info: #2962ff;
+  --status-success: #00C087;
+  --status-warning: #FFB020;
+  --status-error: #F6465D;
+  --status-info: #2196F3;
 
   /* Typography */
   --font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;

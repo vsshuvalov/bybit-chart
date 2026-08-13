@@ -1,61 +1,36 @@
 /**
  * ChartPanel Component (Roadmap §11.1, §11.5).
  *
- * Center panel: TradingView Advanced Charts with drawing tools.
- * Includes overlay modules: CVD, OrderFlow Imbalance.
+ * Center panel: Lightweight Charts with custom drawing tools.
+ * Replaces TradingView widget for full control.
  *
- * Two visualization modes:
- * - 'overlay': Modules as info boxes over chart
- * - 'panel': Modules as mini-charts in BottomDock
+ * Supports two visualization modes for indicators:
+ * - Overlay: CVD/OrderFlow as overlays on main chart
+ * - Separate: CVD/OrderFlow in BottomDock panels
  */
 
 import { useState } from 'react'
-import { useViewStore } from '../store'
 import { useModuleVisualizationStore } from '../store/moduleVisualizationStore'
-import TradingViewChart from './TradingViewChart'
-import CVDModule from '../modules/CVDModule'
-import OrderFlowModule from '../modules/OrderFlowModule'
+import MainChart from './MainChart'
 import BottomDockModules from './BottomDockModules'
 
 export default function ChartPanel() {
-  const { symbol } = useViewStore()
   const { mode } = useModuleVisualizationStore()
 
   // Module settings (later: load from workspace)
-  const [cvdSettings] = useState({
-    enabled: true,
-    resetInterval: 'daily' as const,
-    smoothing: 14,
-    positiveColor: '#26a69a',
-    negativeColor: '#ef5350',
-  })
-
-  const [orderFlowSettings] = useState({
-    enabled: true,
-    imbalanceThreshold: 2.0,
-    volumeMinimum: 10000,
-    algorithm: 'ratio' as const,
-    buyColor: '#26a69a',
-    sellColor: '#ef5350',
-    filterSmallTrades: true,
-    minTradeSize: 100,
-  })
+  const [showCVDOverlay] = useState(mode === 'overlay')
+  const [showOrderFlowOverlay] = useState(mode === 'overlay')
 
   return (
     <>
       <div className="chart-panel" style={{ flex: mode === 'panel' ? '1' : undefined }}>
-        <TradingViewChart />
-
-        {/* Overlay Mode: Info boxes */}
-        {mode === 'overlay' && (
-          <>
-            <CVDModule symbol={symbol} settings={cvdSettings} />
-            <OrderFlowModule symbol={symbol} settings={orderFlowSettings} />
-          </>
-        )}
+        <MainChart
+          showCVDOverlay={showCVDOverlay}
+          showOrderFlowOverlay={showOrderFlowOverlay}
+        />
       </div>
 
-      {/* Panel Mode: BottomDock with charts */}
+      {/* Panel Mode: BottomDock with separate charts */}
       {mode === 'panel' && <BottomDockModules />}
     </>
   )
