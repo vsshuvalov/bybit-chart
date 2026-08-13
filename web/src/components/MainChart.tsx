@@ -200,13 +200,15 @@ export default function MainChart({
     // BTCUSDT tick_size = 0.1, so divide ticks by 10
     const tickSize = 0.1
 
-    const candleData: CandlestickData[] = ohlcData.candles.map((candle: OHLCCandle) => ({
-      time: Math.floor(candle.timestamp_us / 1000000) as any,
-      open: candle.open_ticks * tickSize,
-      high: candle.high_ticks * tickSize,
-      low: candle.low_ticks * tickSize,
-      close: candle.close_ticks * tickSize,
-    }))
+    const candleData: CandlestickData[] = ohlcData.candles
+      .map((candle: OHLCCandle) => ({
+        time: Math.floor(candle.timestamp_us / 1000000) as any,
+        open: candle.open_ticks * tickSize,
+        high: candle.high_ticks * tickSize,
+        low: candle.low_ticks * tickSize,
+        close: candle.close_ticks * tickSize,
+      }))
+      .sort((a, b) => (a.time as number) - (b.time as number)) // Sort by time ascending
 
     console.log('[MainChart] Candle data prepared:', {
       count: candleData.length,
@@ -215,9 +217,11 @@ export default function MainChart({
       sample: candleData.slice(0, 3),
     })
 
-    candlestickSeriesRef.current.setData(candleData)
-    console.log('[MainChart] Data set, calling fitContent()')
-    chartRef.current?.timeScale().fitContent()
+    if (candleData.length > 0) {
+      candlestickSeriesRef.current.setData(candleData)
+      console.log('[MainChart] Data set, calling fitContent()')
+      chartRef.current?.timeScale().fitContent()
+    }
   }, [ohlcData])
 
   // Update CVD data
