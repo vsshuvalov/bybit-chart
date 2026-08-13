@@ -17,6 +17,7 @@ import RightSidebar from './components/RightSidebar'
 import BottomDock from './components/BottomDock'
 import StatusBar from './components/StatusBar'
 import ChartPanel from './components/ChartPanel'
+import PersistenceTest from './components/PersistenceTest'
 import { useWebSocket } from './hooks/useWebSocket'
 
 export default function App() {
@@ -34,6 +35,9 @@ export default function App() {
         {leftToolbarVisible && <LeftToolbar />}
 
         <div className="center-container">
+          {/* Temporary: Persistence Test Component */}
+          <PersistenceTest />
+
           <ChartPanel />
           {bottomDockVisible && <BottomDock />}
         </div>

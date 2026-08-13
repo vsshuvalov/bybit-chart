@@ -11,6 +11,7 @@ Features:
 - Transaction support
 """
 
+import json
 import logging
 from datetime import datetime
 from typing import Optional
@@ -110,7 +111,8 @@ class PostgreSQLPersistence:
             Created Drawing
         """
         drawing_id = uuid4()
-        points_json = [p.model_dump() for p in points]
+        points_json = json.dumps([p.model_dump() for p in points])
+        style_json = json.dumps(style)
 
         async with self.pool.acquire() as conn:
             row = await conn.fetchrow(
@@ -120,7 +122,7 @@ class PostgreSQLPersistence:
                     points, style, schema_version, author,
                     created_at, updated_at
                 )
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), NOW())
+                VALUES ($1, $2, $3, $4, $5::jsonb, $6::jsonb, $7, $8, NOW(), NOW())
                 RETURNING
                     drawing_id, type, symbol, workspace_id,
                     points, style, locked, hidden,
@@ -132,7 +134,7 @@ class PostgreSQLPersistence:
                 symbol,
                 workspace_id,
                 points_json,
-                style,
+                style_json,
                 schema_version,
                 author,
             )
@@ -338,6 +340,8 @@ class PostgreSQLPersistence:
             Created Workspace
         """
         workspace_id = uuid4()
+        layout_json = json.dumps(layout)
+        indicators_json = json.dumps(indicators)
 
         async with self.pool.acquire() as conn:
             row = await conn.fetchrow(
@@ -347,7 +351,7 @@ class PostgreSQLPersistence:
                     layout, indicators, schema_version,
                     author, is_default, created_at, updated_at
                 )
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), NOW())
+                VALUES ($1, $2, $3, $4, $5::jsonb, $6::jsonb, $7, $8, $9, NOW(), NOW())
                 RETURNING
                     workspace_id, name, symbol, timeframe,
                     layout, indicators, schema_version, revision,
@@ -357,8 +361,8 @@ class PostgreSQLPersistence:
                 name,
                 symbol,
                 timeframe,
-                layout,
-                indicators,
+                layout_json,
+                indicators_json,
                 schema_version,
                 author,
                 is_default,
@@ -606,12 +610,16 @@ class PostgreSQLPersistence:
 
     def _row_to_drawing(self, row) -> Drawing:
         """Convert asyncpg.Record to Drawing model."""
+        # Parse JSONB fields (asyncpg returns JSON as Python objects already)
+        points_data = row["points"] if isinstance(row["points"], list) else json.loads(row["points"]) if isinstance(row["points"], str) else []
+        style_data = row["style"] if isinstance(row["style"], dict) else json.loads(row["style"]) if isinstance(row["style"], str) else {}
+
         return Drawing(
             id=str(row["drawing_id"]),
             type=row["type"],
             symbol=row["symbol"],
-            points=[DrawingPoint(**p) for p in row["points"]],
-            style=row["style"],
+            points=[DrawingPoint(**p) for p in points_data],
+            style=style_data,
             locked=row["locked"],
             hidden=row["hidden"],
             created_at=row["created_at"],
@@ -620,13 +628,17 @@ class PostgreSQLPersistence:
 
     def _row_to_workspace(self, row) -> Workspace:
         """Convert asyncpg.Record to Workspace model."""
+        # Parse JSONB fields
+        layout_data = row["layout"] if isinstance(row["layout"], dict) else json.loads(row["layout"]) if isinstance(row["layout"], str) else {}
+        indicators_data = row["indicators"] if isinstance(row["indicators"], list) else json.loads(row["indicators"]) if isinstance(row["indicators"], str) else []
+
         return Workspace(
             id=str(row["workspace_id"]),
             name=row["name"],
             symbol=row["symbol"],
             timeframe=row["timeframe"],
-            layout=row["layout"],
-            indicators=row["indicators"],
+            layout=layout_data,
+            indicators=indicators_data,
             drawing_ids=[],  # Filled separately via get_workspace_drawings
             created_at=row["created_at"],
             updated_at=row["updated_at"],
