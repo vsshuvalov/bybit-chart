@@ -187,7 +187,16 @@ def test_signal_visibility_renders_stale_near_miss_and_diagnostics(html: str) ->
     assert "котировки бирж получены в слишком разное время" in html
     assert "missing_sell_inventory" in html
     assert "на бирже продажи закончился нужный токен" in html
+    assert "insufficient_sell_inventory" in html
+    assert "inventory_not_active" in html
+    assert "inventory_pending_liquidation" in html
+    assert "rebalance_snapshot_consumed" in html
+    assert "duplicate_execution_snapshot" in html
+    assert "kind: blockers.length ? 'blocked' : 'executable'" in html
     assert "renderOpportunity(normalizeOpportunityView(data), scanCount)" in html
+    assert html.index("const nearMiss = unwrapOpportunity") < html.index(
+        "const lastSignal = unwrapOpportunity"
+    )
     assert "renderDiagnostics(first(data, ['diagnostics'], {}))" in html
     assert "gapValue === null || gapValue >= 0" in html
     assert "BBO не покрывает активационную покупку и будущий выход" in html

@@ -548,7 +548,9 @@ async def test_gate_live_ticker_schema_is_enriched_with_real_order_book() -> Non
             200,
             json={
                 "id": 77,
-                "current": 1_800_000_000_000,
+                # Gate reports the last book change here; it may be old even
+                # though this REST snapshot has just been received.
+                "current": 1_600_000_000_000,
                 "bids": [["115999", "0.8"]],
                 "asks": [["116001", "0.6"]],
             },
@@ -565,9 +567,66 @@ async def test_gate_live_ticker_schema_is_enriched_with_real_order_book() -> Non
     assert requests == 2
     assert len(tickers) == 1
     assert tickers[0].symbol == "BTCUSDT"
+    assert tickers[0].timestamp_ms == 1_800_000_000_000
+    assert tickers[0].snapshot_id == "77"
     assert tickers[0].bid_size == Decimal("0.8")
     assert tickers[0].ask_size == Decimal("0.6")
     assert tickers[0].volume_usdt == Decimal("116000000")
+
+
+@pytest.mark.asyncio
+async def test_gate_candidate_budget_reserves_a_cross_quoted_market() -> None:
+    rows = [
+        {
+            "currency_pair": "BTC_USDT",
+            "last": "100000",
+            "highest_bid": "99999",
+            "lowest_ask": "100001",
+            "quote_volume": "100000000",
+            "change_percentage": "9",
+        },
+        *[
+            {
+                "currency_pair": f"COIN{index}_USDT",
+                "last": "1",
+                "highest_bid": "0.99",
+                "lowest_ask": "1.01",
+                "quote_volume": str(90_000_000 - index),
+                "change_percentage": str(8 - index / 10),
+            }
+            for index in range(1, 10)
+        ],
+        {
+            "currency_pair": "ETH_BTC",
+            "last": "0.05",
+            "highest_bid": "0.049",
+            "lowest_ask": "0.051",
+            "quote_volume": "100",
+            "change_percentage": "0.01",
+        },
+    ]
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/spot/tickers":
+            return httpx.Response(200, json=rows)
+        assert request.url.path == "/spot/order_book"
+        return httpx.Response(
+            200,
+            json={
+                "id": 91,
+                "current": 1_800_000_000_000,
+                "bids": [["1", "1000"]],
+                "asks": [["1.01", "1000"]],
+            },
+        )
+
+    async with _client(handler) as client:
+        adapter = GatePublicAdapter(client=client, base_url="https://mock.test")
+        adapter.ticker_enrichment_limit = 5
+        tickers = await adapter.fetch_tickers()
+
+    assert len(tickers) == 5
+    assert "ETHBTC" in {ticker.symbol for ticker in tickers}
 
 
 @pytest.mark.asyncio

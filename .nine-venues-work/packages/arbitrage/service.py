@@ -545,6 +545,7 @@ class ArbitragePaperService:
         self._last_executed_count = 0
         self._current_executable_opportunity: ArbitrageOpportunity | None = None
         self._execution_blockers: list[dict[str, Any]] = []
+
         self._venue_state: dict[str, dict[str, Any]] = {
             adapter.venue.lower(): {
                 "name": adapter.venue.lower(),
@@ -560,6 +561,12 @@ class ArbitragePaperService:
             for adapter in self.adapters
         }
         self._errors: dict[str, str] = {}
+
+    @property
+    def initial_balance_per_venue_usdt(self) -> Decimal:
+        """Configured PAPER seed retained across requests until reset."""
+
+        return self._initial_balance_per_venue_usdt
 
     @property
     def running(self) -> bool:
@@ -2442,7 +2449,10 @@ class ArbitragePaperService:
                 "max_staleness_ms": self.max_staleness_ms,
                 "max_pair_skew_ms": self.max_pair_skew_ms,
                 "depth": 1 if self._settings.symbol == AUTO_SYMBOL else self.depth,
-                "auto_source": "one_public_all_tickers_request_per_venue",
+                "auto_source": (
+                    "one_public_all_tickers_request_per_venue; Gate uses one "
+                    "metadata snapshot plus up to 20 real public order books"
+                ),
                 "auto_quote_asset": "USDT",
                 "auto_liquidity_pool_size": AUTO_LIQUIDITY_POOL_SIZE,
                 "auto_min_liquidity_usdt": decimal_string(

@@ -49,7 +49,8 @@ SUPPORTED_START_ASSETS = frozenset({"USDT", "BTC", "ETH", "BNB", "BRL"})
 # Conservative placeholders for theory testing. They are deliberately not
 # presented as actual account fee tiers.
 DEFAULT_TRIANGULAR_TAKER_FEES: dict[str, Decimal] = {
-    venue: Decimal("0.001") for venue in SUPPORTED_VENUES
+    venue: Decimal("0.002") if venue in {"huobi", "gate"} else Decimal("0.001")
+    for venue in SUPPORTED_VENUES
 }
 DEFAULT_TRIANGULAR_BALANCES: dict[str, dict[str, Decimal]] = {
     venue: {
@@ -616,7 +617,10 @@ class TriangularPaperService:
             "settings": self._settings.to_dict(),
             "fee_source": "configured_assumptions",
             "market_data_policy": {
-                "source": "one_public_all_tickers_request_per_venue",
+                "source": (
+                    "one_public_all_tickers_request_per_venue; Gate uses one "
+                    "metadata snapshot plus up to 20 real public order books"
+                ),
                 "max_tickers_per_venue": self._settings.max_tickers,
                 "max_staleness_ms": self.max_staleness_ms,
                 "max_leg_skew_ms": self.max_leg_skew_ms,

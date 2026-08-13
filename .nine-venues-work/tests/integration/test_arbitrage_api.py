@@ -244,3 +244,13 @@ def test_arbitrage_reset_can_atomically_replace_auto_seed_balance() -> None:
         assert body["settings"]["initial_balance_per_venue_usdt"] == "900"
         assert body["balances"]["alpha"]["USDT"] == "900"
         assert body["balances"]["beta"]["USDT"] == "900"
+
+        # Omitting the field on later API calls preserves the configured seed
+        # instead of silently applying the model's original 500 USDT default.
+        scan = client.post(
+            "/api/v1/arbitrage/scan",
+            json={"symbol": "AUTO", "auto_execute": False},
+        )
+        assert scan.status_code == 200
+        assert scan.json()["settings"]["initial_balance_per_venue_usdt"] == "900"
+        assert scan.json()["balances"]["alpha"]["USDT"] == "900"

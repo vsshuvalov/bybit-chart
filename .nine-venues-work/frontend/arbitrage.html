@@ -164,13 +164,15 @@
 
     .panel {
       position: relative;
-      overflow: hidden;
+      overflow: visible;
       border: 1px solid var(--line);
       border-radius: var(--radius-lg);
       background: var(--surface);
       box-shadow: var(--shadow), inset 0 1px 0 rgba(255,255,255,.025);
       backdrop-filter: blur(18px);
     }
+    .panel:hover,
+    .panel:focus-within { z-index: 2; }
     .panel-head {
       display: flex;
       align-items: center;
@@ -1014,7 +1016,10 @@
 
     async function requestJSON(url, options = {}) {
       const controller = new AbortController();
-      const timeout = window.setTimeout(() => controller.abort(), 7500);
+      // Gate confirms its bounded metadata candidates with real public books;
+      // on a slow network those concurrent read-only requests can outlive the
+      // old 7.5 s browser deadline even while the server is still healthy.
+      const timeout = window.setTimeout(() => controller.abort(), 25000);
       try {
         const response = await fetch(url, {
           ...options,
@@ -1083,7 +1088,7 @@
       const asset = first(value, ['base_asset', 'asset'], null);
       const shortfall = first(value, ['shortfall_base_quantity'], null);
       const localized = readableRejectionReason(code);
-      if (code === 'missing_sell_inventory' || code === 'insufficient_inventory' || code === 'missing_inventory') {
+      if (code === 'missing_sell_inventory' || code === 'insufficient_sell_inventory' || code === 'insufficient_inventory' || code === 'missing_inventory') {
         return `${localized}${exchange === null ? '' : ` на ${displayExchange(exchange)}`}${asset === null ? '' : ` (${asset})`}${shortfall === null ? '' : ` · не хватает ${compact.format(finite(shortfall))}`}`;
       }
       return localized !== String(code ?? '').replace(/[_-]+/g, ' ') ? localized : (message || localized);
@@ -1124,7 +1129,8 @@
       const currentMarket = unwrapOpportunity(first(data, ['current_market_opportunity'], null));
       const currentExecutable = unwrapOpportunity(first(data, ['current_executable_opportunity'], null));
       if (currentExecutable) {
-        return { opportunity: currentExecutable, kind: 'executable', executionBlockers: [], executionBlockerDetails: [] };
+        const blockers = currentExecutionBlockers(data, currentExecutable);
+        return { opportunity: currentExecutable, kind: blockers.length ? 'blocked' : 'executable', executionBlockers: blockers, executionBlockerDetails: currentExecutionBlockerDetails(data, currentExecutable) };
       }
       const current = currentMarket || normalizeOpportunity(data);
       if (current) {
@@ -1132,10 +1138,10 @@
         const blockers = currentExecutionBlockers(data, opportunity);
         return { opportunity, kind: blockers.length || currentMarket ? 'blocked' : 'executable', executionBlockers: blockers, executionBlockerDetails: currentExecutionBlockerDetails(data, opportunity) };
       }
-      const lastSignal = unwrapOpportunity(first(data, ['last_profitable_signal'], null));
-      if (lastSignal) return { opportunity: lastSignal, kind: 'stale', ageMs: opportunityAgeMs(lastSignal) };
       const nearMiss = unwrapOpportunity(first(data, ['best_near_miss'], null));
       if (nearMiss) return { opportunity: nearMiss, kind: 'near-miss' };
+      const lastSignal = unwrapOpportunity(first(data, ['last_profitable_signal'], null));
+      if (lastSignal) return { opportunity: lastSignal, kind: 'stale', ageMs: opportunityAgeMs(lastSignal) };
       return { opportunity: null, kind: 'empty' };
     }
 
@@ -1163,8 +1169,11 @@
         stale_quote: 'котировка устарела',
         stale_ticker: 'котировка устарела',
         missing_sell_inventory: 'на бирже продажи закончился нужный токен',
+        insufficient_sell_inventory: 'на бирже продажи недостаточно нужного токена',
         missing_inventory: 'нет токена для продажи на выбранной бирже',
         insufficient_inventory: 'недостаточно токена для продажи',
+        inventory_not_active: 'токен ещё не активирован в PAPER-инвентаре',
+        inventory_pending_liquidation: 'токен ожидает выхода из PAPER-инвентаря',
         insufficient_quote_balance: 'недостаточно USDT для покупки',
         activation_pending: 'ещё недостаточно наблюдений устойчивости',
         active_symbol_limit: 'достигнут лимит активных токенов',
@@ -1172,6 +1181,8 @@
         balance_corridor: 'актив есть, но лимит баланса не позволяет сделку',
         auto_execute_disabled: 'AUTO-PAPER выключен',
         duplicate_snapshot: 'этот снимок уже был исполнен',
+        duplicate_execution_snapshot: 'этот снимок уже был исполнен',
+        rebalance_snapshot_consumed: 'этот снимок использован для ребалансировки; нужен новый снимок ликвидности',
         not_execution_ready: 'рыночный сигнал есть, но виртуальные балансы пока не готовы к исполнению',
         rebalance_not_profitable: 'ожидаемая прибыль не покрывает стоимость ребалансировки',
         rebalance_pending: 'требуется виртуальная ребалансировка между биржами'

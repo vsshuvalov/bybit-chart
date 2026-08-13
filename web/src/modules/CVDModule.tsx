@@ -13,7 +13,7 @@
 
 import { useEffect, useState, useRef } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import axios from 'axios'
+import { apiClient } from '../api/client'
 
 interface Trade {
   timestampUs: number
@@ -41,9 +41,9 @@ export default function CVDModule({ symbol, settings }: CVDModuleProps) {
 
   // Fetch historical trades to initialize CVD
   const { data: tradesData } = useQuery({
-    queryKey: ['trades', symbol],
+    queryKey: ['trades', symbol, { limit: 1000, type: 'cvd-module' }],
     queryFn: async () => {
-      const response = await axios.get(`http://83.147.234.167/api/v1/trades`, {
+      const response = await apiClient.get('/trades', {
         params: { symbol, limit: 1000 },
       })
       return response.data

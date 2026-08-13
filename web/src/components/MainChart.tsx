@@ -24,7 +24,7 @@ import {
   CrosshairMode,
 } from 'lightweight-charts'
 import { useQuery } from '@tanstack/react-query'
-import axios from 'axios'
+import { apiClient } from '../api/client'
 import { useViewStore } from '../store'
 
 interface OHLCCandle {
@@ -64,7 +64,7 @@ export default function MainChart({
   const { data: ohlcData } = useQuery({
     queryKey: ['ohlc', symbol, timeframe],
     queryFn: async () => {
-      const response = await axios.get(`http://83.147.234.167/api/v1/ohlc`, {
+      const response = await apiClient.get('/ohlc', {
         params: { symbol, interval: timeframe, limit: 500 },
       })
       return response.data
@@ -74,9 +74,9 @@ export default function MainChart({
 
   // Fetch trades for CVD/OrderFlow
   const { data: tradesData } = useQuery({
-    queryKey: ['trades', symbol],
+    queryKey: ['trades', symbol, { limit: 1000 }],
     queryFn: async () => {
-      const response = await axios.get(`http://83.147.234.167/api/v1/trades`, {
+      const response = await apiClient.get('/trades', {
         params: { symbol, limit: 1000 },
       })
       return response.data

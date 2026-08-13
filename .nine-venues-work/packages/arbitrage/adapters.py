@@ -696,7 +696,11 @@ class GatePublicAdapter(BasePublicVenueAdapter):
     venue = "gate"
     default_base_url = "https://api.gateio.ws/api/v4"
     max_depth = 100
-    ticker_enrichment_limit = 50
+    # Gate's all-market payload has no best-size fields. Twenty real books per
+    # scan keep one cross monitor (2 s) plus one triangular monitor (10 s)
+    # comfortably below Gate's public order-book request budget, while the
+    # global nine-exchange universe can still contain 50 symbols.
+    ticker_enrichment_limit = 20
     ticker_enrichment_concurrency = 20
 
     async def fetch_tickers(self) -> tuple[MarketTicker, ...]:
@@ -714,11 +718,17 @@ class GatePublicAdapter(BasePublicVenueAdapter):
                 "gate: all-market tickers contain no usable spot candidates"
             )
 
+        # All enrichment requests below are dispatched as one bounded wave.
+        # Gate's `current` field is the time the individual book last changed,
+        # not the acquisition time of this fresh REST snapshot; using it as
+        # freshness would falsely reject quiet but current books. Keep that
+        # exchange value in the book snapshot id and use one local completion
+        # timestamp for the coherent candidate batch.
         semaphore = asyncio.Semaphore(self.ticker_enrichment_concurrency)
 
         async def enrich(
             candidate: _GateTickerMetadata,
-        ) -> MarketTicker | None:
+        ) -> tuple[_GateTickerMetadata, OrderBook] | None:
             try:
                 async with semaphore:
                     book = await self.fetch_order_book(candidate.symbol, depth=1)
@@ -726,12 +736,26 @@ class GatePublicAdapter(BasePublicVenueAdapter):
                 # One suspended or disappearing pair must not invalidate the
                 # coherent order books returned for the other candidates.
                 return None
-            return MarketTicker(
+            return candidate, book
+
+        enriched = await asyncio.gather(*(enrich(item) for item in candidates))
+        available = tuple(item for item in enriched if item is not None)
+        if not available:
+            raise TickerPayloadError(
+                "gate: no candidate order book could provide executable BBO depth"
+            )
+        batch_timestamp_ms = _ticker_timestamp_ms(
+            self._clock_ms(),
+            venue=self.venue,
+            field="book enrichment acquisition timestamp",
+        )
+        return tuple(
+            MarketTicker(
                 venue=self.venue,
                 symbol=candidate.symbol,
                 base_asset=candidate.base_asset,
                 quote_asset=candidate.quote_asset,
-                timestamp_ms=book.timestamp_ms,
+                timestamp_ms=batch_timestamp_ms,
                 bid=book.best_bid,
                 ask=book.best_ask,
                 bid_size=book.bids[0].quantity,
@@ -741,14 +765,8 @@ class GatePublicAdapter(BasePublicVenueAdapter):
                 snapshot_id=book.snapshot_id,
                 change_24h_pct=candidate.change_24h_pct,
             )
-
-        enriched = await asyncio.gather(*(enrich(item) for item in candidates))
-        result = tuple(item for item in enriched if item is not None)
-        if not result:
-            raise TickerPayloadError(
-                "gate: no candidate order book could provide executable BBO depth"
-            )
-        return result
+            for candidate, book in available
+        )
 
     async def fetch_order_book(self, symbol: str, depth: int = 20) -> OrderBook:
         canonical, depth = self._request_values(symbol, depth)
@@ -936,26 +954,61 @@ def _gate_ticker_candidates(
             )
         )
 
-    liquidity_pool = sorted(
-        ranked,
-        key=lambda item: (-item.volume_usdt, item.symbol),
-    )[: max(limit * 3, limit)]
-    liquid_count = max(1, (limit * 7) // 10)
-    selected = liquidity_pool[:liquid_count]
+    if limit <= 0:
+        return ()
+
+    def hybrid_select(
+        items: Sequence[_GateTickerMetadata],
+        count: int,
+    ) -> list[_GateTickerMetadata]:
+        """Keep a liquid core while reserving room for volatile markets."""
+
+        if count <= 0:
+            return []
+        liquidity_pool = sorted(
+            items,
+            key=lambda item: (-item.volume_usdt, item.symbol),
+        )[: max(count * 3, count)]
+        liquid_count = max(1, (count * 7) // 10)
+        chosen = list(liquidity_pool[:liquid_count])
+        chosen_symbols = {item.symbol for item in chosen}
+        for item in sorted(
+            liquidity_pool,
+            key=lambda value: (
+                -abs(value.change_24h_pct),
+                -value.volume_usdt,
+                value.symbol,
+            ),
+        ):
+            if len(chosen) >= count:
+                break
+            if item.symbol not in chosen_symbols:
+                chosen.append(item)
+                chosen_symbols.add(item.symbol)
+        return chosen
+
+    # A pure top-volume list is almost entirely USDT quoted. Reserve one fifth
+    # of the bounded enrichment budget for liquid cross-quoted markets so Gate
+    # can participate in triangular routes without weakening BBO truthfulness.
+    stable_markets = [
+        item for item in ranked if item.quote_asset in _STABLE_QUOTES
+    ]
+    cross_markets = [
+        item for item in ranked if item.quote_asset not in _STABLE_QUOTES
+    ]
+    cross_count = min(len(cross_markets), max(1, limit // 5))
+    stable_count = min(len(stable_markets), limit - cross_count)
+    selected = hybrid_select(stable_markets, stable_count)
+    selected.extend(hybrid_select(cross_markets, cross_count))
+
     selected_symbols = {item.symbol for item in selected}
-    for item in sorted(
-        liquidity_pool,
-        key=lambda value: (
-            -abs(value.change_24h_pct),
-            -value.volume_usdt,
-            value.symbol,
-        ),
-    ):
-        if len(selected) >= limit:
-            break
-        if item.symbol not in selected_symbols:
-            selected.append(item)
-            selected_symbols.add(item.symbol)
+    if len(selected) < limit:
+        for item in hybrid_select(ranked, limit):
+            if item.symbol not in selected_symbols:
+                selected.append(item)
+                selected_symbols.add(item.symbol)
+            if len(selected) >= limit:
+                break
     return tuple(selected)
 
 

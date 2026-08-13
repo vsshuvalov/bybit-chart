@@ -1,5 +1,6 @@
 """Контрактные тесты standalone dashboard треугольного PAPER-арбитража."""
 
+import re
 from pathlib import Path
 
 import pytest
@@ -27,19 +28,19 @@ def test_page_is_standalone_russian_paper_dashboard(html: str) -> None:
 
 
 def test_controls_match_triangular_request_contract(html: str) -> None:
-    for venue in (
-        "all",
-        "bybit",
-        "binance",
-        "okx",
-        "bitget",
-        "huobi",
-        "kucoin",
-        "mexc",
-        "bingx",
-        "gate",
+    for venue, label in (
+        ("all", "Все биржи"),
+        ("bybit", "Bybit"),
+        ("binance", "Binance"),
+        ("okx", "OKX"),
+        ("bitget", "Bitget"),
+        ("huobi", "Huobi"),
+        ("kucoin", "KuCoin"),
+        ("mexc", "MEXC"),
+        ("bingx", "BingX"),
+        ("gate", "Gate"),
     ):
-        assert f'value="{venue}"' in html
+        assert f'<option value="{venue}">{label}</option>' in html
     for asset in ("USDT", "BTC", "ETH", "BNB", "BRL"):
         assert f'value="{asset}"' in html
     for field in (
@@ -76,7 +77,7 @@ def test_required_triangular_sections_are_present(html: str) -> None:
         "Net edge",
         "Expected P&amp;L",
         "Состояние бирж",
-        "Universe ликвидных тикеров",
+        "Отбор ликвидных тикеров",
         "Виртуальные балансы",
         "Журнал PAPER-циклов",
         "Ошибки и предупреждения",
@@ -84,6 +85,76 @@ def test_required_triangular_sections_are_present(html: str) -> None:
         assert text in html
     assert "Нога ${index + 1}" in html
     assert "Array.from({ length: 3 }" in html
+
+
+def test_help_tooltips_are_accessible_on_every_control_and_panel(html: str) -> None:
+    assert html.count('class="info-button"') >= 23
+    assert html.count('role="tooltip"') == html.count('class="info-button"')
+    described = re.findall(
+        r'class="info-button"[^>]*aria-describedby="([^"]+)"', html
+    )
+    tooltip_ids = re.findall(r'class="info-tooltip" id="([^"]+)"', html)
+    assert described
+    assert len(tooltip_ids) == len(set(tooltip_ids))
+    assert set(described) == set(tooltip_ids)
+    assert ".info-tip:hover .info-tooltip" in html
+    assert ".info-tip:focus-within .info-tooltip" in html
+    assert ".info-button:focus-visible" in html
+
+    for control_id in (
+        "venue",
+        "startAsset",
+        "startAmount",
+        "maxTickers",
+        "minEdge",
+        "riskBuffer",
+        "intervalMs",
+        "autoExecute",
+        "scanButton",
+        "startButton",
+        "stopButton",
+        "resetButton",
+    ):
+        control = re.search(rf'<(?:input|select|button)\b[^>]*id="{control_id}"[^>]*>', html)
+        assert control, f"control {control_id} должен существовать"
+        assert 'aria-describedby="tip-' in control.group(0)
+
+    for panel_tip in (
+        "tip-controls",
+        "tip-best-edge",
+        "tip-best-pnl",
+        "tip-ticker-count",
+        "tip-cycle-count",
+        "tip-opportunity",
+        "tip-universe",
+        "tip-journal",
+        "tip-venues",
+        "tip-balances",
+        "tip-errors",
+    ):
+        assert panel_tip in tooltip_ids
+
+
+def test_execution_copy_is_minimal_and_no_fake_initial_balance_control(html: str) -> None:
+    assert '<span class="switch-copy"><strong>Auto-paper</strong></span>' in html
+    assert "Атомарно, только виртуально" not in html
+    assert ".switch-copy small" not in html
+    assert "initialBalance" not in html
+    assert "initial_balance_per_venue_usdt" not in html
+
+
+def test_user_facing_copy_uses_russian_exchange_terminology(html: str) -> None:
+    visible = re.sub(r"<(script|style)\b.*?</\1>", "", html, flags=re.DOTALL)
+    visible_text = re.sub(r"<[^>]+>", " ", visible)
+    assert re.search(r"бирж", visible_text, flags=re.IGNORECASE)
+    assert re.search(r"\bvenue\b", visible_text, flags=re.IGNORECASE) is None
+
+
+def test_control_panel_is_compact(html: str) -> None:
+    assert ".control-panel .panel-head { min-height: 50px; padding: 10px 16px; }" in html
+    assert "grid-template-columns: repeat(4, minmax(138px, 1fr))" in html
+    assert "padding: 12px 16px 10px" in html
+    assert "height: 38px" in html
 
 
 def test_status_contract_fields_are_rendered(html: str) -> None:

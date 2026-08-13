@@ -5,11 +5,7 @@
  * TypeScript types aligned с backend Pydantic models.
  */
 
-import axios from 'axios'
-
-const API_BASE = (typeof window !== 'undefined' && (window as any).__VITE_API_URL__)
-  || (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_API_URL)
-  || 'http://83.147.234.167'
+import { apiClient } from './client'
 
 // ========== Types (aligned с backend) ==========
 
@@ -115,7 +111,7 @@ export async function listDrawings(
   const params = new URLSearchParams({ symbol, include_hidden: String(includeHidden) })
   if (workspaceId) params.set('workspace_id', workspaceId)
 
-  const response = await axios.get<DrawingListResponse>(`${API_BASE}/api/v1/drawings`, { params })
+  const response = await apiClient.get<DrawingListResponse>('/drawings', { params })
   return response.data
 }
 
@@ -125,7 +121,7 @@ export async function listDrawings(
  * Roadmap §11.3: schemaVersion tracking, server persistence.
  */
 export async function createDrawing(request: CreateDrawingRequest): Promise<Drawing> {
-  const response = await axios.post<Drawing>(`${API_BASE}/api/v1/drawings`, request)
+  const response = await apiClient.post<Drawing>('/drawings', request)
   return response.data
 }
 
@@ -133,7 +129,7 @@ export async function createDrawing(request: CreateDrawingRequest): Promise<Draw
  * Get drawing by ID.
  */
 export async function getDrawing(drawingId: string): Promise<Drawing> {
-  const response = await axios.get<Drawing>(`${API_BASE}/api/v1/drawings/${drawingId}`)
+  const response = await apiClient.get<Drawing>(`/drawings/${drawingId}`)
   return response.data
 }
 
@@ -146,7 +142,7 @@ export async function updateDrawing(
   drawingId: string,
   request: UpdateDrawingRequest
 ): Promise<Drawing> {
-  const response = await axios.put<Drawing>(`${API_BASE}/api/v1/drawings/${drawingId}`, request)
+  const response = await apiClient.put<Drawing>(`/drawings/${drawingId}`, request)
   return response.data
 }
 
@@ -154,7 +150,7 @@ export async function updateDrawing(
  * Delete drawing permanently.
  */
 export async function deleteDrawing(drawingId: string): Promise<void> {
-  await axios.delete(`${API_BASE}/api/v1/drawings/${drawingId}`)
+  await apiClient.delete(`/drawings/${drawingId}`)
 }
 
 // ========== Workspaces API ==========
@@ -166,7 +162,7 @@ export async function deleteDrawing(drawingId: string): Promise<void> {
  */
 export async function listWorkspaces(author?: string): Promise<WorkspaceListResponse> {
   const params = author ? { author } : undefined
-  const response = await axios.get<WorkspaceListResponse>(`${API_BASE}/api/v1/workspaces`, {
+  const response = await apiClient.get<WorkspaceListResponse>('/workspaces', {
     params,
   })
   return response.data
@@ -178,7 +174,7 @@ export async function listWorkspaces(author?: string): Promise<WorkspaceListResp
  * Roadmap §11.2: Open, save, create copy, export/import.
  */
 export async function createWorkspace(request: CreateWorkspaceRequest): Promise<Workspace> {
-  const response = await axios.post<Workspace>(`${API_BASE}/api/v1/workspaces`, request)
+  const response = await apiClient.post<Workspace>('/workspaces', request)
   return response.data
 }
 
@@ -186,7 +182,7 @@ export async function createWorkspace(request: CreateWorkspaceRequest): Promise<
  * Get workspace by ID.
  */
 export async function getWorkspace(workspaceId: string): Promise<Workspace> {
-  const response = await axios.get<Workspace>(`${API_BASE}/api/v1/workspaces/${workspaceId}`)
+  const response = await apiClient.get<Workspace>(`/workspaces/${workspaceId}`)
   return response.data
 }
 
@@ -199,8 +195,8 @@ export async function updateWorkspace(
   workspaceId: string,
   request: UpdateWorkspaceRequest
 ): Promise<Workspace> {
-  const response = await axios.put<Workspace>(
-    `${API_BASE}/api/v1/workspaces/${workspaceId}`,
+  const response = await apiClient.put<Workspace>(
+    `/workspaces/${workspaceId}`,
     request
   )
   return response.data
@@ -210,15 +206,15 @@ export async function updateWorkspace(
  * Delete workspace permanently.
  */
 export async function deleteWorkspace(workspaceId: string): Promise<void> {
-  await axios.delete(`${API_BASE}/api/v1/workspaces/${workspaceId}`)
+  await apiClient.delete(`/workspaces/${workspaceId}`)
 }
 
 /**
  * Get drawings associated with workspace.
  */
 export async function getWorkspaceDrawings(workspaceId: string): Promise<DrawingListResponse> {
-  const response = await axios.get<DrawingListResponse>(
-    `${API_BASE}/api/v1/workspaces/${workspaceId}/drawings`
+  const response = await apiClient.get<DrawingListResponse>(
+    `/workspaces/${workspaceId}/drawings`
   )
   return response.data
 }

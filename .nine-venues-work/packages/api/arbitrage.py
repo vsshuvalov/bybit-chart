@@ -71,8 +71,8 @@ class ArbitrageScanRequest(BaseModel):
         ge=1,
         le=100,
     )
-    initial_balance_per_venue_usdt: Decimal = Field(
-        default=AUTO_PAPER_INITIAL_USDT,
+    initial_balance_per_venue_usdt: Decimal | None = Field(
+        default=None,
         ge=MIN_AUTO_INITIAL_BALANCE_PER_VENUE_USDT,
         le=MAX_AUTO_INITIAL_BALANCE_PER_VENUE_USDT,
     )
@@ -113,15 +113,15 @@ class ArbitrageScanRequest(BaseModel):
             * self.allocation_per_symbol_venue_usdt
             + self.notional
         )
-        if (
-            self.allocation_per_symbol_venue_usdt
-            > self.initial_balance_per_venue_usdt
-        ):
+        initial_balance = self.initial_balance_per_venue_usdt
+        if initial_balance is None:
+            return self
+        if self.allocation_per_symbol_venue_usdt > initial_balance:
             raise ValueError(
                 "AUTO allocation_per_symbol_venue_usdt must not exceed "
                 "initial_balance_per_venue_usdt"
             )
-        if committed > self.initial_balance_per_venue_usdt:
+        if committed > initial_balance:
             raise ValueError(
                 "AUTO budget exceeds initial balance per venue: "
                 "max_active_symbols * allocation_per_symbol_venue_usdt + "
@@ -129,7 +129,12 @@ class ArbitrageScanRequest(BaseModel):
             )
         return self
 
-    def settings(self) -> ScanSettings:
+    def settings(
+        self,
+        current_initial_balance_per_venue_usdt: Decimal = (
+            AUTO_PAPER_INITIAL_USDT
+        ),
+    ) -> ScanSettings:
         return ScanSettings(
             symbol=self.symbol,
             notional=self.notional,
@@ -151,6 +156,8 @@ class ArbitrageScanRequest(BaseModel):
             bbo_depth_multiplier=self.bbo_depth_multiplier,
             initial_balance_per_venue_usdt=(
                 self.initial_balance_per_venue_usdt
+                if self.initial_balance_per_venue_usdt is not None
+                else current_initial_balance_per_venue_usdt
             ),
             rebalance_safety_multiple=self.rebalance_safety_multiple,
         )
@@ -190,17 +197,29 @@ def register_arbitrage_endpoints(
 
     @app.post("/api/v1/arbitrage/scan")
     async def arbitrage_scan(request: ArbitrageScanRequest) -> dict[str, Any]:
+        current = get_service()
         try:
-            return await get_service().scan(request.settings())
+            settings = request.settings(
+                current.initial_balance_per_venue_usdt
+            )
+            return await current.scan(settings)
         except RuntimeError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     @app.post("/api/v1/arbitrage/start")
     async def arbitrage_start(request: ArbitrageScanRequest) -> dict[str, Any]:
+        current = get_service()
         try:
-            return await get_service().start(request.settings())
+            settings = request.settings(
+                current.initial_balance_per_venue_usdt
+            )
+            return await current.start(settings)
         except RuntimeError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     @app.post("/api/v1/arbitrage/stop")
     async def arbitrage_stop() -> dict[str, Any]:

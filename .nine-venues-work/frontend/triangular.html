@@ -180,6 +180,7 @@
     .field-label,
     .stat-label-with-help,
     .action-with-help {
+      position: relative;
       display: flex;
       align-items: center;
       gap: 6px;
@@ -433,7 +434,12 @@
       .edge-item { border-right: 0; }
       .balance-row { grid-template-columns: 1fr; }
       .balance-assets { justify-content: flex-start; }
+      .title-with-help > .info-tip,
+      .field-label > .info-tip,
+      .stat-label-with-help > .info-tip,
+      .action-with-help > .info-tip { position: static; }
       .info-tooltip { left: 0; transform: translate(0, 5px); }
+      .action-with-help:nth-child(even) .info-tooltip { right: 0; left: auto; }
       .info-tip:hover .info-tooltip,
       .info-tip:focus-within .info-tooltip { transform: translate(0, 0); }
     }
@@ -458,9 +464,9 @@
         </div>
       </div>
       <div class="mode-strip" aria-label="Режим терминала">
-        <a class="back-link" href="/">← Межбиржевой</a>
+        <a class="back-link" href="/">← Межбиржевой режим</a>
         <span class="badge badge-paper">● PAPER</span>
-        <span class="badge badge-local">3 ноги · 1 биржа</span>
+        <span class="badge badge-local">3 операции · 1 биржа</span>
         <span class="badge badge-public">Публичные данные · без API-ключей</span>
         <span class="connection" id="connectionState" role="status"><span class="connection-dot"></span><span id="connectionText">Подключение…</span></span>
       </div>
@@ -477,13 +483,16 @@
 
     <section class="panel control-panel" aria-labelledby="controlsTitle">
       <div class="panel-head">
-        <h2 class="panel-title" id="controlsTitle">Параметры треугольного сканирования</h2>
+        <div class="title-with-help">
+          <h2 class="panel-title" id="controlsTitle">Параметры треугольного сканирования</h2>
+          <span class="info-tip"><button class="info-button" type="button" aria-label="Описание параметров сканирования" aria-describedby="tip-controls">?</button><span class="info-tooltip" id="tip-controls" role="tooltip">Здесь задаются биржа, стартовый актив и объём, пороги доходности и режим PAPER-монитора.</span></span>
+        </div>
         <span class="badge" id="monitorState">Монитор остановлен</span>
       </div>
       <form id="scanForm" class="control-grid">
         <div class="field">
-          <label for="venue">Биржа</label>
-          <select id="venue" name="venue">
+          <div class="field-label"><label for="venue">Биржа</label><span class="info-tip"><button class="info-button" type="button" aria-label="Описание выбора биржи" aria-describedby="tip-venue">?</button><span class="info-tooltip" id="tip-venue" role="tooltip">Выберите одну биржу или проверьте все доступные площадки; каждый треугольный маршрут остаётся внутри одной биржи.</span></span></div>
+          <select id="venue" name="venue" aria-describedby="tip-venue">
             <option value="all">Все биржи</option>
             <option value="bybit">Bybit</option>
             <option value="binance">Binance</option>
@@ -497,8 +506,8 @@
           </select>
         </div>
         <div class="field">
-          <label for="startAsset">Стартовый актив</label>
-          <select id="startAsset" name="start_asset">
+          <div class="field-label"><label for="startAsset">Стартовый актив</label><span class="info-tip"><button class="info-button" type="button" aria-label="Описание стартового актива" aria-describedby="tip-start-asset">?</button><span class="info-tooltip" id="tip-start-asset" role="tooltip">Актив, с которого начинается и которым завершается замкнутый цикл A → B → C → A.</span></span></div>
+          <select id="startAsset" name="start_asset" aria-describedby="tip-start-asset">
             <option value="USDT">USDT</option>
             <option value="BTC">BTC</option>
             <option value="ETH">ETH</option>
@@ -507,24 +516,24 @@
           </select>
         </div>
         <div class="field">
-          <label for="startAmount">Стартовый объём</label>
-          <input id="startAmount" name="start_amount" type="number" min="0.00000001" max="1000000" step="any" value="1000" inputmode="decimal" required>
+          <div class="field-label"><label for="startAmount">Стартовый объём</label><span class="info-tip"><button class="info-button" type="button" aria-label="Описание стартового объёма" aria-describedby="tip-start-amount">?</button><span class="info-tooltip" id="tip-start-amount" role="tooltip">Виртуальная сумма стартового актива, которую сканер проводит через три последовательных обмена.</span></span></div>
+          <input id="startAmount" name="start_amount" type="number" min="0.00000001" max="1000000" step="any" value="1000" inputmode="decimal" aria-describedby="tip-start-amount" required>
         </div>
         <div class="field">
-          <label for="maxTickers">Ликвидный universe</label>
-          <input id="maxTickers" name="max_tickers" type="number" min="50" max="50" step="1" value="50" readonly aria-readonly="true">
+          <div class="field-label"><label for="maxTickers">Ликвидные пары</label><span class="info-tip"><button class="info-button" type="button" aria-label="Описание ликвидных пар" aria-describedby="tip-max-tickers">?</button><span class="info-tooltip" id="tip-max-tickers" role="tooltip">Фиксированный лимит: до 50 ликвидных тикеров на биржу с сохранением доступных треугольников.</span></span></div>
+          <input id="maxTickers" name="max_tickers" type="number" min="50" max="50" step="1" value="50" readonly aria-readonly="true" aria-describedby="tip-max-tickers">
         </div>
         <div class="field">
-          <label for="minEdge">Мин. net edge, bps</label>
-          <input id="minEdge" name="min_net_edge_bps" type="number" min="0" max="9999" step="0.1" value="5" inputmode="decimal" required>
+          <div class="field-label"><label for="minEdge">Мин. net edge, bps</label><span class="info-tip"><button class="info-button" type="button" aria-label="Описание минимального net edge" aria-describedby="tip-min-edge">?</button><span class="info-tooltip" id="tip-min-edge" role="tooltip">Минимальная ожидаемая доходность цикла после трёх taker-комиссий и risk buffer. 1 bps = 0,01%.</span></span></div>
+          <input id="minEdge" name="min_net_edge_bps" type="number" min="0" max="9999" step="0.1" value="5" inputmode="decimal" aria-describedby="tip-min-edge" required>
         </div>
         <div class="field">
-          <label for="riskBuffer">Risk buffer, bps</label>
-          <input id="riskBuffer" name="risk_buffer_bps" type="number" min="0" max="9999" step="0.1" value="2" inputmode="decimal" required>
+          <div class="field-label"><label for="riskBuffer">Risk buffer, bps</label><span class="info-tip"><button class="info-button" type="button" aria-label="Описание risk buffer" aria-describedby="tip-risk-buffer">?</button><span class="info-tooltip" id="tip-risk-buffer" role="tooltip">Дополнительный запас на задержку, проскальзывание и небольшое изменение цены между ногами цикла.</span></span></div>
+          <input id="riskBuffer" name="risk_buffer_bps" type="number" min="0" max="9999" step="0.1" value="2" inputmode="decimal" aria-describedby="tip-risk-buffer" required>
         </div>
         <div class="field">
-          <label for="intervalMs">Интервал монитора</label>
-          <select id="intervalMs" name="interval_ms">
+          <div class="field-label"><label for="intervalMs">Интервал монитора</label><span class="info-tip"><button class="info-button" type="button" aria-label="Описание интервала монитора" aria-describedby="tip-interval">?</button><span class="info-tooltip" id="tip-interval" role="tooltip">Как часто PAPER-монитор получает новый снимок котировок и повторяет поиск циклов.</span></span></div>
+          <select id="intervalMs" name="interval_ms" aria-describedby="tip-interval">
             <option value="10000" selected>10 секунд</option>
             <option value="15000">15 секунд</option>
             <option value="30000">30 секунд</option>
@@ -532,33 +541,33 @@
           </select>
         </div>
         <div class="field">
-          <label for="autoExecute">Исполнение</label>
+          <div class="field-label"><label for="autoExecute">Исполнение</label><span class="info-tip"><button class="info-button" type="button" aria-label="Описание Auto-paper" aria-describedby="tip-auto-paper">?</button><span class="info-tooltip" id="tip-auto-paper" role="tooltip">Когда включено, подходящий цикл исполняется атомарно только на виртуальных балансах выбранной биржи.</span></span></div>
           <label class="switch-wrap" for="autoExecute">
-            <span class="switch-copy"><strong>Auto-paper</strong><small>Атомарно, только виртуально</small></span>
-            <span class="switch"><input id="autoExecute" name="auto_execute" type="checkbox"><span class="switch-track" aria-hidden="true"></span></span>
+            <span class="switch-copy"><strong>Auto-paper</strong></span>
+            <span class="switch"><input id="autoExecute" name="auto_execute" type="checkbox" aria-describedby="tip-auto-paper"><span class="switch-track" aria-hidden="true"></span></span>
           </label>
         </div>
         <div class="actions">
-          <button class="btn btn-primary" id="scanButton" type="submit"><span id="scanIcon">△</span><span id="scanText">Запустить скан</span></button>
-          <button class="btn btn-secondary" id="startButton" type="button"><span aria-hidden="true">▶</span><span>Старт монитора</span></button>
-          <button class="btn btn-stop" id="stopButton" type="button" disabled><span aria-hidden="true">■</span><span>Стоп монитора</span></button>
-          <button class="btn btn-ghost" id="resetButton" type="button" title="Сбросить виртуальный портфель" aria-label="Сбросить виртуальный портфель">↺</button>
+          <span class="action-with-help"><button class="btn btn-primary" id="scanButton" type="submit" aria-describedby="tip-scan"><span id="scanIcon">△</span><span id="scanText">Запустить скан</span></button><span class="info-tip"><button class="info-button" type="button" aria-label="Описание одиночного сканирования" aria-describedby="tip-scan">?</button><span class="info-tooltip" id="tip-scan" role="tooltip">Запрашивает один свежий снимок и ищет лучший треугольный цикл с текущими параметрами.</span></span></span>
+          <span class="action-with-help"><button class="btn btn-secondary" id="startButton" type="button" aria-describedby="tip-start-monitor"><span aria-hidden="true">▶</span><span>Старт монитора</span></button><span class="info-tip"><button class="info-button" type="button" aria-label="Описание запуска монитора" aria-describedby="tip-start-monitor">?</button><span class="info-tooltip" id="tip-start-monitor" role="tooltip">Запускает повторное сканирование по выбранному интервалу до ручной остановки.</span></span></span>
+          <span class="action-with-help"><button class="btn btn-stop" id="stopButton" type="button" aria-describedby="tip-stop-monitor" disabled><span aria-hidden="true">■</span><span>Стоп монитора</span></button><span class="info-tip"><button class="info-button" type="button" aria-label="Описание остановки монитора" aria-describedby="tip-stop-monitor">?</button><span class="info-tooltip" id="tip-stop-monitor" role="tooltip">Останавливает автоматические повторы; уже полученные результаты и PAPER-журнал сохраняются.</span></span></span>
+          <span class="action-with-help"><button class="btn btn-ghost" id="resetButton" type="button" title="Сбросить виртуальный портфель" aria-label="Сбросить виртуальный портфель" aria-describedby="tip-reset">↺</button><span class="info-tip"><button class="info-button" type="button" aria-label="Описание сброса PAPER-сессии" aria-describedby="tip-reset">?</button><span class="info-tooltip" id="tip-reset" role="tooltip">Сбрасывает виртуальные балансы и журнал текущей PAPER-сессии к серверному начальному состоянию.</span></span></span>
         </div>
       </form>
       <div class="paper-note"><strong>PAPER-режим:</strong> один снимок публичных тикеров моделирует три последовательных обмена на одной площадке. Проскальзывание после top-of-book, задержка исполнения и реальные лимиты аккаунта не моделируются.</div>
     </section>
 
     <section class="stats-grid" aria-label="Сводные показатели">
-      <article class="panel stat"><div class="stat-label">Лучший net edge</div><div class="stat-value" id="bestNetEdge">—</div><div class="stat-detail" id="bestVenue">сигнал ещё не найден</div></article>
-      <article class="panel stat"><div class="stat-label">Ожидаемый P&amp;L</div><div class="stat-value" id="bestPnl">—</div><div class="stat-detail" id="pnlAsset">в стартовом активе</div></article>
-      <article class="panel stat"><div class="stat-label">Ликвидные тикеры</div><div class="stat-value" id="tickerCount">0 <small>из 50</small></div><div class="stat-detail" id="tickerVenueCount">по выбранным биржам</div></article>
-      <article class="panel stat"><div class="stat-label">Найдено циклов</div><div class="stat-value" id="cycleCount">0</div><div class="stat-detail" id="scanCount">сканирований: 0</div></article>
+      <article class="panel stat"><div class="stat-label-with-help"><div class="stat-label">Лучший net edge</div><span class="info-tip"><button class="info-button" type="button" aria-label="Описание лучшего net edge" aria-describedby="tip-best-edge">?</button><span class="info-tooltip" id="tip-best-edge" role="tooltip">Доходность лучшего найденного цикла после комиссий и risk buffer.</span></span></div><div class="stat-value" id="bestNetEdge">—</div><div class="stat-detail" id="bestVenue">сигнал ещё не найден</div></article>
+      <article class="panel stat"><div class="stat-label-with-help"><div class="stat-label">Ожидаемый P&amp;L</div><span class="info-tip"><button class="info-button" type="button" aria-label="Описание ожидаемого P и L" aria-describedby="tip-best-pnl">?</button><span class="info-tooltip" id="tip-best-pnl" role="tooltip">Разница между финальной и стартовой суммой лучшего цикла в стартовом активе.</span></span></div><div class="stat-value" id="bestPnl">—</div><div class="stat-detail" id="pnlAsset">в стартовом активе</div></article>
+      <article class="panel stat"><div class="stat-label-with-help"><div class="stat-label">Ликвидные тикеры</div><span class="info-tip"><button class="info-button" type="button" aria-label="Описание числа ликвидных тикеров" aria-describedby="tip-ticker-count">?</button><span class="info-tooltip" id="tip-ticker-count" role="tooltip">Сколько тикеров вошло в отбор; лимит составляет 50 для каждой проверенной биржи.</span></span></div><div class="stat-value" id="tickerCount">0 <small>из 50</small></div><div class="stat-detail" id="tickerVenueCount">по выбранным биржам</div></article>
+      <article class="panel stat"><div class="stat-label-with-help"><div class="stat-label">Найдено циклов</div><span class="info-tip"><button class="info-button" type="button" aria-label="Описание числа найденных циклов" aria-describedby="tip-cycle-count">?</button><span class="info-tooltip" id="tip-cycle-count" role="tooltip">Количество трёхшаговых маршрутов, прошедших доступность пар и расчёт исполнимого объёма.</span></span></div><div class="stat-value" id="cycleCount">0</div><div class="stat-detail" id="scanCount">сканирований: 0</div></article>
     </section>
 
     <div class="main-grid">
       <div class="stack">
         <section class="panel opportunity" aria-labelledby="opportunityTitle">
-          <div class="panel-head"><h2 class="panel-title" id="opportunityTitle">Лучший путь A → B → C → A</h2><span class="badge" id="opportunityVenue">Ожидание</span></div>
+          <div class="panel-head"><div class="title-with-help"><h2 class="panel-title" id="opportunityTitle">Лучший путь A → B → C → A</h2><span class="info-tip"><button class="info-button" type="button" aria-label="Описание лучшего треугольного пути" aria-describedby="tip-opportunity">?</button><span class="info-tooltip" id="tip-opportunity" role="tooltip">Лучший исполнимый маршрут из трёх обменов внутри одной биржи с деталями каждой операции и итоговой доходностью.</span></span></div><span class="badge" id="opportunityVenue">Ожидание</span></div>
           <div id="opportunityEmpty" class="empty">
             <div><div class="empty-icon" aria-hidden="true">△</div><h3>Запустите первый скан</h3><p>Движок переберёт исполнимые циклы из трёх разных активов и покажет лучший результат после трёх комиссий и risk buffer.</p></div>
           </div>
@@ -576,14 +585,14 @@
         </section>
 
         <section class="panel" aria-labelledby="universeTitle">
-          <div class="panel-head"><h2 class="panel-title" id="universeTitle">Universe ликвидных тикеров</h2><span class="panel-note">до 50 на биржу · отбор сохраняет треугольники</span></div>
+          <div class="panel-head"><div class="title-with-help"><h2 class="panel-title" id="universeTitle">Отбор ликвидных тикеров</h2><span class="info-tip"><button class="info-button" type="button" aria-label="Описание отбора ликвидных тикеров" aria-describedby="tip-universe">?</button><span class="info-tooltip" id="tip-universe" role="tooltip">Показывает отобранные инструменты каждой биржи; алгоритм сохраняет связанные пары, необходимые для треугольников.</span></span></div><span class="panel-note">до 50 на биржу · отбор сохраняет треугольники</span></div>
           <div class="universe-list" id="universeList"><div class="journal-empty">Universe появится после сканирования</div></div>
         </section>
 
         <section class="panel" aria-labelledby="journalTitle">
-          <div class="panel-head"><h2 class="panel-title" id="journalTitle">Журнал PAPER-циклов</h2><span class="badge" id="journalCount">0 записей</span></div>
+          <div class="panel-head"><div class="title-with-help"><h2 class="panel-title" id="journalTitle">Журнал PAPER-циклов</h2><span class="info-tip"><button class="info-button" type="button" aria-label="Описание журнала PAPER-циклов" aria-describedby="tip-journal">?</button><span class="info-tooltip" id="tip-journal" role="tooltip">Только виртуально исполненные циклы: маршрут, суммы до и после, net edge, P&amp;L и статус.</span></span></div><span class="badge" id="journalCount">0 записей</span></div>
           <div class="table-wrap">
-            <table>
+            <table aria-describedby="journalTitle">
               <thead><tr><th>Время</th><th>Биржа</th><th>Путь</th><th>Старт</th><th>Финиш</th><th>Net edge</th><th>P&amp;L</th><th>Статус</th></tr></thead>
               <tbody id="journalBody"><tr><td colspan="8" class="journal-empty">Виртуальных исполнений пока нет</td></tr></tbody>
             </table>
@@ -593,15 +602,15 @@
 
       <aside class="stack side-stack" aria-label="Состояние симулятора">
         <section class="panel" aria-labelledby="venueTitle">
-          <div class="panel-head"><h2 class="panel-title" id="venueTitle">Состояние бирж</h2><span class="panel-note">all-tickers REST</span></div>
+          <div class="panel-head"><div class="title-with-help"><h2 class="panel-title" id="venueTitle">Состояние бирж</h2><span class="info-tip"><button class="info-button" type="button" aria-label="Описание состояния бирж" aria-describedby="tip-venues">?</button><span class="info-tooltip" id="tip-venues" role="tooltip">Доступность публичных котировок, число отобранных тикеров и задержка ответа каждой биржи.</span></span></div><span class="panel-note">публичные данные</span></div>
           <div class="venue-list" id="venueList"><div class="journal-empty">Ожидание источников</div></div>
         </section>
         <section class="panel" aria-labelledby="balanceTitle">
-          <div class="panel-head"><h2 class="panel-title" id="balanceTitle">Виртуальные балансы</h2><span class="badge badge-paper">PAPER</span></div>
+          <div class="panel-head"><div class="title-with-help"><h2 class="panel-title" id="balanceTitle">Виртуальные балансы</h2><span class="info-tip"><button class="info-button" type="button" aria-label="Описание виртуальных балансов" aria-describedby="tip-balances">?</button><span class="info-tooltip" id="tip-balances" role="tooltip">Серверный PAPER-портфель показывает доступные активы отдельно для каждой биржи; реальные средства не используются.</span></span></div><span class="badge badge-paper">PAPER</span></div>
           <div class="balance-list" id="balanceList"><div class="journal-empty">Балансы пока недоступны</div></div>
         </section>
         <section class="panel errors" id="errorsPanel" aria-labelledby="errorsTitle" hidden>
-          <div class="panel-head"><h2 class="panel-title" id="errorsTitle">Ошибки и предупреждения</h2><span class="badge" id="errorCount">0</span></div>
+          <div class="panel-head"><div class="title-with-help"><h2 class="panel-title" id="errorsTitle">Ошибки и предупреждения</h2><span class="info-tip"><button class="info-button" type="button" aria-label="Описание ошибок и предупреждений" aria-describedby="tip-errors">?</button><span class="info-tooltip" id="tip-errors" role="tooltip">Проблемы получения котировок, задержки и сообщения конкретной биржи, требующие внимания.</span></span></div><span class="badge" id="errorCount">0</span></div>
           <div class="error-list" id="errorList"></div>
         </section>
       </aside>
@@ -724,6 +733,16 @@
       return EXCHANGE_NAMES[raw.toLowerCase()] || raw || 'Биржа';
     }
 
+    function pluralRu(value, one, few, many) {
+      const number = Math.abs(Math.trunc(finite(value)));
+      const mod100 = number % 100;
+      const mod10 = number % 10;
+      if (mod100 >= 11 && mod100 <= 14) return many;
+      if (mod10 === 1) return one;
+      if (mod10 >= 2 && mod10 <= 4) return few;
+      return many;
+    }
+
     function showToast(message, kind = '') {
       const toast = document.createElement('div');
       toast.className = `toast ${kind}`;
@@ -734,7 +753,7 @@
 
     async function requestJSON(url, options = {}) {
       const controller = new AbortController();
-      const timeout = window.setTimeout(() => controller.abort(), 10000);
+      const timeout = window.setTimeout(() => controller.abort(), 25000);
       try {
         const response = await fetch(url, {
           ...options,
@@ -1037,7 +1056,7 @@
       const limit = venueCount ? venueCount * 50 : 50;
       const scans = finite(first(metrics, ['scan_count', 'scans'], first(data, ['scan_count'], 0)));
       $('tickerCount').innerHTML = `${escapeHTML(formatNumber(selected, 0))} <small>из ${escapeHTML(formatNumber(limit, 0))}</small>`;
-      $('tickerVenueCount').textContent = venueCount ? `${venueCount} ${venueCount === 1 ? 'биржа' : venueCount < 5 ? 'биржи' : 'бирж'} · лимит 50 на каждую` : 'по выбранным биржам';
+      $('tickerVenueCount').textContent = venueCount ? `${venueCount} ${pluralRu(venueCount, 'биржа', 'биржи', 'бирж')} · лимит 50 на каждую` : 'по выбранным биржам';
       $('cycleCount').textContent = formatNumber(opportunities.length, 0);
       $('scanCount').textContent = `сканирований: ${formatNumber(scans, 0)}`;
     }
