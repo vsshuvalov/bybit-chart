@@ -51,6 +51,7 @@ def test_controls_match_triangular_request_contract(html: str) -> None:
         "risk_buffer_bps",
         "interval_ms",
         "auto_execute",
+        "use_fee_token_discounts",
         "max_tickers",
     ):
         assert field in html
@@ -60,6 +61,47 @@ def test_controls_match_triangular_request_contract(html: str) -> None:
     assert "Запустить скан" in html
     assert "Старт монитора" in html
     assert "Стоп монитора" in html
+
+
+def test_fee_token_discount_what_if_is_explicit_and_synced(html: str) -> None:
+    assert 'id="useFeeTokenDiscounts" name="use_fee_token_discounts" type="checkbox"' in html
+    assert 'aria-describedby="tip-fee-token-discounts" checked' in html
+    assert "use_fee_token_discounts: $('useFeeTokenDiscounts').checked" in html
+    assert "first(settings, ['use_fee_token_discounts'], null)" in html
+    assert "'useFeeTokenDiscounts'" in html.split("function syncControlAvailability()", 1)[1]
+    assert "PAPER what-if" in html
+    assert "токена достаточно" in html
+    assert "Цена токена и его курсовой риск не моделируются" in html
+    assert "для Bybit, OKX и BingX скидка равна 0" in html
+    for contract_key in (
+        "fee_policy",
+        "fee_token_balance_mode",
+        "fee_token_balance_assumption",
+        "fee_token_balance_explanation",
+        "token",
+        "base_taker_fee_bps",
+        "effective_taker_fee_bps",
+        "discount_bps",
+        "enabled",
+        "api_compatible",
+        "assumption",
+    ):
+        assert contract_key in html
+    assert 'id="feePolicyPanel"' in html
+    assert 'id="feePolicySummary"' in html
+    assert 'id="feePolicyList"' in html
+    assert "Ставки комиссий по биржам" in html
+    assert "function normalizeFeePolicy(raw)" in html
+    assert "function renderFeePolicy(data)" in html
+    assert "renderFeePolicy(data)" in html
+
+
+def test_triangular_journal_shows_effective_fee_rates(html: str) -> None:
+    assert "<th>Комиссии</th>" in html
+    assert 'colspan="9" class="journal-empty"' in html
+    assert "fee_rate_bps" in html
+    assert "effective_taker_fee_bps" in html
+    assert "const feeText =" in html
 
 
 def test_api_contract_and_status_polling(html: str) -> None:

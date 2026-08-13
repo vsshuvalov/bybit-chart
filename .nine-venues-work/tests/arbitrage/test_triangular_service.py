@@ -143,6 +143,54 @@ async def test_auto_paper_is_atomic_and_same_snapshot_is_not_reused() -> None:
 
 
 @pytest.mark.asyncio
+async def test_fee_token_toggle_applies_effective_rate_to_all_three_legs() -> None:
+    def make_discount_service() -> TriangularPaperService:
+        adapter = FakeTickerAdapter(
+            "binance",
+            profitable_triangle("binance"),
+        )
+        return TriangularPaperService(
+            (adapter,),
+            initial_balances={"binance": {"USDT": "10000"}},
+            taker_fees={"binance": "0.001"},
+            clock_ms=lambda: NOW_MS,
+        )
+
+    enabled = await make_discount_service().scan(
+        TriangularScanSettings(
+            venue="binance",
+            start_amount="500",
+            min_net_edge_bps="1",
+            risk_buffer_bps="0",
+            auto_execute=True,
+            use_fee_token_discounts=True,
+        )
+    )
+    disabled = await make_discount_service().scan(
+        TriangularScanSettings(
+            venue="binance",
+            start_amount="500",
+            min_net_edge_bps="1",
+            risk_buffer_bps="0",
+            auto_execute=True,
+            use_fee_token_discounts=False,
+        )
+    )
+
+    for leg in enabled["best_opportunity"]["legs"]:
+        assert D(leg["fee"]) / D(leg["output_before_fee"]) == D("0.00075")
+    for leg in disabled["best_opportunity"]["legs"]:
+        assert D(leg["fee"]) / D(leg["output_before_fee"]) == D("0.001")
+    assert D(enabled["metrics"]["realized_pnl"]) == D(
+        "13.84211884523437500"
+    )
+    assert D(disabled["metrics"]["realized_pnl"]) == D("13.45654448500")
+    assert enabled["fee_policy"]["binance"]["effective_taker_fee"] == (
+        "0.00075"
+    )
+
+
+@pytest.mark.asyncio
 async def test_failed_and_unselected_venues_are_isolated() -> None:
     good = FakeTickerAdapter("alpha", profitable_triangle("alpha"))
     broken = FakeTickerAdapter("beta", RuntimeError("maintenance"))

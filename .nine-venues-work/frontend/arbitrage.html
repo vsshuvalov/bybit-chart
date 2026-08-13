@@ -1000,7 +1000,9 @@
 
     function renderFeePolicy(data) {
       const rows = normalizeFeePolicy(first(data, ['fee_policy'], []));
-      const explanation = first(data, ['fee_token_balance_explanation'], first(data, ['fee_policy_explanation'], ''));
+      const balanceMode = first(data, ['fee_token_balance_mode'], 'what_if_usdt_equivalent');
+      const explanation = first(data, ['fee_token_balance_assumption'], first(data, ['fee_token_balance_explanation'], first(data, ['fee_policy_explanation'], '')));
+      $('feePolicyPanel').dataset.balanceMode = String(balanceMode);
       if (!rows.length) {
         $('feePolicySummary').textContent = 'ставки недоступны';
         $('feePolicyList').innerHTML = '<div class="fee-policy-empty">Ставки пока не получены от API</div>';
@@ -1008,7 +1010,7 @@
       }
       const enabledCount = rows.filter((row) => Boolean(first(row, ['enabled'], false)) && finite(first(row, ['discount_bps'], 0)) > 0).length;
       $('feePolicySummary').textContent = `${enabledCount} ${pluralRu(enabledCount, 'скидка', 'скидки', 'скидок')} · PAPER what-if`;
-      $('feePolicySummary').title = String(explanation || 'Баланс токена комиссии моделируется как достаточный USDT-эквивалент.');
+      $('feePolicySummary').title = String(explanation || (balanceMode === 'what_if_usdt_equivalent' ? 'Баланс токена комиссии моделируется как достаточный USDT-эквивалент.' : balanceMode));
       $('feePolicyList').innerHTML = rows.map((row) => {
         const venue = displayExchange(first(row, ['venue', 'exchange', 'name'], '—'));
         const token = first(row, ['token', 'fee_token'], null);

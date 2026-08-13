@@ -59,7 +59,12 @@ def test_toggle_off_and_custom_base_rates_do_not_apply_hidden_discounts() -> Non
 
 def test_status_exposes_auditable_what_if_policy_without_token_balances() -> None:
     status = fee_policy_status(
-        {"binance": D("0.001"), "bybit": D("0.001")},
+        {
+            "binance": D("0.001"),
+            "bybit": D("0.001"),
+            "mexc": D("0.0005"),
+            "gate": D("0.001"),
+        },
         use_fee_token_discounts=True,
     )
 
@@ -79,3 +84,7 @@ def test_status_exposes_auditable_what_if_policy_without_token_balances() -> Non
     assert status["bybit"]["discount_bps"] == "0"
     assert status["bybit"]["enabled"] is False
     assert status["bybit"]["api_compatible"] is False
+    assert status["mexc"]["base_taker_fee_bps"] == "5.0000"
+    assert status["mexc"]["effective_taker_fee_bps"] == "4.000000"
+    assert status["gate"]["base_taker_fee_bps"] == "10.000"
+    assert status["gate"]["effective_taker_fee_bps"] == "9.00000"

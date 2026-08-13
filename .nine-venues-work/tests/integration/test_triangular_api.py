@@ -69,12 +69,14 @@ def test_triangular_api_full_paper_lifecycle() -> None:
                 "risk_buffer_bps": "2",
                 "max_tickers": 50,
                 "auto_execute": True,
+                "use_fee_token_discounts": False,
             },
         )
         assert scan.status_code == 200
         body = scan.json()
         assert body["best_opportunity"]["path"] == "USDT → BTC → ETH → USDT"
         assert body["metrics"]["trade_count"] == 1
+        assert body["settings"]["use_fee_token_discounts"] is False
 
         start = client.post(
             "/api/v1/triangular/start",

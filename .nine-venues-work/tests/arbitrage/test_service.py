@@ -200,6 +200,52 @@ async def test_auto_execute_changes_only_virtual_balances_and_journal() -> None:
 
 
 @pytest.mark.asyncio
+async def test_fee_token_toggle_changes_cross_engine_and_execution_rates() -> None:
+    def make_discount_service() -> ArbitragePaperService:
+        adapters = (
+            FakeAdapter("binance", make_book("binance", "99", "100")),
+            FakeAdapter("okx", make_book("okx", "102", "103")),
+        )
+        return ArbitragePaperService(
+            adapters,
+            initial_balances={
+                "binance": {"USDT": "10000", "BTC": "10"},
+                "okx": {"USDT": "10000", "BTC": "10"},
+            },
+            taker_fees={"binance": "0.001", "okx": "0.001"},
+            clock_ms=lambda: NOW_MS,
+        )
+
+    enabled = await make_discount_service().scan(
+        ScanSettings(
+            notional="500",
+            min_net_edge_bps="1",
+            auto_execute=True,
+            use_fee_token_discounts=True,
+        )
+    )
+    disabled = await make_discount_service().scan(
+        ScanSettings(
+            notional="500",
+            min_net_edge_bps="1",
+            auto_execute=True,
+            use_fee_token_discounts=False,
+        )
+    )
+
+    assert enabled["journal"][0]["buy_fee_rate"] == "0.00075"
+    assert enabled["journal"][0]["sell_fee_rate"] == "0.001"
+    assert disabled["journal"][0]["buy_fee_rate"] == "0.001"
+    assert D(enabled["best_opportunity"]["net_profit"]) > D(
+        disabled["best_opportunity"]["net_profit"]
+    )
+    assert D(enabled["metrics"]["realized_pnl"]) == D("9.11500")
+    assert D(disabled["metrics"]["realized_pnl"]) == D("8.990")
+    assert enabled["fee_policy"]["binance"]["enabled"] is True
+    assert disabled["fee_policy"]["binance"]["enabled"] is False
+
+
+@pytest.mark.asyncio
 async def test_failed_venue_is_isolated_and_other_pair_still_scans() -> None:
     service = service_with(
         FakeAdapter("cheap", make_book("cheap", "99", "100")),

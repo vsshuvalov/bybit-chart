@@ -157,6 +157,7 @@ def test_arbitrage_api_accepts_custom_auto_controls_and_rejects_bad_budget() -> 
                     "min_24h_volume_usdt": "1500000",
                     "bbo_depth_multiplier": "3",
                     "initial_balance_per_venue_usdt": "750",
+                    "use_fee_token_discounts": False,
                 },
             )
             assert response.status_code == 200
@@ -170,6 +171,7 @@ def test_arbitrage_api_accepts_custom_auto_controls_and_rejects_bad_budget() -> 
             assert settings["min_24h_volume_usdt"] == "1500000"
             assert settings["bbo_depth_multiplier"] == "3"
             assert settings["initial_balance_per_venue_usdt"] == "750"
+            assert settings["use_fee_token_discounts"] is False
             # Injected deterministic portfolios keep their explicit balances;
             # the configurable seed applies only to the default AUTO account.
             assert response.json()["balances"]["alpha"]["USDT"] == "10000"

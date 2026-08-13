@@ -37,6 +37,7 @@ def test_scan_controls_cover_supported_contract(html: str) -> None:
         "risk_buffer_bps",
         "interval_ms",
         "auto_execute",
+        "use_fee_token_discounts",
         "max_symbols",
         "activation_observations",
         "evidence_window_minutes",
@@ -132,6 +133,42 @@ def test_auto_inventory_controls_have_defaults_payload_and_budget_guard(html: st
     ):
         assert settings_mapping in html
     assert "settingsHydrated" in html
+
+
+def test_fee_token_discount_what_if_is_explicit_and_synced(html: str) -> None:
+    assert 'id="useFeeTokenDiscounts" name="use_fee_token_discounts" type="checkbox"' in html
+    assert 'aria-describedby="tip-fee-token-discounts" checked' in html
+    assert "use_fee_token_discounts: $('useFeeTokenDiscounts').checked" in html
+    assert "first(settings, ['use_fee_token_discounts'], null)" in html
+    assert "'useFeeTokenDiscounts'" in html.split("function syncControlAvailability()", 1)[1]
+    assert "PAPER what-if" in html
+    assert "токена достаточно" in html
+    assert "Цена токена и его курсовой риск не моделируются" in html
+    assert "для Bybit, OKX и BingX скидка равна 0" in html
+
+    for contract_key in (
+        "fee_policy",
+        "fee_token_balance_mode",
+        "fee_token_balance_assumption",
+        "fee_token_balance_explanation",
+        "token",
+        "base_taker_fee_bps",
+        "effective_taker_fee_bps",
+        "discount_bps",
+        "enabled",
+        "api_compatible",
+        "assumption",
+    ):
+        assert contract_key in html
+    assert 'id="feePolicyPanel"' in html
+    assert 'id="feePolicySummary"' in html
+    assert 'id="feePolicyList"' in html
+    assert "Ставки комиссий по биржам" in html
+    assert "function normalizeFeePolicy(raw)" in html
+    assert "function renderFeePolicy(data)" in html
+    assert "renderFeePolicy(data)" in html
+    assert "base_taker_fee_bps" in html
+    assert "effective_taker_fee_bps" in html
 
 
 def test_initial_balance_requires_explicit_session_reset(html: str) -> None:

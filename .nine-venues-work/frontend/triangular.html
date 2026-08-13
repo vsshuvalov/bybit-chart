@@ -319,6 +319,21 @@
     @keyframes spin { to { transform: rotate(360deg); } }
     .paper-note { margin: 0 16px 12px; padding: 8px 10px; border: 1px solid rgba(251,191,36,.16); border-radius: 9px; background: rgba(251,191,36,.045); color: #aa9e7b; font-size: 10px; line-height: 1.45; }
     .paper-note strong { color: #d9bf76; }
+    .fee-policy { margin: 0 16px 10px; border: 1px solid var(--line); border-radius: 10px; background: rgba(7,10,15,.3); }
+    .fee-policy summary { display: flex; align-items: center; gap: 8px; min-height: 36px; padding: 7px 10px; cursor: pointer; color: var(--muted); font-size: 9px; font-weight: 720; list-style: none; }
+    .fee-policy summary::-webkit-details-marker { display: none; }
+    .fee-policy summary::before { color: var(--subtle); content: "▸"; transition: transform .16s; }
+    .fee-policy[open] summary::before { transform: rotate(90deg); }
+    .fee-policy-summary { margin-left: auto; color: var(--subtle); font-size: 8px; font-weight: 550; }
+    .fee-policy-list { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1px; border-top: 1px solid var(--line); background: var(--line); }
+    .fee-policy-row { min-width: 0; padding: 8px 10px; background: #0c111a; }
+    .fee-policy-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+    .fee-policy-head strong { font-size: 9px; }
+    .fee-policy-token { color: #c4b5fd; font-size: 8px; font-weight: 720; }
+    .fee-policy-rate { margin-top: 5px; color: var(--text); font-size: 9px; font-variant-numeric: tabular-nums; }
+    .fee-policy-rate .discount { color: var(--green); }
+    .fee-policy-condition { overflow: hidden; margin-top: 4px; color: var(--subtle); font-size: 8px; line-height: 1.4; text-overflow: ellipsis; }
+    .fee-policy-empty { grid-column: 1 / -1; padding: 13px; background: #0c111a; color: var(--subtle); font-size: 9px; text-align: center; }
 
     .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 14px; }
     .stat { min-height: 91px; padding: 14px 16px; }
@@ -407,6 +422,7 @@
       .control-grid { grid-template-columns: repeat(3, 1fr); }
       .main-grid { grid-template-columns: 1fr; }
       .side-stack { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .fee-policy-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     }
     @media (max-width: 820px) {
       .topbar, .hero { align-items: flex-start; flex-direction: column; }
@@ -434,6 +450,7 @@
       .edge-item { border-right: 0; }
       .balance-row { grid-template-columns: 1fr; }
       .balance-assets { justify-content: flex-start; }
+      .fee-policy-list { grid-template-columns: 1fr; }
       .title-with-help > .info-tip,
       .field-label > .info-tip,
       .stat-label-with-help > .info-tip,
@@ -547,6 +564,13 @@
             <span class="switch"><input id="autoExecute" name="auto_execute" type="checkbox" aria-describedby="tip-auto-paper"><span class="switch-track" aria-hidden="true"></span></span>
           </label>
         </div>
+        <div class="field">
+          <div class="field-label"><label for="useFeeTokenDiscounts">Комиссия</label><span class="info-tip"><button class="info-button" type="button" aria-label="Описание скидок токеном биржи" aria-describedby="tip-fee-token-discounts">?</button><span class="info-tooltip" id="tip-fee-token-discounts" role="tooltip">PAPER what-if: предполагается, что оплата комиссии токеном биржи включена и токена достаточно. Цена токена и его курсовой риск не моделируются; для Bybit, OKX и BingX скидка равна 0.</span></span></div>
+          <label class="switch-wrap" for="useFeeTokenDiscounts">
+            <span class="switch-copy"><strong>Скидки токеном биржи</strong></span>
+            <span class="switch"><input id="useFeeTokenDiscounts" name="use_fee_token_discounts" type="checkbox" aria-describedby="tip-fee-token-discounts" checked><span class="switch-track" aria-hidden="true"></span></span>
+          </label>
+        </div>
         <div class="actions">
           <span class="action-with-help"><button class="btn btn-primary" id="scanButton" type="submit" aria-describedby="tip-scan"><span id="scanIcon">△</span><span id="scanText">Запустить скан</span></button><span class="info-tip"><button class="info-button" type="button" aria-label="Описание одиночного сканирования" aria-describedby="tip-scan">?</button><span class="info-tooltip" id="tip-scan" role="tooltip">Запрашивает один свежий снимок и ищет лучший треугольный цикл с текущими параметрами.</span></span></span>
           <span class="action-with-help"><button class="btn btn-secondary" id="startButton" type="button" aria-describedby="tip-start-monitor"><span aria-hidden="true">▶</span><span>Старт монитора</span></button><span class="info-tip"><button class="info-button" type="button" aria-label="Описание запуска монитора" aria-describedby="tip-start-monitor">?</button><span class="info-tooltip" id="tip-start-monitor" role="tooltip">Запускает повторное сканирование по выбранному интервалу до ручной остановки.</span></span></span>
@@ -554,6 +578,10 @@
           <span class="action-with-help"><button class="btn btn-ghost" id="resetButton" type="button" title="Сбросить виртуальный портфель" aria-label="Сбросить виртуальный портфель" aria-describedby="tip-reset">↺</button><span class="info-tip"><button class="info-button" type="button" aria-label="Описание сброса PAPER-сессии" aria-describedby="tip-reset">?</button><span class="info-tooltip" id="tip-reset" role="tooltip">Сбрасывает виртуальные балансы и журнал текущей PAPER-сессии к серверному начальному состоянию.</span></span></span>
         </div>
       </form>
+      <details class="fee-policy" id="feePolicyPanel">
+        <summary><span>Ставки комиссий по биржам</span><span class="info-tip"><button class="info-button" type="button" aria-label="Описание ставок комиссий" aria-describedby="tip-fee-policy">?</button><span class="info-tooltip" id="tip-fee-policy" role="tooltip">Базовая ставка → PAPER-ставка после доступной скидки. Условия зависят от биржи, уровня аккаунта и включённой оплаты её токеном.</span></span><span class="fee-policy-summary" id="feePolicySummary">ожидание данных</span></summary>
+        <div class="fee-policy-list" id="feePolicyList"><div class="fee-policy-empty">Ставки появятся после подключения к API</div></div>
+      </details>
       <div class="paper-note"><strong>PAPER-режим:</strong> один снимок публичных тикеров моделирует три последовательных обмена на одной площадке. Проскальзывание после top-of-book, задержка исполнения и реальные лимиты аккаунта не моделируются.</div>
     </section>
 
@@ -590,11 +618,11 @@
         </section>
 
         <section class="panel" aria-labelledby="journalTitle">
-          <div class="panel-head"><div class="title-with-help"><h2 class="panel-title" id="journalTitle">Журнал PAPER-циклов</h2><span class="info-tip"><button class="info-button" type="button" aria-label="Описание журнала PAPER-циклов" aria-describedby="tip-journal">?</button><span class="info-tooltip" id="tip-journal" role="tooltip">Только виртуально исполненные циклы: маршрут, суммы до и после, net edge, P&amp;L и статус.</span></span></div><span class="badge" id="journalCount">0 записей</span></div>
+          <div class="panel-head"><div class="title-with-help"><h2 class="panel-title" id="journalTitle">Журнал PAPER-циклов</h2><span class="info-tip"><button class="info-button" type="button" aria-label="Описание журнала PAPER-циклов" aria-describedby="tip-journal">?</button><span class="info-tooltip" id="tip-journal" role="tooltip">Только виртуально исполненные циклы: маршрут, суммы до и после, фактические PAPER-ставки комиссий, net edge, P&amp;L и статус.</span></span></div><span class="badge" id="journalCount">0 записей</span></div>
           <div class="table-wrap">
             <table aria-describedby="journalTitle">
-              <thead><tr><th>Время</th><th>Биржа</th><th>Путь</th><th>Старт</th><th>Финиш</th><th>Net edge</th><th>P&amp;L</th><th>Статус</th></tr></thead>
-              <tbody id="journalBody"><tr><td colspan="8" class="journal-empty">Виртуальных исполнений пока нет</td></tr></tbody>
+              <thead><tr><th>Время</th><th>Биржа</th><th>Путь</th><th>Старт</th><th>Финиш</th><th>Комиссии</th><th>Net edge</th><th>P&amp;L</th><th>Статус</th></tr></thead>
+              <tbody id="journalBody"><tr><td colspan="9" class="journal-empty">Виртуальных исполнений пока нет</td></tr></tbody>
             </table>
           </div>
         </section>
@@ -635,7 +663,7 @@
     const POLL_INTERVAL_MS = 2000;
 
     const $ = (id) => document.getElementById(id);
-    const state = { polling: false, scanning: false, remoteScanning: false, monitorAction: false, running: false, initial: true };
+    const state = { polling: false, scanning: false, remoteScanning: false, monitorAction: false, running: false, initial: true, settingsHydrated: false };
     const numberFormat = new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 8 });
     const compactFormat = new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 4 });
 
@@ -731,6 +759,59 @@
     function exchangeName(value) {
       const raw = String(value ?? '').trim();
       return EXCHANGE_NAMES[raw.toLowerCase()] || raw || 'Биржа';
+    }
+
+    function normalizeFeePolicy(raw) {
+      if (Array.isArray(raw)) return raw;
+      if (!raw || typeof raw !== 'object') return [];
+      return Object.entries(raw).map(([venue, item]) => (
+        item && typeof item === 'object' && !Array.isArray(item)
+          ? { venue, ...item }
+          : { venue, effective_taker_fee_bps: item }
+      ));
+    }
+
+    function renderFeePolicy(data) {
+      const rows = normalizeFeePolicy(first(data, ['fee_policy'], []));
+      const balanceMode = first(data, ['fee_token_balance_mode'], 'what_if_usdt_equivalent');
+      const explanation = first(data, ['fee_token_balance_assumption'], first(data, ['fee_token_balance_explanation'], first(data, ['fee_policy_explanation'], '')));
+      $('feePolicyPanel').dataset.balanceMode = String(balanceMode);
+      if (!rows.length) {
+        $('feePolicySummary').textContent = 'ставки недоступны';
+        $('feePolicyList').innerHTML = '<div class="fee-policy-empty">Ставки пока не получены от API</div>';
+        return;
+      }
+      const enabledCount = rows.filter((row) => Boolean(first(row, ['enabled'], false)) && finite(first(row, ['discount_bps'], 0)) > 0).length;
+      $('feePolicySummary').textContent = `${enabledCount} ${pluralRu(enabledCount, 'скидка', 'скидки', 'скидок')} · PAPER what-if`;
+      $('feePolicySummary').title = String(explanation || (balanceMode === 'what_if_usdt_equivalent' ? 'Баланс токена комиссии моделируется как достаточный USDT-эквивалент.' : balanceMode));
+      $('feePolicyList').innerHTML = rows.map((row) => {
+        const venue = exchangeName(first(row, ['venue', 'exchange', 'name'], '—'));
+        const token = first(row, ['token', 'fee_token'], null);
+        const base = finite(first(row, ['base_taker_fee_bps', 'base_fee_rate_bps'], 0));
+        const effective = finite(first(row, ['effective_taker_fee_bps', 'effective_fee_rate_bps'], base));
+        const relativeDiscountBps = finite(first(row, ['discount_bps'], 0));
+        const discountPercent = first(row, ['discount_percent'], null) === null
+          ? relativeDiscountBps / 100
+          : finite(first(row, ['discount_percent'], 0));
+        const enabled = Boolean(first(row, ['enabled'], false)) && discountPercent > 0;
+        const apiCompatible = first(row, ['api_compatible'], null);
+        const assumption = first(row, ['assumption'], enabled ? 'Опция оплаты комиссии токеном включена; токена достаточно.' : 'Скидка не применяется.');
+        const compatibility = apiCompatible === false ? ' Нет универсальной API-настройки.' : '';
+        return `<div class="fee-policy-row">
+          <div class="fee-policy-head"><strong>${escapeHTML(venue)}</strong><span class="fee-policy-token">${escapeHTML(token || 'без токена')}</span></div>
+          <div class="fee-policy-rate">${escapeHTML(compactFormat.format(base))} → ${escapeHTML(compactFormat.format(effective))} bps${enabled ? ` <span class="discount">−${escapeHTML(compactFormat.format(discountPercent))}%</span>` : ''}</div>
+          <div class="fee-policy-condition" title="${escapeHTML(`${assumption}${compatibility}`)}">${escapeHTML(`${assumption}${compatibility}`)}</div>
+        </div>`;
+      }).join('');
+    }
+
+    function syncFeeSettingsFromStatus(data) {
+      const settings = first(data, ['settings'], null);
+      const running = Boolean(first(data, ['running'], false));
+      if (!settings || typeof settings !== 'object' || (state.settingsHydrated && !running)) return;
+      const useFeeTokenDiscounts = first(settings, ['use_fee_token_discounts'], null);
+      if (useFeeTokenDiscounts !== null) $('useFeeTokenDiscounts').checked = Boolean(useFeeTokenDiscounts);
+      state.settingsHydrated = true;
     }
 
     function pluralRu(value, one, few, many) {
@@ -999,7 +1080,7 @@
     function renderJournal(journal) {
       $('journalCount').textContent = `${journal.length} ${journal.length === 1 ? 'запись' : 'записей'}`;
       if (!journal.length) {
-        $('journalBody').innerHTML = '<tr><td colspan="8" class="journal-empty">Виртуальных исполнений пока нет</td></tr>';
+        $('journalBody').innerHTML = '<tr><td colspan="9" class="journal-empty">Виртуальных исполнений пока нет</td></tr>';
         return;
       }
       $('journalBody').innerHTML = journal.slice().reverse().slice(0, 50).map((item) => {
@@ -1012,12 +1093,17 @@
         const net = first(source, ['net_edge_bps', 'net_bps'], null);
         const pnl = first(source, ['realized_pnl', 'expected_pnl', 'net_profit', 'pnl'], null);
         const status = first(source, ['status', 'result'], 'paper');
+        const legRates = normalizeLegs(source).map((leg) => first(leg, ['fee_rate_bps', 'effective_taker_fee_bps'], null)).filter((value) => value !== null);
+        const fallbackRate = first(source, ['effective_taker_fee_bps', 'fee_rate_bps'], null);
+        const feeRates = legRates.length ? legRates : fallbackRate === null ? [] : [fallbackRate];
+        const feeText = feeRates.length ? `${feeRates.map((rate) => compactFormat.format(finite(rate))).join(' + ')} bps` : '—';
         return `<tr>
           <td>${escapeHTML(formatTime(first(source, ['timestamp_ms', 'timestamp', 'executed_at', 'created_at', 'ts'], null), true))}</td>
           <td><strong>${escapeHTML(venue)}</strong></td>
           <td>${escapeHTML(routeText(source))}</td>
           <td>${escapeHTML(formatAmount(start, asset))}</td>
           <td>${escapeHTML(formatAmount(finalAmount, asset))}</td>
+          <td>${escapeHTML(feeText)}</td>
           <td class="${finite(net) >= 0 ? 'positive' : 'negative'}">${escapeHTML(formatBps(net))}</td>
           <td class="${finite(pnl) >= 0 ? 'positive' : 'negative'}">${escapeHTML(formatAmount(pnl, asset))}</td>
           <td>${escapeHTML(status)}</td>
@@ -1047,6 +1133,15 @@
       $('monitorState').className = state.running ? 'badge badge-local' : 'badge';
       $('startButton').disabled = state.running || state.monitorAction;
       $('stopButton').disabled = !state.running || state.monitorAction;
+      syncControlAvailability();
+      updateScanLoading();
+    }
+
+    function syncControlAvailability() {
+      const locked = state.running || state.monitorAction;
+      ['venue', 'startAsset', 'startAmount', 'minEdge', 'riskBuffer', 'intervalMs', 'autoExecute', 'useFeeTokenDiscounts'].forEach((id) => {
+        $(id).disabled = locked;
+      });
     }
 
     function renderSummary(data, universe, opportunities) {
@@ -1063,6 +1158,8 @@
 
     function renderStatus(rawData) {
       const data = first(rawData, ['status'], rawData) || {};
+      syncFeeSettingsFromStatus(data);
+      renderFeePolicy(data);
       const venues = normalizeVenues(data);
       const universe = normalizeUniverse(data);
       const opportunities = toArray(first(data, ['opportunities', 'cycles'], []));
@@ -1083,7 +1180,7 @@
 
     function updateScanLoading() {
       const loading = state.scanning || state.remoteScanning;
-      $('scanButton').disabled = loading;
+      $('scanButton').disabled = loading || state.running || state.monitorAction;
       $('scanIcon').innerHTML = loading ? '<span class="spinner" aria-hidden="true"></span>' : '△';
       $('scanText').textContent = loading ? 'Сканирование…' : 'Запустить скан';
     }
@@ -1096,6 +1193,7 @@
         min_net_edge_bps: finite($('minEdge').value),
         risk_buffer_bps: finite($('riskBuffer').value),
         auto_execute: $('autoExecute').checked,
+        use_fee_token_discounts: $('useFeeTokenDiscounts').checked,
         interval_ms: Math.trunc(finite($('intervalMs').value, 10000)),
         max_tickers: 50
       };

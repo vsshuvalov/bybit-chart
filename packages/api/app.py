@@ -92,7 +92,7 @@ async def lifespan(app: FastAPI):
         logger.warning("Drawings/Workspaces endpoints will return 500")
 
     # Register Redis subscriber
-    register_redis_subscriber(app)
+    register_redis_subscriber(app, live_feed_manager)
     logger.info("Redis subscriber registered")
 
     # Start WebSocket live feed manager
