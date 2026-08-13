@@ -156,6 +156,7 @@ def test_arbitrage_api_accepts_custom_auto_controls_and_rejects_bad_budget() -> 
                     "allocation_per_symbol_venue_usdt": "60",
                     "min_24h_volume_usdt": "1500000",
                     "bbo_depth_multiplier": "3",
+                    "initial_balance_per_venue_usdt": "750",
                 },
             )
             assert response.status_code == 200
@@ -168,6 +169,11 @@ def test_arbitrage_api_accepts_custom_auto_controls_and_rejects_bad_budget() -> 
             assert settings["allocation_per_symbol_venue_usdt"] == "60"
             assert settings["min_24h_volume_usdt"] == "1500000"
             assert settings["bbo_depth_multiplier"] == "3"
+            assert settings["initial_balance_per_venue_usdt"] == "750"
+            # Injected deterministic portfolios keep their explicit balances;
+            # the configurable seed applies only to the default AUTO account.
+            assert response.json()["balances"]["alpha"]["USDT"] == "10000"
+            assert response.json()["balances"]["beta"]["USDT"] == "10000"
 
             invalid_budget = client.post(
                 "/api/v1/arbitrage/scan",
@@ -179,7 +185,7 @@ def test_arbitrage_api_accepts_custom_auto_controls_and_rejects_bad_budget() -> 
                 },
             )
             assert invalid_budget.status_code == 422
-            assert "budget exceeds 500" in invalid_budget.text
+            assert "budget exceeds initial balance" in invalid_budget.text
 
             assert client.post(
                 "/api/v1/arbitrage/scan",
@@ -213,3 +219,28 @@ def test_arbitrage_api_accepts_custom_auto_controls_and_rejects_bad_budget() -> 
                     "max_active_symbols": 3,
                 },
             ).status_code == 422
+
+
+def test_arbitrage_reset_can_atomically_replace_auto_seed_balance() -> None:
+    class AutoOnlyAdapter(FakeAdapter):
+        async def fetch_tickers(self) -> tuple[()]:
+            return ()
+
+    service = ArbitragePaperService(
+        (
+            AutoOnlyAdapter("alpha", "99", "100"),
+            AutoOnlyAdapter("beta", "99", "100"),
+        ),
+        clock_ms=lambda: NOW_MS,
+    )
+    app = create_app(arbitrage_service=service)
+    with TestClient(app) as client:
+        reset = client.post(
+            "/api/v1/arbitrage/reset",
+            json={"initial_balance_per_venue_usdt": "900"},
+        )
+        assert reset.status_code == 200
+        body = reset.json()
+        assert body["settings"]["initial_balance_per_venue_usdt"] == "900"
+        assert body["balances"]["alpha"]["USDT"] == "900"
+        assert body["balances"]["beta"]["USDT"] == "900"

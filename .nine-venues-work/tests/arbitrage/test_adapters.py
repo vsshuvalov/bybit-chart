@@ -405,7 +405,11 @@ async def test_injected_client_base_url_is_honored() -> None:
         (
             GatePublicAdapter,
             "/spot/order_book",
-            {"currency_pair": "BTC_USDT", "limit": "2"},
+            {
+                "currency_pair": "BTC_USDT",
+                "limit": "2",
+                "with_id": "true",
+            },
             {
                 "id": 168,
                 "current": 1_723_456_789_020,

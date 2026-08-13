@@ -38,7 +38,28 @@ class ParquetReader:
         Args:
             base_dir: базовый каталог с partition dirs (symbol subdirectories)
         """
-        self.base_dir = Path(base_dir)
+        self.base_dir = Path(base_dir).resolve()
+
+    def _safe_child(self, *parts: str) -> Path:
+        """Validate that joined path stays within base_dir (path traversal protection).
+
+        Args:
+            parts: path components to join
+
+        Returns:
+            Resolved path within base_dir
+
+        Raises:
+            ValueError: if path escapes base_dir
+        """
+        candidate = self.base_dir.joinpath(*parts).resolve()
+
+        try:
+            candidate.relative_to(self.base_dir)
+        except ValueError as exc:
+            raise ValueError(f"Path escapes configured data directory: {candidate}") from exc
+
+        return candidate
 
     def read_range(
         self,
@@ -49,44 +70,45 @@ class ParquetReader:
         limit: int | None = None,
         event_type: str | None = None,
     ) -> list[dict[str, Any]]:
-        """Прочитать события в заданном временном диапазоне.
+        """Read events in specified time range.
 
         Args:
-            symbol: идентификатор partition (BTCUSDT)
-            start_ts: начало диапазона (microseconds, inclusive)
-            end_ts: конец диапазона (microseconds, exclusive)
-            limit: максимальное количество rows (None = без ограничения)
-            event_type: фильтр по eventType (None = все типы)
+            symbol: partition identifier (BTCUSDT, ETHUSDT, XRPUSDT only)
+            start_ts: start of range (microseconds, inclusive)
+            end_ts: end of range (microseconds, exclusive)
+            limit: max number of rows (None = no limit)
+            event_type: filter by eventType (None = all types)
 
         Returns:
-            Список событий (dict) в хронологическом порядке
+            List of events (dict) in chronological order
 
         Raises:
-            FileNotFoundError: partition или manifest не существует
-            ValueError: некорректные параметры (start_ts > end_ts)
+            FileNotFoundError: partition or manifest does not exist
+            ValueError: invalid parameters (start_ts > end_ts, path traversal)
         """
         if start_ts >= end_ts:
-            raise ValueError(f"start_ts ({start_ts}) должен быть < end_ts ({end_ts})")
+            raise ValueError(f"start_ts ({start_ts}) must be < end_ts ({end_ts})")
 
-        partition_dir = self.base_dir / symbol
+        # Path traversal protection
+        partition_dir = self._safe_child(symbol)
         if not partition_dir.exists():
-            raise FileNotFoundError(f"Partition не существует: {partition_dir}")
+            raise FileNotFoundError(f"Partition does not exist: {symbol}")
 
-        manifest_path = partition_dir / "manifest.json"
+        manifest_path = self._safe_child(symbol, "manifest.json")
         if not manifest_path.exists():
-            raise FileNotFoundError(f"Manifest не существует: {manifest_path}")
+            raise FileNotFoundError(f"Manifest does not exist: {symbol}/manifest.json")
 
-        # 1. Читаем manifest
+        # 1. Read manifest
         manifest = Manifest(manifest_path)
 
-        # 2. Находим релевантные сегменты
-        # Roadmap §6.4: manifest хранит min/max_event_time_ms (если заполнено)
-        # Для RawTrade мы не заполняем event_time (используем WAL offsets),
-        # поэтому читаем все сегменты (будущая оптимизация — ADR для event_time)
+        # 2. Find relevant segments
+        # Roadmap §6.4: manifest stores min/max_event_time_ms (if populated)
+        # For RawTrade we don't populate event_time (use WAL offsets),
+        # so read all segments (future optimization — ADR for event_time)
         all_entries = manifest.sorted_entries()
 
-        # OPTIMIZATION: для последних N минут читаем только последние 100 сегментов
-        # (каждый сегмент ~1 минута данных при 1000 trades/min)
+        # OPTIMIZATION: for last N minutes read only last 100 segments
+        # (each segment ~1 minute of data at 1000 trades/min)
         # Это временное решение до реализации event_time индексации
         if len(all_entries) > 100:
             import time
@@ -104,13 +126,13 @@ class ParquetReader:
             logger.info(f"Нет сегментов для {symbol}")
             return []
 
-        # 3. Читаем и фильтруем каждый сегмент
+        # 3. Read and filter each segment
         all_rows = []
         for entry in relevant_entries:
-            segment_path = partition_dir / entry.relative_path
+            segment_path = self._safe_child(symbol, entry.relative_path)
 
             if not segment_path.exists():
-                logger.warning(f"Сегмент не найден: {segment_path}, пропускаем")
+                logger.warning(f"Segment not found: {entry.relative_path}, skipping")
                 continue
 
             try:

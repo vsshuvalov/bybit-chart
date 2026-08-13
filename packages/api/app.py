@@ -374,28 +374,48 @@ def create_app(data_dir: Path | str | None = None) -> FastAPI:
                 detail=f"Ошибка чтения данных: {exc}",
             )
 
+    from typing import Literal
+
+    # Symbol allowlist (P1 Security)
+    Symbol = Literal["BTCUSDT", "ETHUSDT", "XRPUSDT"]
+    Interval = Literal["1m", "5m", "15m", "30m", "1h", "2h", "4h", "1d"]
+
+    INTERVAL_US: dict[str, int] = {
+        "1m": 60_000_000,
+        "5m": 300_000_000,
+        "15m": 900_000_000,
+        "30m": 1_800_000_000,
+        "1h": 3_600_000_000,
+        "2h": 7_200_000_000,
+        "4h": 14_400_000_000,
+        "1d": 86_400_000_000,
+    }
+
+    MAX_RANGE_US = 30 * 86_400_000_000  # 30 days max
+
     @app.get("/api/v1/ohlc", response_model=OHLCResponse)
     async def get_ohlc(
-        symbol: str = Query(..., description="Symbol (BTCUSDT)"),
-        interval: str = Query(..., description="Интервал candle (1m, 5m, 15m, 1h, 4h, 1d)"),
-        start_ts: int | None = Query(None, description="Начало диапазона (microseconds)", ge=0),
-        end_ts: int | None = Query(None, description="Конец диапазона (microseconds)", ge=0),
-        limit: int = Query(500, description="Количество последних candles", ge=1, le=5000),
+        symbol: Symbol = Query(..., description="Symbol (BTCUSDT, ETHUSDT, XRPUSDT)"),
+        interval: Interval = Query(..., description="Interval (1m, 5m, 15m, 30m, 1h, 2h, 4h, 1d)"),
+        start_ts: int | None = Query(None, description="Start range (microseconds)", ge=0),
+        end_ts: int | None = Query(None, description="End range (microseconds)", ge=0),
+        limit: int = Query(500, description="Number of candles", ge=1, le=5000),
     ):
-        """Получить OHLC candles (агрегированные RawTrade).
+        """Get OHLC candles (aggregated from RawTrade).
 
         Query params:
-            - symbol: идентификатор инструмента (BTCUSDT)
-            - interval: интервал candle (1m, 5m, 15m, 30m, 1h, 2h, 4h, 1d)
-            - start_ts: начало диапазона (microseconds, inclusive) — опционально
-            - end_ts: конец диапазона (microseconds, exclusive) — опционально
-            - limit: количество последних candles (по умолчанию 500, если не указан start_ts/end_ts)
+            - symbol: instrument identifier (BTCUSDT, ETHUSDT, XRPUSDT)
+            - interval: candle interval (1m, 5m, 15m, 30m, 1h, 2h, 4h, 1d)
+            - start_ts: start of range (microseconds, inclusive) — optional
+            - end_ts: end of range (microseconds, exclusive) — optional
+            - limit: number of last candles (default 500 if start_ts/end_ts not specified)
 
         Returns:
-            200 OK: OHLCResponse с candles
-            400 Bad Request: некорректные параметры
-            404 Not Found: symbol не существует
-            500 Internal Server Error: ошибка чтения данных
+            200 OK: OHLCResponse with candles
+            400 Bad Request: invalid parameters
+            404 Not Found: symbol not found
+            422 Unprocessable Entity: invalid time range
+            500 Internal Server Error: data read error
 
         Example 1 (last N candles):
             GET /api/v1/ohlc?symbol=BTCUSDT&interval=1m&limit=100
@@ -405,42 +425,55 @@ def create_app(data_dir: Path | str | None = None) -> FastAPI:
         """
         import time
 
-        # Парсинг interval → microseconds
-        try:
-            interval_us = parse_interval(interval)
-        except ValueError as exc:
+        interval_us = INTERVAL_US[interval]
+
+        # Validate start_ts/end_ts consistency
+        if (start_ts is None) != (end_ts is None):
             raise HTTPException(
-                status_code=400,
-                detail=str(exc),
+                status_code=422,
+                detail="start_ts and end_ts must be provided together",
             )
 
-        # Если start_ts/end_ts не указаны, берём последние N candles
-        if start_ts is None or end_ts is None:
-            end_ts = int(time.time() * 1_000_000)  # текущее время в microseconds
-            start_ts = end_ts - (limit * interval_us)  # limit интервалов назад
+        # If not specified, get last N candles
+        if start_ts is None:
+            end_ts = int(time.time() * 1_000_000)
+            start_ts = end_ts - (limit * interval_us)
 
-        # Чтение RawTrade из Parquet
+        # Validate time range
+        if start_ts >= end_ts:
+            raise HTTPException(
+                status_code=422,
+                detail="start_ts must be less than end_ts",
+            )
+
+        if end_ts - start_ts > MAX_RANGE_US:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Requested range exceeds maximum {MAX_RANGE_US // 86_400_000_000} days",
+            )
+
+        # Read RawTrade from Parquet
         try:
             read_start = time.time()
             events = reader.read_range(
                 symbol=symbol,
                 start_ts=start_ts,
                 end_ts=end_ts,
-                event_type="RawTrade",  # только trades для OHLC
+                event_type="RawTrade",
             )
             read_time = (time.time() - read_start) * 1000
 
-            # Агрегация → candles
+            # Aggregate → candles
             agg_start = time.time()
             candles = aggregate_ohlc(events, interval_us)
             agg_time = (time.time() - agg_start) * 1000
 
             logger.info(
-                f"[STEP:API→Parquet→OHLC] {symbol} {interval} read {len(events)} trades in {read_time:.1f}ms "
-                f"→ aggregated {len(candles)} candles in {agg_time:.1f}ms"
+                f"[OHLC] {symbol} {interval} read {len(events)} trades in {read_time:.1f}ms "
+                f"→ {len(candles)} candles in {agg_time:.1f}ms"
             )
 
-            # Ограничить до limit последних candles
+            # Limit to last N candles
             if len(candles) > limit:
                 candles = candles[-limit:]
 

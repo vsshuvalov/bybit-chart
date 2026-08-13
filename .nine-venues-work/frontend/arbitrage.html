@@ -846,7 +846,7 @@
           <div class="balance-settings">
             <div class="field">
               <div class="field-label"><label for="initialBalance">Стартовый баланс на биржу, USDT</label><span class="info-tip"><button class="info-button" type="button" aria-label="Описание стартового баланса" aria-describedby="tip-initial-balance">?</button><span class="info-tooltip" id="tip-initial-balance" role="tooltip">С этой суммы начинается новая PAPER-сессия на каждой подключённой бирже.</span></span></div>
-              <input id="initialBalance" name="initial_balance_per_venue_usdt" type="number" min="50" max="100000" step="50" value="500" inputmode="decimal" required>
+              <input id="initialBalance" name="initial_balance_per_venue_usdt" type="number" min="100" max="1000000" step="50" value="500" inputmode="decimal" required>
             </div>
             <p class="balance-reset-note" id="balanceResetNote">Изменение пересоздаёт PAPER-сессию: балансы, P&amp;L и журналы будут очищены.</p>
             <button class="btn btn-secondary balance-apply" id="applyBalanceButton" type="button">Применить и сбросить</button>
@@ -1034,7 +1034,7 @@
     }
 
     function normalizeOpportunity(data) {
-      const best = first(data, ['best_opportunity', 'opportunity', 'best'], null);
+      const best = first(data, ['current_market_opportunity', 'best_opportunity', 'opportunity', 'best'], null);
       if (best && typeof best === 'object') return best;
       const opportunities = toArray(first(data, ['opportunities', 'candidates'], []));
       return opportunities[0] || null;
@@ -1075,6 +1075,20 @@
       return keyed === null ? [] : blockerCodes(keyed, opportunity);
     }
 
+    function executionBlockerText(value) {
+      if (typeof value !== 'object' || value === null) return readableRejectionReason(value);
+      const message = first(value, ['message'], null);
+      const code = first(value, ['code', 'reason', 'blocker'], null);
+      const exchange = first(value, ['sell_venue', 'venue', 'exchange'], null);
+      const asset = first(value, ['base_asset', 'asset'], null);
+      const shortfall = first(value, ['shortfall_base_quantity'], null);
+      const localized = readableRejectionReason(code);
+      if (code === 'missing_sell_inventory' || code === 'insufficient_inventory' || code === 'missing_inventory') {
+        return `${localized}${exchange === null ? '' : ` на ${displayExchange(exchange)}`}${asset === null ? '' : ` (${asset})`}${shortfall === null ? '' : ` · не хватает ${compact.format(finite(shortfall))}`}`;
+      }
+      return localized !== String(code ?? '').replace(/[_-]+/g, ' ') ? localized : (message || localized);
+    }
+
     function currentExecutionBlockers(data, opportunity) {
       const explicitOnOpportunity = first(opportunity, ['execution_blockers', 'blockers'], null);
       const topLevel = first(data, ['execution_blockers', 'current_execution_blockers'], null);
@@ -1093,12 +1107,30 @@
       return [...new Set(values.map((value) => String(value).trim()).filter(Boolean))];
     }
 
+    function currentExecutionBlockerDetails(data, opportunity) {
+      const raw = first(opportunity, ['execution_blockers', 'blockers'], first(data, ['execution_blockers', 'current_execution_blockers'], []));
+      const rows = Array.isArray(raw) ? raw : (raw && typeof raw === 'object' ? [raw] : []);
+      const symbol = String(first(opportunity, ['symbol', 'instrument', 'pair'], '')).toUpperCase();
+      const route = String(first(opportunity, ['route'], ''));
+      return rows.filter((item) => {
+        if (!item || typeof item !== 'object') return false;
+        const itemSymbol = String(first(item, ['symbol', 'instrument', 'pair'], '')).toUpperCase();
+        const itemRoute = String(first(item, ['route'], ''));
+        return (!itemSymbol || !symbol || itemSymbol === symbol) && (!itemRoute || !route || itemRoute === route);
+      });
+    }
+
     function normalizeOpportunityView(data) {
-      const current = normalizeOpportunity(data);
+      const currentMarket = unwrapOpportunity(first(data, ['current_market_opportunity'], null));
+      const currentExecutable = unwrapOpportunity(first(data, ['current_executable_opportunity'], null));
+      if (currentExecutable) {
+        return { opportunity: currentExecutable, kind: 'executable', executionBlockers: [], executionBlockerDetails: [] };
+      }
+      const current = currentMarket || normalizeOpportunity(data);
       if (current) {
         const opportunity = unwrapOpportunity(current);
         const blockers = currentExecutionBlockers(data, opportunity);
-        return { opportunity, kind: blockers.length ? 'blocked' : 'executable', executionBlockers: blockers };
+        return { opportunity, kind: blockers.length || currentMarket ? 'blocked' : 'executable', executionBlockers: blockers, executionBlockerDetails: currentExecutionBlockerDetails(data, opportunity) };
       }
       const lastSignal = unwrapOpportunity(first(data, ['last_profitable_signal'], null));
       if (lastSignal) return { opportunity: lastSignal, kind: 'stale', ageMs: opportunityAgeMs(lastSignal) };
@@ -1186,7 +1218,7 @@
       const metrics = first(data, ['metrics', 'stats', 'summary'], {});
       const arbitrageRaw = first(metrics, ['arbitrage_realized_pnl', 'arbitrage_realized_pnl_usdt', 'realized_pnl', 'realized_pnl_usdt'], first(data, ['arbitrage_realized_pnl', 'realized_pnl'], 0));
       const strategyRaw = first(metrics, ['strategy_pnl_usdt', 'total_strategy_pnl_usdt', 'total_pnl_usdt', 'paper_pnl_usdt'], first(data, ['strategy_pnl_usdt', 'total_strategy_pnl_usdt'], null));
-      const carryRaw = first(metrics, ['inventory_carry_pnl_usdt', 'inventory_rebalance_pnl_usdt', 'inventory_pnl_usdt', 'carry_pnl_usdt'], first(data, ['inventory_carry_pnl_usdt', 'inventory_rebalance_pnl_usdt'], null));
+      const carryRaw = first(metrics, ['inventory_carry_pnl_usdt', 'inventory_and_rebalance_pnl_usdt', 'inventory_rebalance_pnl_usdt', 'inventory_pnl_usdt', 'carry_pnl_usdt'], first(data, ['inventory_carry_pnl_usdt', 'inventory_and_rebalance_pnl_usdt', 'inventory_rebalance_pnl_usdt'], null));
       const arbitragePnl = finite(arbitrageRaw);
       const strategyPnl = strategyRaw === null ? null : finite(strategyRaw);
       const inventoryCarryPnl = carryRaw === null
@@ -1341,7 +1373,9 @@
     function inventoryEventLabel(value) {
       const labels = {
         activation_buy: 'Предварительная закупка', inventory_buy: 'Закупка инвентаря',
+        inventory_activation: 'Предварительная закупка',
         liquidation_sell: 'Выход из инвентаря', inventory_sell: 'Продажа инвентаря',
+        inventory_liquidation: 'Выход из инвентаря',
         rebalance_buy: 'Ребалансировка: покупка', rebalance_sell: 'Ребалансировка: продажа',
         rebalance_transfer: 'Виртуальная ребалансировка'
       };
@@ -1424,7 +1458,10 @@
       } else if (kind === 'blocked') {
         kindBadge.textContent = 'Текущий сигнал — заблокирован';
         const blockers = first(view, ['executionBlockers'], []);
-        $('opportunityContextCopy').textContent = `${blockers.map(readableRejectionReason).join('; ') || 'виртуальные балансы не готовы к исполнению'}. Это рыночный сигнал, но PAPER-сделки сейчас не будет.`;
+        const blockerDetails = first(view, ['executionBlockerDetails'], []);
+        const blockerSource = Array.isArray(blockerDetails) && blockerDetails.length ? blockerDetails : first(opportunity, ['execution_blockers'], blockers);
+        const details = Array.isArray(blockerSource) ? blockerSource.map(executionBlockerText) : blockers.map(readableRejectionReason);
+        $('opportunityContextCopy').textContent = `${details.join('; ') || 'виртуальные балансы не готовы к исполнению'}. Это рыночный сигнал, но PAPER-сделки сейчас не будет.`;
       } else {
         kindBadge.textContent = 'Текущая исполнимая сделка';
         $('opportunityContextCopy').textContent = 'Маршрут прошёл рыночные фильтры, и виртуальные балансы готовы к PAPER-исполнению.';
@@ -1583,20 +1620,22 @@
       const initialBalance = finite(initialBalanceInput.value);
       const required = maxActive * allocation + notional;
       const allocationCoversTrade = allocation >= notional;
-      const valid = allocationCoversTrade && initialBalance >= 50 && required <= initialBalance;
+      const valid = allocationCoversTrade && initialBalance >= 100 && initialBalance <= 1000000 && required <= initialBalance;
       if (valid) {
         hint.classList.remove('invalid');
         hint.textContent = `AUTO-бюджет на биржу: ${compact.format(maxActive)} × ${compact.format(allocation)} + ${compact.format(notional)} = ${compact.format(required)} из ${compact.format(initialBalance)} USDT; свободный резерв ${compact.format(initialBalance - required)} USDT.`;
       } else {
         const message = !allocationCoversTrade
           ? `Лимит токена на биржу (${compact.format(allocation)} USDT) не может быть меньше суммы одной сделки (${compact.format(notional)} USDT).`
-          : initialBalance < 50
-            ? 'Стартовый баланс должен быть не меньше 50 USDT на биржу.'
+          : initialBalance < 100
+            ? 'Стартовый баланс должен быть не меньше 100 USDT на биржу.'
+            : initialBalance > 1000000
+              ? 'Стартовый баланс не может превышать 1 000 000 USDT на биржу.'
             : `AUTO-бюджет превышен: ${compact.format(maxActive)} × ${compact.format(allocation)} + ${compact.format(notional)} = ${compact.format(required)} USDT, доступно ${compact.format(initialBalance)} USDT на биржу. Уменьшите количество токенов, лимит токена или сумму сделки.`;
         hint.classList.add('invalid');
         hint.textContent = message;
         allocationInput.setCustomValidity(message);
-        if (initialBalance < 50) initialBalanceInput.setCustomValidity(message);
+        if (initialBalance < 100 || initialBalance > 1000000) initialBalanceInput.setCustomValidity(message);
         if (report) allocationInput.reportValidity();
       }
       return valid;
@@ -1677,7 +1716,7 @@
 
     function updateScanLoading() {
       const loading = state.localScanInFlight || state.remoteScanning;
-      $('scanButton').disabled = loading || state.running || state.monitorActionInFlight;
+      $('scanButton').disabled = loading || state.running || state.monitorActionInFlight || state.initialBalanceDirty;
       $('scanButtonIcon').innerHTML = loading ? '<span class="spinner" aria-hidden="true"></span>' : '↗';
       $('scanButtonText').textContent = loading ? 'Сканирование…' : 'Запустить скан';
     }
@@ -1693,6 +1732,7 @@
         allocation_per_symbol_venue_usdt: finite($('allocationPerSymbol').value),
         min_24h_volume_usdt: finite($('min24hVolume').value),
         bbo_depth_multiplier: finite($('bboDepthMultiplier').value),
+        initial_balance_per_venue_usdt: finite($('initialBalance').value),
         notional: finite($('notional').value),
         min_net_edge_bps: finite($('minEdge').value),
         risk_buffer_bps: finite($('riskBuffer').value),
@@ -1703,6 +1743,10 @@
     $('scanForm').addEventListener('submit', async (event) => {
       event.preventDefault();
       if (state.localScanInFlight || state.remoteScanning || state.running || state.monitorActionInFlight) return;
+      if (state.initialBalanceDirty) {
+        showToast('Сначала нажмите «Применить и сбросить», чтобы создать PAPER-сессию с новым балансом.', 'error');
+        return;
+      }
       if (!validateAutoBudget({ report: true })) {
         showToast(`Проверьте AUTO-бюджет: доступно ${compact.format(finite($('initialBalance').value))} USDT на биржу.`, 'error');
         return;
@@ -1727,6 +1771,10 @@
       if (state.monitorActionInFlight) return;
       const starting = action === 'start';
       if (starting) {
+        if (state.initialBalanceDirty) {
+          showToast('Сначала нажмите «Применить и сбросить», чтобы создать PAPER-сессию с новым балансом.', 'error');
+          return;
+        }
         validateAutoBudget();
         if (!$('scanForm').reportValidity()) {
           showToast('Проверьте параметры AUTO перед запуском монитора.', 'error');
@@ -1799,6 +1847,7 @@
     $('initialBalance').addEventListener('input', () => {
       state.initialBalanceDirty = true;
       validateAutoBudget();
+      updateScanLoading();
     });
     syncAutoMode();
 

@@ -75,7 +75,7 @@ def test_required_triangular_sections_are_present(html: str) -> None:
         "Gross edge",
         "Net edge",
         "Expected P&amp;L",
-        "Здоровье venue",
+        "Состояние бирж",
         "Universe ликвидных тикеров",
         "Виртуальные балансы",
         "Журнал PAPER-циклов",

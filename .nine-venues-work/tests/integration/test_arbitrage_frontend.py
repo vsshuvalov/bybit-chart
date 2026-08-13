@@ -143,8 +143,14 @@ def test_initial_balance_requires_explicit_session_reset(html: str) -> None:
     payload_source = html.split("function currentPayload()", 1)[1].split(
         "$('scanForm').addEventListener", 1
     )[0]
-    assert "initial_balance_per_venue_usdt" not in payload_source
+    assert "initial_balance_per_venue_usdt: finite($('initialBalance').value)" in payload_source
     assert "state.initialBalanceDirty = true" in html
+    assert "if (state.initialBalanceDirty)" in html
+    assert "Сначала нажмите «Применить и сбросить»" in html
+    assert "state.initialBalanceDirty = false" in html
+    assert 'min="100" max="1000000"' in html
+    assert "Стартовый баланс должен быть не меньше 100 USDT" in html
+    assert "Стартовый баланс не может превышать 1 000 000 USDT" in html
 
 
 def test_signal_visibility_renders_stale_near_miss_and_diagnostics(html: str) -> None:
@@ -299,6 +305,8 @@ def test_pnl_and_inventory_costs_are_explained_separately(html: str) -> None:
         assert contract_key in html
     assert "function renderInventoryJournal(entries)" in html
     assert "Расходы инвентаря и ребалансировки" in html
+    assert "inventory_activation: 'Предварительная закупка'" in html
+    assert "inventory_liquidation: 'Выход из инвентаря'" in html
 
 
 def test_auto_universe_status_contract_is_rendered(html: str) -> None:

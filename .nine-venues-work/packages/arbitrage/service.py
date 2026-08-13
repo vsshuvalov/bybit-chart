@@ -16,9 +16,14 @@ import time
 from typing import Any, Callable, Iterable, Mapping, Sequence
 
 from packages.arbitrage.adapters import (
+    BingXPublicAdapter,
     BinancePublicAdapter,
     BitgetPublicAdapter,
     BybitPublicAdapter,
+    GatePublicAdapter,
+    HuobiPublicAdapter,
+    KuCoinPublicAdapter,
+    MEXCPublicAdapter,
     OkxPublicAdapter,
     PublicVenueAdapter,
 )
@@ -68,6 +73,11 @@ DEFAULT_TAKER_FEES: dict[str, Decimal] = {
     "binance": Decimal("0.001"),
     "okx": Decimal("0.001"),
     "bitget": Decimal("0.001"),
+    "huobi": Decimal("0.002"),
+    "kucoin": Decimal("0.001"),
+    "mexc": Decimal("0.001"),
+    "bingx": Decimal("0.001"),
+    "gate": Decimal("0.002"),
 }
 
 DEFAULT_INITIAL_BALANCES: dict[str, dict[str, Decimal]] = {
@@ -457,6 +467,11 @@ class ArbitragePaperService:
                 BinancePublicAdapter(),
                 OkxPublicAdapter(),
                 BitgetPublicAdapter(),
+                HuobiPublicAdapter(),
+                KuCoinPublicAdapter(),
+                MEXCPublicAdapter(),
+                BingXPublicAdapter(),
+                GatePublicAdapter(),
             )
         )
         if len(self.adapters) < 2:
@@ -475,10 +490,14 @@ class ArbitragePaperService:
         self.max_staleness_ms = int(max_staleness_ms)
         self.max_pair_skew_ms = int(max_pair_skew_ms)
         self.clock_ms = clock_ms or _clock_ms
+        default_fees = {
+            venue: DEFAULT_TAKER_FEES.get(venue, Decimal("0.001"))
+            for venue in venue_names
+        }
         self.taker_fees = {
             venue.lower(): decimal_value(fee, name=f"taker fee for {venue}")
             for venue, fee in (
-                DEFAULT_TAKER_FEES if taker_fees is None else taker_fees
+                default_fees if taker_fees is None else taker_fees
             ).items()
         }
         self._auto_inventory_enabled = initial_balances is None
@@ -767,9 +786,12 @@ class ArbitragePaperService:
                 opportunity.sell_venue,
                 opportunity.base_asset,
             )
-            # A partial balance that can still clear the engine's AUTO minimum
-            # is executable and must be used before any inventory rotation.
-            if available_destination * sell_book.best_bid >= minimum_notional:
+            # No rotation is needed while the destination can cover the full
+            # current strict opportunity.  Once a fill has shifted inventory,
+            # rotate up to one full trade from the accumulated source back to
+            # the destination; moving only the tiny arithmetic shortfall would
+            # leave the source-side balance corridor blocked indefinitely.
+            if available_destination >= opportunity.quantity:
                 continue
 
             snapshot_key = self._opportunity_snapshot_key(opportunity, books)
@@ -804,7 +826,7 @@ class ArbitragePaperService:
                 Decimal("0"),
                 opportunity.quantity - available_destination,
             )
-            quantity = min(source_excess, destination_shortfall)
+            quantity = min(source_excess, opportunity.quantity)
             attempt.update(
                 {
                     "source_excess_base_quantity": decimal_string(source_excess),
@@ -884,7 +906,7 @@ class ArbitragePaperService:
             )
             if (
                 destination_usdt - destination_debit
-                < settings.auto_usdt_reserve_target
+                < settings.auto_execution_usdt_floor
             ):
                 attempt["reason"] = "insufficient_destination_quote_reserve"
                 continue
@@ -988,6 +1010,24 @@ class ArbitragePaperService:
                         "message": (
                             "strict market signal exists, but this symbol has "
                             "no active PAPER inventory"
+                        ),
+                    }
+                )
+                continue
+            if snapshot_key in self._consumed_rebalance_snapshot_pairs:
+                attempt = attempts.get(route_key)
+                rows.append(
+                    {
+                        **base,
+                        "code": "rebalance_snapshot_consumed",
+                        "message": (
+                            "this snapshot was used to rebalance PAPER "
+                            "inventory; execution waits for fresh liquidity"
+                        ),
+                        **(
+                            {"rebalance": dict(attempt)}
+                            if attempt is not None
+                            else {}
                         ),
                     }
                 )
@@ -1741,7 +1781,10 @@ class ArbitragePaperService:
                                 opportunity,
                                 tradable_books,
                             )
-                            not in self._executed_snapshot_pairs
+                            not in (
+                                self._executed_snapshot_pairs
+                                | self._consumed_rebalance_snapshot_pairs
+                            )
                         ),
                         None,
                     )
@@ -1773,7 +1816,10 @@ class ArbitragePaperService:
                             opportunity
                             for opportunity in execution_candidates
                             if self._opportunity_snapshot_key(opportunity, books)
-                            not in self._executed_snapshot_pairs
+                            not in (
+                                self._executed_snapshot_pairs
+                                | self._consumed_rebalance_snapshot_pairs
+                            )
                         ),
                         None,
                     )
@@ -1802,6 +1848,31 @@ class ArbitragePaperService:
                 self._last_executed_count = (
                     len(self._executor.journal) - trade_count_before
                 )
+                if selected.symbol == AUTO_SYMBOL:
+                    remaining_candidates = [
+                        opportunity
+                        for opportunity in execution_candidates
+                        if self._opportunity_snapshot_key(opportunity, books)
+                        not in (
+                            self._executed_snapshot_pairs
+                            | self._consumed_rebalance_snapshot_pairs
+                        )
+                    ]
+                    self._current_executable_opportunity = (
+                        remaining_candidates[0]
+                        if remaining_candidates
+                        else None
+                    )
+                    self._last_execution_candidate_count = len(
+                        remaining_candidates
+                    )
+                    self._execution_blockers = self._build_execution_blockers(
+                        self._opportunities,
+                        remaining_candidates,
+                        tradable_books,
+                        selected,
+                        rebalance_attempts,
+                    )
 
                 self._scan_count += 1
                 self._last_scan_ms = now_ms
@@ -2283,6 +2354,9 @@ class ArbitragePaperService:
             rejection_counts["duplicate_snapshot"] = (
                 self._last_execution_candidate_count
             )
+        for blocker in self._execution_blockers:
+            code = str(blocker.get("code", "execution_blocked"))
+            rejection_counts[code] = rejection_counts.get(code, 0) + 1
         return {
             "funnel": funnel,
             "rejection_counts": rejection_counts,
@@ -2503,6 +2577,11 @@ class ArbitragePaperService:
                     None if strategy_pnl is None else decimal_string(strategy_pnl)
                 ),
                 "inventory_and_rebalance_pnl_usdt": (
+                    None
+                    if inventory_and_rebalance_pnl is None
+                    else decimal_string(inventory_and_rebalance_pnl)
+                ),
+                "inventory_carry_pnl_usdt": (
                     None
                     if inventory_and_rebalance_pnl is None
                     else decimal_string(inventory_and_rebalance_pnl)

@@ -398,6 +398,17 @@ def test_auto_settings_validate_configurable_risk_budget() -> None:
     assert custom.to_dict()["allocation_per_symbol_venue_usdt"] == "60"
     assert custom.to_dict()["min_24h_volume_usdt"] == "1500000"
 
+    larger_seed = ScanSettings(
+        symbol="AUTO",
+        initial_balance_per_venue_usdt="1000",
+        notional="100",
+        max_active_symbols=5,
+        allocation_per_symbol_venue_usdt="100",
+    )
+    assert larger_seed.auto_usdt_reserve_target == D("500")
+    assert larger_seed.to_dict()["initial_balance_per_venue_usdt"] == "1000"
+    assert larger_seed.to_dict()["rebalance_safety_multiple"] == "1.5"
+
     with pytest.raises(ValueError, match="at least 10"):
         ScanSettings(symbol="AUTO", notional="9")
     with pytest.raises(ValueError, match="greater than or equal"):
@@ -408,13 +419,17 @@ def test_auto_settings_validate_configurable_risk_budget() -> None:
         )
     with pytest.raises(ValueError, match="must not exceed max_symbols"):
         ScanSettings(symbol="AUTO", max_symbols=2, max_active_symbols=3)
-    with pytest.raises(ValueError, match="budget exceeds 500"):
+    with pytest.raises(ValueError, match="budget exceeds initial balance"):
         ScanSettings(
             symbol="AUTO",
             notional="60",
             max_active_symbols=5,
             allocation_per_symbol_venue_usdt="90",
         )
+    with pytest.raises(ValueError, match="between 100 and 1000000"):
+        ScanSettings(symbol="AUTO", initial_balance_per_venue_usdt="99")
+    with pytest.raises(ValueError, match="between 1.5 and 10"):
+        ScanSettings(symbol="AUTO", rebalance_safety_multiple="1.49")
 
     # AUTO-only controls do not reduce the legacy manual notional range.
     assert ScanSettings(symbol="BTCUSDT", notional="500").notional == D("500")
@@ -899,6 +914,296 @@ async def test_auto_diagnostics_require_inventory_on_the_sell_venue() -> None:
     assert result["diagnostics"]["funnel"]["inventory_ready"] == 0
     assert result["diagnostics"]["rejection_counts"]["missing_inventory"] == 2
     assert "balance_corridor" not in result["diagnostics"]["rejection_counts"]
+    assert result["current_market_opportunity"]["sell_venue"] == "gamma"
+    assert result["current_executable_opportunity"] is None
+    blocker = result["execution_blockers"][0]
+    assert blocker["code"] == "insufficient_sell_inventory"
+    assert blocker["sell_venue"] == "gamma"
+    assert D(blocker["available_base_quantity"]) == 0
+    assert (
+        blocker["rebalance"]["reason"]
+        == "insufficient_excess_source_inventory"
+    )
+
+
+@pytest.mark.asyncio
+async def test_auto_rebalance_is_atomic_economic_and_waits_for_fresh_snapshot(
+) -> None:
+    def rows(venue: str) -> tuple[tuple[MarketTicker, ...], ...]:
+        flat = (
+            make_ticker(
+                venue,
+                "ROTATE",
+                "99",
+                "100",
+                volume="3000000",
+                change="9",
+                snapshot_id=f"flat-{venue}",
+            ),
+        )
+
+        def profitable(snapshot: str) -> tuple[MarketTicker, ...]:
+            return (
+                make_ticker(
+                    venue,
+                    "ROTATE",
+                    "99" if venue == "cheap" else "103",
+                    "100" if venue == "cheap" else "104",
+                    volume="3000000",
+                    change="9",
+                    snapshot_id=f"{snapshot}-{venue}",
+                ),
+            )
+
+        # scan 4 is repeated once to prove that the rebalance-consumed public
+        # liquidity cannot also be used by an arbitrage fill.
+        return (
+            flat,
+            profitable("edge-1"),
+            profitable("edge-2"),
+            profitable("edge-3"),
+            profitable("edge-3"),
+            profitable("edge-4"),
+        )
+
+    service = ArbitragePaperService(
+        (
+            SequencedAutoAdapter("cheap", rows("cheap")),
+            SequencedAutoAdapter("rich", rows("rich")),
+        ),
+        clock_ms=lambda: NOW_MS,
+    )
+    settings = ScanSettings(
+        symbol="AUTO",
+        activation_observations=1,
+        max_active_symbols=1,
+        notional="25",
+        min_net_edge_bps="5",
+        auto_execute=True,
+    )
+
+    activated = await service.scan(settings)
+    initial_total_base = sum(
+        D(activated["balances"][venue]["ROTATE"])
+        for venue in ("cheap", "rich")
+    )
+    first = await service.scan(settings)
+    second = await service.scan(settings)
+    assert first["metrics"]["trade_count"] == 1
+    assert second["metrics"]["trade_count"] == 1
+    assert second["metrics"]["rebalance_count"] == 0
+
+    rebalanced = await service.scan(settings)
+
+    assert rebalanced["metrics"]["trade_count"] == 1
+    assert rebalanced["metrics"]["rebalance_count"] == 1
+    assert len(rebalanced["rebalance_journal"]) == 1
+    row = rebalanced["rebalance_journal"][0]
+    assert row["status"] == "paper_rebalanced"
+    assert row["buy_venue"] == "cheap"
+    assert row["sell_venue"] == "rich"
+    assert D(row["projected_route_profit_usdt"]) >= D(
+        row["required_projected_profit_usdt"]
+    )
+    assert D(row["safety_multiple"]) == D("1.5")
+    total_after = sum(
+        D(rebalanced["balances"][venue]["ROTATE"])
+        for venue in ("cheap", "rich")
+    )
+    assert total_after == initial_total_base
+    assert rebalanced["current_executable_opportunity"] is None
+    assert rebalanced["execution_blockers"][0]["code"] == (
+        "rebalance_snapshot_consumed"
+    )
+
+    repeated = await service.scan(settings)
+    assert repeated["metrics"]["trade_count"] == 1
+    assert repeated["metrics"]["rebalance_count"] == 1
+    assert repeated["current_executable_opportunity"] is None
+
+    fresh = await service.scan(settings)
+    assert fresh["metrics"]["trade_count"] == 2
+    assert fresh["metrics"]["rebalance_count"] == 1
+
+
+@pytest.mark.asyncio
+async def test_auto_rebalance_does_not_run_without_profit_cost_coverage() -> None:
+    # One prior profitable fill depletes part of the destination, but the
+    # accumulated strict signal profit is intentionally too small to cover a
+    # wide paired rebalance by the 1.5x safety rule.
+    def sequence(venue: str) -> tuple[tuple[MarketTicker, ...], ...]:
+        return tuple(
+            (
+                make_ticker(
+                    venue,
+                    "SAFE",
+                    "99" if venue == "cheap" else ("103" if index else "99"),
+                    "100" if venue == "cheap" else ("104" if index else "100"),
+                    volume="3000000",
+                    change="9",
+                    snapshot_id=f"safe-{index}-{venue}",
+                ),
+            )
+            for index in range(4)
+        )
+
+    service = ArbitragePaperService(
+        (
+            SequencedAutoAdapter("cheap", sequence("cheap")),
+            SequencedAutoAdapter("rich", sequence("rich")),
+        ),
+        clock_ms=lambda: NOW_MS,
+    )
+    settings = ScanSettings(
+        symbol="AUTO",
+        activation_observations=1,
+        max_active_symbols=1,
+        notional="25",
+        min_net_edge_bps="5",
+        auto_execute=True,
+        rebalance_safety_multiple="10",
+    )
+    await service.scan(settings)
+    await service.scan(settings)
+    await service.scan(settings)
+    blocked = await service.scan(settings)
+
+    assert blocked["metrics"]["trade_count"] == 1
+    assert blocked["metrics"]["rebalance_count"] == 0
+    assert blocked["execution_blockers"][0]["code"] == (
+        "insufficient_sell_inventory"
+    )
+    assert blocked["execution_blockers"][0]["rebalance"]["reason"] == (
+        "rebalance_not_economic"
+    )
+
+
+@pytest.mark.asyncio
+async def test_active_symbol_thin_exchange_book_is_valuation_only() -> None:
+    def qualified(venue: str, snapshot: str) -> MarketTicker:
+        return make_ticker(
+            venue,
+            "FILTER",
+            "99",
+            "100",
+            volume="2000000",
+            change="9",
+            snapshot_id=snapshot,
+        )
+
+    service = ArbitragePaperService(
+        (
+            SequencedAutoAdapter(
+                "alpha",
+                (
+                    (qualified("alpha", "a1"),),
+                    (qualified("alpha", "a2"),),
+                ),
+            ),
+            SequencedAutoAdapter(
+                "beta",
+                (
+                    (qualified("beta", "b1"),),
+                    (qualified("beta", "b2"),),
+                ),
+            ),
+            SequencedAutoAdapter(
+                "thin",
+                (
+                    (make_ticker(
+                        "thin", "FILTER", "199", "200",
+                        volume="10", change="100", snapshot_id="t1",
+                    ),),
+                    (make_ticker(
+                        "thin", "FILTER", "199", "200",
+                        volume="10", change="100", snapshot_id="t2",
+                    ),),
+                ),
+            ),
+        ),
+        clock_ms=lambda: NOW_MS,
+    )
+    settings = ScanSettings(
+        symbol="AUTO",
+        activation_observations=1,
+        max_active_symbols=1,
+        auto_execute=True,
+        min_net_edge_bps="5",
+    )
+
+    first = await service.scan(settings)
+    assert first["active_symbols"] == ["FILTERUSDT"]
+    second = await service.scan(settings)
+
+    assert second["best_opportunity"] is None
+    assert second["metrics"]["book_count"] == 3
+    assert second["metrics"]["tradable_book_count"] == 2
+    assert second["diagnostics"]["funnel"]["routes"] == 2
+    assert second["execution_blockers"] == []
+
+
+@pytest.mark.asyncio
+async def test_auto_seed_balance_changes_only_when_pristine_or_via_reset() -> None:
+    rows = {
+        venue: (
+            make_ticker(
+                venue,
+                "SEED",
+                "99",
+                "100",
+                volume="2000000",
+                change="9",
+                snapshot_id=f"seed-{venue}",
+            ),
+        )
+        for venue in ("alpha", "beta")
+    }
+    service = ArbitragePaperService(
+        (
+            AutoAdapter("alpha", rows["alpha"]),
+            AutoAdapter("beta", rows["beta"]),
+        ),
+        clock_ms=lambda: NOW_MS,
+    )
+
+    configured = await service.scan(
+        ScanSettings(
+            symbol="AUTO",
+            initial_balance_per_venue_usdt="750",
+        )
+    )
+    assert configured["balances"]["alpha"] == {"USDT": "750"}
+    reconfigured = await service.scan(
+        ScanSettings(
+            symbol="AUTO",
+            initial_balance_per_venue_usdt="800",
+        )
+    )
+    assert reconfigured["balances"]["beta"] == {"USDT": "800"}
+
+    active = await service.scan(
+        ScanSettings(
+            symbol="AUTO",
+            initial_balance_per_venue_usdt="800",
+            activation_observations=1,
+            max_active_symbols=1,
+            auto_execute=True,
+        )
+    )
+    assert active["active_symbols"] == ["SEEDUSDT"]
+    with pytest.raises(RuntimeError, match="reset with the new balance"):
+        await service.scan(
+            ScanSettings(
+                symbol="AUTO",
+                initial_balance_per_venue_usdt="900",
+            )
+        )
+
+    reset = await service.reset("900")
+    assert reset["settings"]["initial_balance_per_venue_usdt"] == "900"
+    assert reset["balances"]["alpha"] == {"USDT": "900"}
+    assert reset["inventory_journal"] == []
+    assert reset["rebalance_journal"] == []
 
 
 @pytest.mark.asyncio

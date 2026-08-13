@@ -420,7 +420,7 @@ async def test_mexc_tickers_use_receipt_time_not_old_last_trade_time() -> None:
                     # Some MEXC rows omit quoteVolume. Fall back to
                     # base-volume times last price for universe ranking.
                     "quoteVolume": None,
-                    "priceChangePercent": "12.5",
+                    "priceChangePercent": "0.125",
                     "closeTime": 1_600_000_000_000,
                 },
                 {
@@ -450,7 +450,7 @@ async def test_mexc_tickers_use_receipt_time_not_old_last_trade_time() -> None:
     assert tickers[0].venue == "mexc"
     assert tickers[0].timestamp_ms == 1_800_000_000_000
     assert tickers[0].quote_volume == Decimal("2000000.0")
-    assert tickers[0].change_24h_pct == Decimal("12.5")
+    assert tickers[0].change_24h_pct == Decimal("12.500")
 
 
 @pytest.mark.asyncio
@@ -480,7 +480,7 @@ async def test_bingx_all_tickers_are_public_and_use_receipt_timestamp() -> None:
                         "askQty": "900",
                         "volume": "500000",
                         "quoteVolume": "505000",
-                        "priceChangePercent": "2.5",
+                        "priceChangePercent": "2.5%",
                         "closeTime": 1_600_000_000_000,
                     },
                     {
@@ -513,15 +513,72 @@ async def test_bingx_all_tickers_are_public_and_use_receipt_timestamp() -> None:
     assert tickers[0].symbol == "XRPUSDT"
     assert tickers[0].timestamp_ms == 1_800_000_000_000
     assert tickers[0].volume_usdt == Decimal("505000")
+    assert tickers[0].change_24h_pct == Decimal("2.5")
 
 
 @pytest.mark.asyncio
-async def test_gate_all_tickers_normalize_currency_pair_and_sizes() -> None:
+async def test_gate_live_ticker_schema_is_enriched_with_real_order_book() -> None:
+    """Gate 24h metadata must not be mistaken for executable BBO depth."""
+
+    payload = [
+        {
+            "currency_pair": "BTC_USDT",
+            "last": "116000",
+            "highest_bid": "115999",
+            "lowest_ask": "116001",
+            "base_volume": "1000",
+            "quote_volume": "116000000",
+            "change_percentage": "2.1",
+        }
+    ]
     requests = 0
 
     def handler(request: httpx.Request) -> httpx.Response:
         nonlocal requests
         requests += 1
+        if request.url.path == "/spot/tickers":
+            return httpx.Response(200, json=payload)
+        assert request.url.path == "/spot/order_book"
+        assert dict(request.url.params) == {
+            "currency_pair": "BTC_USDT",
+            "limit": "1",
+            "with_id": "true",
+        }
+        return httpx.Response(
+            200,
+            json={
+                "id": 77,
+                "current": 1_800_000_000_000,
+                "bids": [["115999", "0.8"]],
+                "asks": [["116001", "0.6"]],
+            },
+        )
+
+    async with _client(handler) as client:
+        adapter = GatePublicAdapter(
+            client=client,
+            base_url="https://mock.test",
+            clock_ms=lambda: 1_800_000_000_000,
+        )
+        tickers = await adapter.fetch_tickers()
+
+    assert requests == 2
+    assert len(tickers) == 1
+    assert tickers[0].symbol == "BTCUSDT"
+    assert tickers[0].bid_size == Decimal("0.8")
+    assert tickers[0].ask_size == Decimal("0.6")
+    assert tickers[0].volume_usdt == Decimal("116000000")
+
+
+@pytest.mark.asyncio
+async def test_gate_all_tickers_rejects_unavailable_book_enrichment() -> None:
+    requests = 0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal requests
+        requests += 1
+        if request.url.path == "/spot/order_book":
+            return httpx.Response(503, json={"message": "book unavailable"})
         assert request.url.path == "/spot/tickers"
         assert not request.url.query
         return httpx.Response(
@@ -558,15 +615,13 @@ async def test_gate_all_tickers_normalize_currency_pair_and_sizes() -> None:
             base_url="https://mock.test",
             clock_ms=lambda: 1_800_000_000_001,
         )
-        tickers = await adapter.fetch_tickers()
+        with pytest.raises(
+            TickerPayloadError,
+            match="no candidate order book",
+        ):
+            await adapter.fetch_tickers()
 
-    assert requests == 1
-    assert len(tickers) == 1
-    assert tickers[0].venue == "gate"
-    assert tickers[0].symbol == "ADAUSDT"
-    assert tickers[0].bid_size == Decimal("5000")
-    assert tickers[0].ask_size == Decimal("4000")
-    assert tickers[0].change_24h_pct == Decimal("-3.25")
+    assert requests == 2
 
 
 @pytest.mark.asyncio
@@ -577,7 +632,11 @@ async def test_gate_all_tickers_normalize_currency_pair_and_sizes() -> None:
         (KuCoinPublicAdapter, {"code": "400100", "msg": "bad request"}, "bad request"),
         (MEXCPublicAdapter, {"code": -1, "msg": "unavailable"}, "unavailable"),
         (BingXPublicAdapter, {"code": 100500, "msg": "busy"}, "busy"),
-        (GatePublicAdapter, {"label": "INVALID_PARAM_VALUE", "msg": "invalid"}, "invalid"),
+        (
+            GatePublicAdapter,
+            {"label": "INVALID_PARAM_VALUE", "message": "invalid"},
+            "invalid",
+        ),
     ],
 )
 async def test_new_ticker_adapters_reject_venue_error_payloads(

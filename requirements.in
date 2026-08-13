@@ -57,6 +57,11 @@ uvicorn==0.32.1
 # Требуется starlette.testclient для интеграционных тестов API.
 httpx==0.28.1
 
+# asyncpg — PostgreSQL async driver для persistence (drawings/workspaces).
+# Используется в packages/api/persistence.py для хранения состояния UI.
+# CRITICAL: required by app.py imports, previously missing from requirements.
+asyncpg==0.29.0
+
 # Заявлено в Roadmap §4, но ещё не добавлено — каждая позиция вводится
 # своей задачей вместо с использующим её кодом:
 #   FastAPI, Uvicorn  api-gateway                   → Stage 4

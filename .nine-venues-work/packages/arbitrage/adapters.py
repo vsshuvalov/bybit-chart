@@ -7,6 +7,7 @@ credentials, and contain no order, account, or wallet endpoints.
 
 from __future__ import annotations
 
+import asyncio
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
@@ -181,8 +182,14 @@ class BasePublicVenueAdapter(ABC):
             path, params=params, payload_error=TickerPayloadError
         )
         if isinstance(payload, (str, bytes)) or not isinstance(payload, Sequence):
-            if isinstance(payload, Mapping) and payload.get("msg"):
-                raise TickerPayloadError(f"{self.venue}: {payload['msg']}")
+            if isinstance(payload, Mapping):
+                detail = (
+                    payload.get("msg")
+                    or payload.get("message")
+                    or payload.get("label")
+                )
+                if detail:
+                    raise TickerPayloadError(f"{self.venue}: {detail}")
             raise TickerPayloadError(
                 f"{self.venue}: response root must be an array"
             )
@@ -648,6 +655,7 @@ class BingXPublicAdapter(BasePublicVenueAdapter):
             base_volume_field="volume",
             last_price_field="lastPrice",
             change_field="priceChangePercent",
+            change_parser=_bingx_percent,
         )
         return _market_tickers(raw)
 
@@ -688,43 +696,79 @@ class GatePublicAdapter(BasePublicVenueAdapter):
     venue = "gate"
     default_base_url = "https://api.gateio.ws/api/v4"
     max_depth = 100
+    ticker_enrichment_limit = 50
+    ticker_enrichment_concurrency = 20
 
     async def fetch_tickers(self) -> tuple[MarketTicker, ...]:
+        # Gate's live all-market REST ticker omits quantities at the best
+        # bid/ask.  Enrich a bounded candidate set with actual public order
+        # books.  Non-standard extra fields and 24h volume are deliberately
+        # never trusted as executable BBO depth.
         rows = await self._get_json_array("/spot/tickers", params={})
-        timestamp = _ticker_timestamp_ms(
-            self._clock_ms(), venue=self.venue, field="receipt timestamp"
+        candidates = _gate_ticker_candidates(
+            rows,
+            limit=self.ticker_enrichment_limit,
         )
-        raw = _parse_compact_ticker_rows(
-            venue=self.venue,
-            rows=rows,
-            timestamp=lambda _row: timestamp,
-            symbol_field="currency_pair",
-            bid_field="highest_bid",
-            ask_field="lowest_ask",
-            bid_size_field="highest_size",
-            ask_size_field="lowest_size",
-            quote_volume_field="quote_volume",
-            base_volume_field="base_volume",
-            last_price_field="last",
-            change_field="change_percentage",
-        )
-        return _market_tickers(raw)
+        if not candidates:
+            raise TickerPayloadError(
+                "gate: all-market tickers contain no usable spot candidates"
+            )
+
+        semaphore = asyncio.Semaphore(self.ticker_enrichment_concurrency)
+
+        async def enrich(
+            candidate: _GateTickerMetadata,
+        ) -> MarketTicker | None:
+            try:
+                async with semaphore:
+                    book = await self.fetch_order_book(candidate.symbol, depth=1)
+            except (PublicVenueError, TypeError, ValueError):
+                # One suspended or disappearing pair must not invalidate the
+                # coherent order books returned for the other candidates.
+                return None
+            return MarketTicker(
+                venue=self.venue,
+                symbol=candidate.symbol,
+                base_asset=candidate.base_asset,
+                quote_asset=candidate.quote_asset,
+                timestamp_ms=book.timestamp_ms,
+                bid=book.best_bid,
+                ask=book.best_ask,
+                bid_size=book.bids[0].quantity,
+                ask_size=book.asks[0].quantity,
+                quote_volume=candidate.quote_volume,
+                volume_usdt=candidate.volume_usdt,
+                snapshot_id=book.snapshot_id,
+                change_24h_pct=candidate.change_24h_pct,
+            )
+
+        enriched = await asyncio.gather(*(enrich(item) for item in candidates))
+        result = tuple(item for item in enriched if item is not None)
+        if not result:
+            raise TickerPayloadError(
+                "gate: no candidate order book could provide executable BBO depth"
+            )
+        return result
 
     async def fetch_order_book(self, symbol: str, depth: int = 20) -> OrderBook:
         canonical, depth = self._request_values(symbol, depth)
         instrument = _separated_symbol(canonical, "_")
         payload = await self._get_json(
             "/spot/order_book",
-            params={"currency_pair": instrument, "limit": depth},
+            params={
+                "currency_pair": instrument,
+                "limit": depth,
+                "with_id": "true",
+            },
         )
         if "label" in payload and "bids" not in payload:
             detail = payload.get("message") or payload.get("label") or "venue error"
             raise OrderBookPayloadError(f"{self.venue}: {detail}")
 
         timestamp = _timestamp_ms(
-            payload.get("update", payload.get("current")),
+            payload.get("current", payload.get("update")),
             venue=self.venue,
-            field="update",
+            field="current",
         )
         return _make_order_book(
             venue=self.venue,
@@ -805,6 +849,116 @@ class _RawTicker:
     change_24h_pct: Decimal = Decimal("0")
 
 
+@dataclass(frozen=True, slots=True)
+class _GateTickerMetadata:
+    symbol: str
+    base_asset: str
+    quote_asset: str
+    bid: Decimal
+    ask: Decimal
+    quote_volume: Decimal
+    volume_usdt: Decimal
+    change_24h_pct: Decimal
+
+
+def _gate_ticker_candidates(
+    rows: Sequence[Any],
+    *,
+    limit: int,
+) -> tuple[_GateTickerMetadata, ...]:
+    """Rank Gate metadata before bounded, real-order-book enrichment."""
+
+    parsed: list[dict[str, Any]] = []
+    for row in rows:
+        if not isinstance(row, Mapping):
+            continue
+        try:
+            symbol = _normalise_symbol(row.get("currency_pair"))
+            base_asset, quote_asset = _split_compact_symbol(symbol)
+            bid = _ticker_positive_decimal(row.get("highest_bid"), "gate", "highest_bid")
+            ask = _ticker_positive_decimal(row.get("lowest_ask"), "gate", "lowest_ask")
+            if bid >= ask:
+                continue
+            try:
+                quote_volume = _ticker_positive_decimal(
+                    row.get("quote_volume"), "gate", "quote_volume"
+                )
+            except TickerPayloadError:
+                base_volume = _ticker_positive_decimal(
+                    row.get("base_volume"), "gate", "base_volume"
+                )
+                last = _ticker_positive_decimal(row.get("last"), "gate", "last")
+                quote_volume = base_volume * last
+            change = _ticker_optional_decimal(row.get("change_percentage")) or Decimal("0")
+        except (TickerPayloadError, TypeError, ValueError):
+            continue
+        parsed.append(
+            {
+                "symbol": symbol,
+                "base_asset": base_asset,
+                "quote_asset": quote_asset,
+                "bid": bid,
+                "ask": ask,
+                "quote_volume": quote_volume,
+                "change": change,
+            }
+        )
+
+    usdt_rates: dict[str, Decimal] = {
+        asset: Decimal("1") for asset in _STABLE_QUOTES
+    }
+    for item in parsed:
+        midpoint = (item["bid"] + item["ask"]) / Decimal("2")
+        if item["quote_asset"] in _STABLE_QUOTES:
+            usdt_rates.setdefault(item["base_asset"], midpoint)
+        elif item["base_asset"] in _STABLE_QUOTES:
+            usdt_rates.setdefault(
+                item["quote_asset"], Decimal("1") / midpoint
+            )
+
+    ranked: list[_GateTickerMetadata] = []
+    for item in parsed:
+        volume_usdt = item["quote_volume"] * usdt_rates.get(
+            item["quote_asset"], Decimal("0")
+        )
+        if volume_usdt <= 0:
+            continue
+        ranked.append(
+            _GateTickerMetadata(
+                symbol=item["symbol"],
+                base_asset=item["base_asset"],
+                quote_asset=item["quote_asset"],
+                bid=item["bid"],
+                ask=item["ask"],
+                quote_volume=item["quote_volume"],
+                volume_usdt=volume_usdt,
+                change_24h_pct=item["change"],
+            )
+        )
+
+    liquidity_pool = sorted(
+        ranked,
+        key=lambda item: (-item.volume_usdt, item.symbol),
+    )[: max(limit * 3, limit)]
+    liquid_count = max(1, (limit * 7) // 10)
+    selected = liquidity_pool[:liquid_count]
+    selected_symbols = {item.symbol for item in selected}
+    for item in sorted(
+        liquidity_pool,
+        key=lambda value: (
+            -abs(value.change_24h_pct),
+            -value.volume_usdt,
+            value.symbol,
+        ),
+    ):
+        if len(selected) >= limit:
+            break
+        if item.symbol not in selected_symbols:
+            selected.append(item)
+            selected_symbols.add(item.symbol)
+    return tuple(selected)
+
+
 def _parse_compact_ticker_rows(
     *,
     venue: str,
@@ -821,6 +975,7 @@ def _parse_compact_ticker_rows(
     usdt_volume_field: str | None = None,
     change_field: str | None = None,
     change_multiplier: Decimal = Decimal("1"),
+    change_parser: Callable[[Any], Decimal | None] | None = None,
     open_field: str | None = None,
     close_field: str | None = None,
 ) -> tuple[_RawTicker, ...]:
@@ -865,7 +1020,9 @@ def _parse_compact_ticker_rows(
                 else None
             )
             raw_change = (
-                _ticker_optional_decimal(row.get(change_field))
+                (change_parser or _ticker_optional_decimal)(
+                    row.get(change_field)
+                )
                 if change_field is not None
                 else None
             )
@@ -1085,6 +1242,16 @@ def _ticker_optional_decimal(value: Any) -> Decimal | None:
     except (InvalidOperation, ValueError):
         return None
     return result if result.is_finite() else None
+
+
+def _bingx_percent(value: Any) -> Decimal | None:
+    """Parse BingX's documented percent string without double scaling it."""
+
+    if isinstance(value, str):
+        value = value.strip()
+        if value.endswith("%"):
+            value = value[:-1].strip()
+    return _ticker_optional_decimal(value)
 
 
 def _okx_instrument_id(original: str, canonical: str) -> str:
