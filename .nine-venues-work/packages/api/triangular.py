@@ -27,6 +27,7 @@ class TriangularScanRequest(BaseModel):
     min_net_edge_bps: Decimal = Field(default=Decimal("5"), ge=0, lt=10_000)
     risk_buffer_bps: Decimal = Field(default=Decimal("2"), ge=0, lt=10_000)
     auto_execute: bool = False
+    use_fee_token_discounts: bool = True
     interval_ms: int = Field(default=10_000, ge=10_000, le=60_000)
     max_tickers: int = Field(default=50, ge=3, le=50)
 
@@ -62,6 +63,7 @@ class TriangularScanRequest(BaseModel):
             min_net_edge_bps=self.min_net_edge_bps,
             risk_buffer_bps=self.risk_buffer_bps,
             auto_execute=self.auto_execute,
+            use_fee_token_discounts=self.use_fee_token_discounts,
             interval_ms=self.interval_ms,
             max_tickers=self.max_tickers,
         )

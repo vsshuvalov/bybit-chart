@@ -40,6 +40,7 @@ class ArbitrageScanRequest(BaseModel):
     min_net_edge_bps: Decimal = Field(default=Decimal("5"), ge=0, lt=10_000)
     risk_buffer_bps: Decimal = Field(default=Decimal("2"), ge=0, lt=10_000)
     auto_execute: bool = False
+    use_fee_token_discounts: bool = True
     interval_ms: int = Field(default=2000, ge=500, le=60_000)
     max_symbols: int = Field(default=DEFAULT_MAX_SYMBOLS, ge=1, le=50)
     activation_observations: int = Field(
@@ -141,6 +142,7 @@ class ArbitrageScanRequest(BaseModel):
             min_net_edge_bps=self.min_net_edge_bps,
             risk_buffer_bps=self.risk_buffer_bps,
             auto_execute=self.auto_execute,
+            use_fee_token_discounts=self.use_fee_token_discounts,
             interval_ms=self.interval_ms,
             max_symbols=self.max_symbols,
             activation_observations=self.activation_observations,

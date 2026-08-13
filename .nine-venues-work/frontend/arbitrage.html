@@ -360,6 +360,38 @@
     }
     .paper-note strong { color: #d7bd74; }
 
+    .fee-policy {
+      margin: 0 18px 12px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: rgba(7,10,16,.3);
+    }
+    .fee-policy summary {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-height: 38px;
+      padding: 8px 11px;
+      cursor: pointer;
+      color: var(--muted);
+      font-size: 10px;
+      font-weight: 700;
+      list-style: none;
+    }
+    .fee-policy summary::-webkit-details-marker { display: none; }
+    .fee-policy summary::before { color: var(--subtle); content: "▸"; transition: transform .16s; }
+    .fee-policy[open] summary::before { transform: rotate(90deg); }
+    .fee-policy-summary { margin-left: auto; color: var(--subtle); font-size: 9px; font-weight: 550; }
+    .fee-policy-list { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1px; border-top: 1px solid var(--line); background: var(--line); }
+    .fee-policy-row { min-width: 0; padding: 9px 11px; background: #0d121c; }
+    .fee-policy-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+    .fee-policy-head strong { font-size: 10px; }
+    .fee-policy-token { color: #c4b5fd; font-size: 9px; font-weight: 700; }
+    .fee-policy-rate { margin-top: 5px; color: var(--text); font-size: 10px; font-variant-numeric: tabular-nums; }
+    .fee-policy-rate .discount { color: var(--green); }
+    .fee-policy-condition { overflow: hidden; margin-top: 4px; color: var(--subtle); font-size: 8px; line-height: 1.4; text-overflow: ellipsis; }
+    .fee-policy-empty { grid-column: 1 / -1; padding: 14px; background: #0d121c; color: var(--subtle); font-size: 10px; text-align: center; }
+
     .stats-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 10px; margin-bottom: 16px; }
     .stat { min-height: 94px; padding: 15px 17px; }
     .stat-label { color: var(--muted); font-size: 10px; font-weight: 700; letter-spacing: .045em; text-transform: uppercase; }
@@ -552,6 +584,7 @@
       .stats-grid { grid-template-columns: repeat(4, 1fr); }
       .main-grid { grid-template-columns: 1fr; }
       .side-stack { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .fee-policy-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     }
 
     @media (max-width: 760px) {
@@ -572,6 +605,7 @@
       .edge-item { border-right: 0; border-bottom: 1px solid var(--line); }
       .edge-item:last-child { border-bottom: 0; }
       .diagnostics { grid-template-columns: 1fr; }
+      .fee-policy-list { grid-template-columns: 1fr; }
     }
 
     @media (max-width: 440px) {
@@ -667,6 +701,16 @@
           </label>
         </div>
         <div class="field">
+          <div class="field-label"><label for="useFeeTokenDiscounts">Комиссия</label><span class="info-tip"><button class="info-button" type="button" aria-label="Описание скидок токеном биржи" aria-describedby="tip-fee-token-discounts">?</button><span class="info-tooltip" id="tip-fee-token-discounts" role="tooltip">PAPER what-if: предполагается, что оплата комиссии токеном биржи включена и токена достаточно. Цена токена и его курсовой риск не моделируются; для Bybit, OKX и BingX скидка равна 0.</span></span></div>
+          <label class="switch-wrap" for="useFeeTokenDiscounts">
+            <span class="switch-copy"><strong>Скидки токеном биржи</strong></span>
+            <span class="switch">
+              <input id="useFeeTokenDiscounts" name="use_fee_token_discounts" type="checkbox" aria-describedby="tip-fee-token-discounts" checked>
+              <span class="switch-track" aria-hidden="true"></span>
+            </span>
+          </label>
+        </div>
+        <div class="field">
           <div class="field-label"><label for="activationObservations">Наблюдений устойчивости</label><span class="info-tip"><button class="info-button" type="button" aria-label="Описание наблюдений устойчивости" aria-describedby="tip-observations">?</button><span class="info-tooltip" id="tip-observations" role="tooltip">Сколько свежих наблюдений нужно, прежде чем заранее закупить токен для арбитража.</span></span></div>
           <input id="activationObservations" name="activation_observations" type="number" min="1" max="100" step="1" value="5" inputmode="numeric" required>
         </div>
@@ -702,6 +746,10 @@
           <button class="btn btn-ghost" id="resetButton" type="button" title="Сбросить виртуальный портфель" aria-label="Сбросить виртуальный портфель">↺</button>
         </div>
       </form>
+      <details class="fee-policy" id="feePolicyPanel">
+        <summary><span>Ставки комиссий по биржам</span><span class="info-tip"><button class="info-button" type="button" aria-label="Описание ставок комиссий" aria-describedby="tip-fee-policy">?</button><span class="info-tooltip" id="tip-fee-policy" role="tooltip">Базовая ставка → PAPER-ставка после доступной скидки. Условия зависят от биржи, уровня аккаунта и включённой оплаты её токеном.</span></span><span class="fee-policy-summary" id="feePolicySummary">ожидание данных</span></summary>
+        <div class="fee-policy-list" id="feePolicyList"><div class="fee-policy-empty">Ставки появятся после подключения к API</div></div>
+      </details>
       <div class="paper-note"><span aria-hidden="true">△</span><span><strong>PAPER-режим:</strong> <span id="paperPolicyNote"></span> Расчёты используют публичные BBO-котировки; реальные средства не задействованы.</span></div>
     </section>
 
@@ -938,6 +986,48 @@
         huobi: 'Huobi', kucoin: 'KuCoin', mexc: 'MEXC', bingx: 'BingX', gate: 'Gate'
       };
       return names[raw.toLowerCase()] || raw || 'Неизвестно';
+    }
+
+    function normalizeFeePolicy(raw) {
+      if (Array.isArray(raw)) return raw;
+      if (!raw || typeof raw !== 'object') return [];
+      return Object.entries(raw).map(([venue, item]) => (
+        item && typeof item === 'object' && !Array.isArray(item)
+          ? { venue, ...item }
+          : { venue, effective_taker_fee_bps: item }
+      ));
+    }
+
+    function renderFeePolicy(data) {
+      const rows = normalizeFeePolicy(first(data, ['fee_policy'], []));
+      const explanation = first(data, ['fee_token_balance_explanation'], first(data, ['fee_policy_explanation'], ''));
+      if (!rows.length) {
+        $('feePolicySummary').textContent = 'ставки недоступны';
+        $('feePolicyList').innerHTML = '<div class="fee-policy-empty">Ставки пока не получены от API</div>';
+        return;
+      }
+      const enabledCount = rows.filter((row) => Boolean(first(row, ['enabled'], false)) && finite(first(row, ['discount_bps'], 0)) > 0).length;
+      $('feePolicySummary').textContent = `${enabledCount} ${pluralRu(enabledCount, 'скидка', 'скидки', 'скидок')} · PAPER what-if`;
+      $('feePolicySummary').title = String(explanation || 'Баланс токена комиссии моделируется как достаточный USDT-эквивалент.');
+      $('feePolicyList').innerHTML = rows.map((row) => {
+        const venue = displayExchange(first(row, ['venue', 'exchange', 'name'], '—'));
+        const token = first(row, ['token', 'fee_token'], null);
+        const base = finite(first(row, ['base_taker_fee_bps', 'base_fee_rate_bps'], 0));
+        const effective = finite(first(row, ['effective_taker_fee_bps', 'effective_fee_rate_bps'], base));
+        const relativeDiscountBps = finite(first(row, ['discount_bps'], 0));
+        const discountPercent = first(row, ['discount_percent'], null) === null
+          ? relativeDiscountBps / 100
+          : finite(first(row, ['discount_percent'], 0));
+        const enabled = Boolean(first(row, ['enabled'], false)) && discountPercent > 0;
+        const apiCompatible = first(row, ['api_compatible'], null);
+        const assumption = first(row, ['assumption'], enabled ? 'Опция оплаты комиссии токеном включена; токена достаточно.' : 'Скидка не применяется.');
+        const compatibility = apiCompatible === false ? ' Нет универсальной API-настройки.' : '';
+        return `<div class="fee-policy-row">
+          <div class="fee-policy-head"><strong>${escapeHTML(venue)}</strong><span class="fee-policy-token">${escapeHTML(token || 'без токена')}</span></div>
+          <div class="fee-policy-rate">${escapeHTML(compact.format(base))} → ${escapeHTML(compact.format(effective))} bps${enabled ? ` <span class="discount">−${escapeHTML(compact.format(discountPercent))}%</span>` : ''}</div>
+          <div class="fee-policy-condition" title="${escapeHTML(`${assumption}${compatibility}`)}">${escapeHTML(`${assumption}${compatibility}`)}</div>
+        </div>`;
+      }).join('');
     }
 
     function formatPrice(value) {
@@ -1595,7 +1685,7 @@
 
     function syncControlAvailability() {
       const locked = state.running || state.monitorActionInFlight;
-      ['notional', 'minEdge', 'riskBuffer', 'intervalMs', 'autoExecute', 'activationObservations', 'evidenceWindowMinutes', 'inventoryIdleTimeoutMinutes', 'maxActiveSymbols', 'allocationPerSymbol', 'min24hVolume', 'bboDepthMultiplier', 'initialBalance'].forEach((id) => {
+      ['notional', 'minEdge', 'riskBuffer', 'intervalMs', 'autoExecute', 'useFeeTokenDiscounts', 'activationObservations', 'evidenceWindowMinutes', 'inventoryIdleTimeoutMinutes', 'maxActiveSymbols', 'allocationPerSymbol', 'min24hVolume', 'bboDepthMultiplier', 'initialBalance'].forEach((id) => {
         $(id).disabled = locked;
       });
       $('applyBalanceButton').disabled = locked;
@@ -1611,7 +1701,8 @@
       const exitMinutes = compact.format(finite($('inventoryIdleTimeoutMinutes').value));
       const minVolume = formatLiquidity(finite($('min24hVolume').value));
       const depthMultiplier = compact.format(finite($('bboDepthMultiplier').value));
-      $('paperPolicyNote').textContent = `${initialBalance} USDT на биржу; до ${active} активных токенов с лимитом ${allocation} USDT на токен/биржу; лимит сделки ${notional} USDT. Предварительный инвентарь: ${observations} устойчивых наблюдений за ${stabilityMinutes} мин; текущий прибыльный маршрут получает приоритет на свободный слот, остальные слоты — по рейтингу; выход после ${exitMinutes} мин вне рейтинга. Отбор: оборот от ${minVolume}, BBO-глубина от ${depthMultiplier}× лимита сделки.`;
+      const feeDiscounts = $('useFeeTokenDiscounts').checked ? 'включены как what-if' : 'выключены';
+      $('paperPolicyNote').textContent = `${initialBalance} USDT на биржу; до ${active} активных токенов с лимитом ${allocation} USDT на токен/биржу; лимит сделки ${notional} USDT. Предварительный инвентарь: ${observations} устойчивых наблюдений за ${stabilityMinutes} мин; текущий прибыльный маршрут получает приоритет на свободный слот, остальные слоты — по рейтингу; выход после ${exitMinutes} мин вне рейтинга. Отбор: оборот от ${minVolume}, BBO-глубина от ${depthMultiplier}× лимита сделки. Скидки токеном биржи ${feeDiscounts}.`;
     }
 
     function validateAutoBudget({ report = false } = {}) {
@@ -1678,6 +1769,8 @@
       }
       const autoExecute = first(settings, ['auto_execute'], null);
       if (autoExecute !== null) $('autoExecute').checked = Boolean(autoExecute);
+      const useFeeTokenDiscounts = first(settings, ['use_fee_token_discounts'], null);
+      if (useFeeTokenDiscounts !== null) $('useFeeTokenDiscounts').checked = Boolean(useFeeTokenDiscounts);
       state.settingsHydrated = true;
       syncControlAvailability();
       validateAutoBudget();
@@ -1686,6 +1779,7 @@
     function renderStatus(rawData) {
       const data = first(rawData, ['status'], rawData) || {};
       syncSettingsFromStatus(data);
+      renderFeePolicy(data);
       const venues = toArray(first(data, ['venues', 'venue_health', 'exchanges'], []));
       const universe = normalizeUniverse(data);
       const journal = normalizeJournal(data);
@@ -1747,7 +1841,8 @@
         notional: finite($('notional').value),
         min_net_edge_bps: finite($('minEdge').value),
         risk_buffer_bps: finite($('riskBuffer').value),
-        auto_execute: $('autoExecute').checked
+        auto_execute: $('autoExecute').checked,
+        use_fee_token_discounts: $('useFeeTokenDiscounts').checked
       };
     }
 
@@ -1855,6 +1950,7 @@
     ['notional', 'activationObservations', 'evidenceWindowMinutes', 'inventoryIdleTimeoutMinutes', 'maxActiveSymbols', 'allocationPerSymbol', 'min24hVolume', 'bboDepthMultiplier'].forEach((id) => {
       $(id).addEventListener('input', () => validateAutoBudget());
     });
+    $('useFeeTokenDiscounts').addEventListener('change', () => updatePaperPolicyNote());
     $('initialBalance').addEventListener('input', () => {
       state.initialBalanceDirty = true;
       validateAutoBudget();

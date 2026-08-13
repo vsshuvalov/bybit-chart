@@ -21,6 +21,12 @@ from packages.arbitrage.adapters import (
     OkxPublicAdapter,
 )
 from packages.arbitrage.models import decimal_string, decimal_value
+from packages.arbitrage.fee_policy import (
+    DEFAULT_BASE_TAKER_FEES,
+    effective_taker_fees,
+    fee_policy_status,
+    resolve_base_taker_fees,
+)
 from packages.arbitrage.triangular import (
     MarketTicker,
     TriangularConfig,
@@ -49,8 +55,7 @@ SUPPORTED_START_ASSETS = frozenset({"USDT", "BTC", "ETH", "BNB", "BRL"})
 # Conservative placeholders for theory testing. They are deliberately not
 # presented as actual account fee tiers.
 DEFAULT_TRIANGULAR_TAKER_FEES: dict[str, Decimal] = {
-    venue: Decimal("0.002") if venue in {"huobi", "gate"} else Decimal("0.001")
-    for venue in SUPPORTED_VENUES
+    venue: DEFAULT_BASE_TAKER_FEES[venue] for venue in SUPPORTED_VENUES
 }
 DEFAULT_TRIANGULAR_BALANCES: dict[str, dict[str, Decimal]] = {
     venue: {
@@ -97,6 +102,7 @@ class TriangularScanSettings:
     min_net_edge_bps: Decimal = Decimal("5")
     risk_buffer_bps: Decimal = Decimal("2")
     auto_execute: bool = False
+    use_fee_token_discounts: bool = True
     interval_ms: int = 10_000
     max_tickers: int = 50
 
@@ -110,6 +116,8 @@ class TriangularScanSettings:
         amount = decimal_value(self.start_amount, name="start_amount")
         min_edge = decimal_value(self.min_net_edge_bps, name="min_net_edge_bps")
         risk = decimal_value(self.risk_buffer_bps, name="risk_buffer_bps")
+        if not isinstance(self.use_fee_token_discounts, bool):
+            raise TypeError("use_fee_token_discounts must be a boolean")
         if amount <= 0:
             raise ValueError("start_amount must be greater than zero")
         if min_edge < 0 or min_edge >= BPS:
@@ -142,6 +150,7 @@ class TriangularScanSettings:
             "min_net_edge_bps": decimal_string(self.min_net_edge_bps),
             "risk_buffer_bps": decimal_string(self.risk_buffer_bps),
             "auto_execute": self.auto_execute,
+            "use_fee_token_discounts": self.use_fee_token_discounts,
             "interval_ms": self.interval_ms,
             "max_tickers": self.max_tickers,
         }
@@ -191,11 +200,11 @@ class TriangularPaperService:
         self.clock_ms = clock_ms or _clock_ms
         self.max_staleness_ms = int(max_staleness_ms)
         self.max_leg_skew_ms = int(max_leg_skew_ms)
-        raw_fees = DEFAULT_TRIANGULAR_TAKER_FEES if taker_fees is None else taker_fees
-        self.taker_fees = {
-            venue.lower(): decimal_value(fee, name=f"taker fee for {venue}")
-            for venue, fee in raw_fees.items()
-        }
+        self.base_taker_fees = resolve_base_taker_fees(
+            venue_names,
+            taker_fees,
+        )
+        self.taker_fees = self.base_taker_fees
         if initial_balances is None:
             self._initial_balances = {
                 venue: dict(
@@ -279,7 +288,12 @@ class TriangularPaperService:
 
     def _config(self, settings: TriangularScanSettings) -> TriangularConfig:
         return TriangularConfig(
-            taker_fees=self.taker_fees,
+            taker_fees=effective_taker_fees(
+                self.base_taker_fees,
+                use_fee_token_discounts=(
+                    settings.use_fee_token_discounts
+                ),
+            ),
             min_net_edge=settings.min_net_edge_bps / BPS,
             risk_buffer=settings.risk_buffer_bps / BPS,
             max_start_amount=settings.start_amount,
@@ -647,7 +661,18 @@ class TriangularPaperService:
             "scanning": self._scanning,
             "last_scan_ms": self._last_scan_ms,
             "settings": self._settings.to_dict(),
-            "fee_source": "configured_assumptions",
+            "fee_source": "base_assumptions_plus_optional_fee_token_what_if",
+            "fee_policy": fee_policy_status(
+                self.base_taker_fees,
+                use_fee_token_discounts=(
+                    self._settings.use_fee_token_discounts
+                ),
+            ),
+            "fee_token_balance_mode": "what_if_usdt_equivalent",
+            "fee_token_balance_assumption": (
+                "enabled discounts assume a sufficient fee-token balance; "
+                "PAPER does not create, buy, hold, or debit fee tokens"
+            ),
             "market_data_policy": {
                 "source": (
                     "one_public_all_tickers_request_per_venue; Gate uses one "

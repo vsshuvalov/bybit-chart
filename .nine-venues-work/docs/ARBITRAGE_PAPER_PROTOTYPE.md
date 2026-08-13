@@ -100,6 +100,51 @@ USDT и множитель BBO-глубины 1–100.
 показывает фиктивный убыток; `arbitrage_realized_pnl` остаётся отдельным
 результатом только исполненных арбитражных маршрутов.
 
+## Скидки при оплате комиссии токеном биржи
+
+Настройка `use_fee_token_discounts=true` включает отдельный PAPER what-if
+профиль. Он предполагает, что оплата комиссий уже включена в аккаунте и на нём
+есть достаточный баланс соответствующего токена. Комиссия учитывается в
+USDT-эквиваленте по сниженной ставке; покупка, курсовой риск и нехватка самого
+fee-токена пока **не моделируются**. Поэтому этот режим нужен для сравнения
+экономики, а не является обещанием доступной скидки реального аккаунта.
+
+| Биржа | PAPER-база taker | Токен | Учитываемая скидка | PAPER effective |
+|---|---:|---|---:|---:|
+| Bybit | 0,10% | MNT | 0% для API | 0,10% |
+| Binance | 0,10% | BNB | 25% | 0,075% |
+| OKX | 0,10% | OKB | 0% | 0,10% |
+| Bitget | 0,10% | BGB | 20% | 0,08% |
+| HTX/Huobi | 0,20% | HTX | 25% | 0,15% |
+| KuCoin | 0,10% | KCS | 20% | 0,08% |
+| MEXC | 0,05% | MX | 20% | 0,04% |
+| BingX | 0,10% | — | 0% | 0,10% |
+| Gate | 0,10% | GT | 10% (VIP0) | 0,09% |
+
+Bybit рекламирует скидку MNT 25% для ручной spot-торговли, но официально
+исключает API users/orders, поэтому автоматический профиль её не применяет.
+OKX не разрешает оплачивать exchange trading fees токеном OKB, а у BingX не
+подтверждён собственный токен для такого списания. Gate не имеет единого
+процента для всех VIP-уровней; 10% — только PAPER-предположение для VIP0.
+Скидка применяется ко всем моделируемым операциям: арбитражным ногам,
+предварительной закупке, ликвидации и ребалансировке.
+
+Официальные источники: [Bybit MNT](https://www.bybit.com/en/help-center/article/FAQ-Paying-Trading-Fees-with-MNT),
+[Binance BNB](https://www.binance.com/en/support/faq/detail/115000583311),
+[Binance commission API](https://developers.binance.com/en/docs/catalog/core-trading-spot-trading/api/rest-api/account),
+[OKX OKB](https://www.okx.com/en-gb/help/x-layer-okt-okb),
+[Bitget BGB](https://www.bitget.com/asia/support/articles/360060644351-Bitget-BGB-Deduction-of-Spot-Exchange-Fees),
+[HTX fee settings](https://www.htx.com/fee/?feeType=trading),
+[KuCoin KCS](https://www.kucoin.com/en-au/support/47497300094040),
+[MEXC MX](https://www.mexc.com/learn/article/how-to-use-mx-for-trading-fee-discounts/1),
+[Gate fees](https://www.gate.com/fee) и
+[BingX fees](https://bingx.com/en/support/costs).
+
+Перед реальным подключением фиксированные PAPER-ставки необходимо заменить
+персональными ставками и flags конкретной пары/аккаунта. VIP, регион,
+промоакции, исключённые пары и недостаточный fee-token баланс могут полностью
+изменить результат.
+
 ## Граница безопасности
 
 - Используются только публичные market-data endpoints.

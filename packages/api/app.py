@@ -36,6 +36,7 @@ from packages.api.aggregation import aggregate_ohlc, parse_interval
 from packages.api.models import TradesQueryParams, TradesResponse, OHLCQueryParams, OHLCResponse
 from packages.api.websocket import register_websocket_endpoints, live_feed_manager
 from packages.api.redis_subscriber import register_redis_subscriber
+from packages.api.instruments import INSTRUMENT_SPECS, InstrumentInfo, Symbol as InstrumentSymbol
 from packages.storage.parquet_reader import ParquetReader
 from packages.monitoring import get_metrics_collector, Timer
 from packages.monitoring.worker_metrics import APIMetrics
@@ -302,6 +303,68 @@ def create_app(data_dir: Path | str | None = None) -> FastAPI:
                 status_code=500,
                 detail=f"Ошибка чтения списка symbols: {exc}",
             )
+
+    @app.get("/api/v1/instruments")
+    async def list_instruments():
+        """Get list of available instruments with metadata.
+
+        Returns instrument specifications including tick_size, qty_step,
+        min/max quantities for accurate price/volume conversion.
+
+        Returns:
+            200 OK: {"instruments": [InstrumentInfo, ...]}
+
+        Example:
+            GET /api/v1/instruments
+            Response: {
+                "instruments": [
+                    {
+                        "symbol": "BTCUSDT",
+                        "tick_size": 0.1,
+                        "qty_step": 0.001,
+                        "min_qty": 0.001,
+                        "max_qty": 100.0,
+                        "base_asset": "BTC",
+                        "quote_asset": "USDT"
+                    },
+                    ...
+                ]
+            }
+        """
+        return JSONResponse(
+            status_code=200,
+            content={
+                "instruments": [spec.model_dump() for spec in INSTRUMENT_SPECS.values()],
+                "count": len(INSTRUMENT_SPECS),
+            },
+        )
+
+    @app.get("/api/v1/instruments/{symbol}", response_model=InstrumentInfo)
+    async def get_instrument(symbol: InstrumentSymbol):
+        """Get instrument metadata for specific symbol.
+
+        Args:
+            symbol: Instrument symbol (BTCUSDT, ETHUSDT, XRPUSDT)
+
+        Returns:
+            200 OK: InstrumentInfo with tick_size, qty_step, etc.
+            404 Not Found: symbol not found
+
+        Example:
+            GET /api/v1/instruments/BTCUSDT
+            Response: {
+                "symbol": "BTCUSDT",
+                "tick_size": 0.1,
+                "qty_step": 0.001,
+                "min_qty": 0.001,
+                "max_qty": 100.0,
+                "base_asset": "BTC",
+                "quote_asset": "USDT"
+            }
+        """
+        if symbol not in INSTRUMENT_SPECS:
+            raise HTTPException(status_code=404, detail=f"Instrument not found: {symbol}")
+        return INSTRUMENT_SPECS[symbol]
 
     @app.get("/api/v1/trades", response_model=TradesResponse)
     async def get_trades(

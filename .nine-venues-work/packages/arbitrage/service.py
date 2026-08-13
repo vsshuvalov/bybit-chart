@@ -28,6 +28,12 @@ from packages.arbitrage.adapters import (
     PublicVenueAdapter,
 )
 from packages.arbitrage.engine import ArbitrageConfig, ArbitrageEngine, split_symbol
+from packages.arbitrage.fee_policy import (
+    DEFAULT_BASE_TAKER_FEES,
+    effective_taker_fees,
+    fee_policy_status,
+    resolve_base_taker_fees,
+)
 from packages.arbitrage.diagnostics import (
     PairAssessment,
     aggregate_assessments,
@@ -67,18 +73,7 @@ DEFAULT_AUTO_MIN_24H_VOLUME_USDT = Decimal("1000000")
 DEFAULT_AUTO_BBO_DEPTH_MULTIPLIER = Decimal("2")
 AUTO_REBALANCE_SAFETY_MULTIPLE = Decimal("1.5")
 
-DEFAULT_TAKER_FEES: dict[str, Decimal] = {
-    # Conservative placeholders for theory testing, not account fee quotes.
-    "bybit": Decimal("0.001"),
-    "binance": Decimal("0.001"),
-    "okx": Decimal("0.001"),
-    "bitget": Decimal("0.001"),
-    "huobi": Decimal("0.002"),
-    "kucoin": Decimal("0.001"),
-    "mexc": Decimal("0.001"),
-    "bingx": Decimal("0.001"),
-    "gate": Decimal("0.002"),
-}
+DEFAULT_TAKER_FEES: dict[str, Decimal] = dict(DEFAULT_BASE_TAKER_FEES)
 
 DEFAULT_INITIAL_BALANCES: dict[str, dict[str, Decimal]] = {
     venue: {"USDT": AUTO_PAPER_INITIAL_USDT}
@@ -212,6 +207,7 @@ class ScanSettings:
     min_net_edge_bps: Decimal = Decimal("5")
     risk_buffer_bps: Decimal = Decimal("2")
     auto_execute: bool = False
+    use_fee_token_discounts: bool = True
     interval_ms: int = 2000
     max_symbols: int = DEFAULT_MAX_SYMBOLS
     activation_observations: int = DEFAULT_AUTO_ACTIVATION_OBSERVATIONS
@@ -233,6 +229,8 @@ class ScanSettings:
         notional = decimal_value(self.notional, name="notional")
         min_edge = decimal_value(self.min_net_edge_bps, name="min_net_edge_bps")
         risk_buffer = decimal_value(self.risk_buffer_bps, name="risk_buffer_bps")
+        if not isinstance(self.use_fee_token_discounts, bool):
+            raise TypeError("use_fee_token_discounts must be a boolean")
         allocation = decimal_value(
             self.allocation_per_symbol_venue_usdt,
             name="allocation_per_symbol_venue_usdt",
@@ -419,6 +417,7 @@ class ScanSettings:
             "min_net_edge_bps": decimal_string(self.min_net_edge_bps),
             "risk_buffer_bps": decimal_string(self.risk_buffer_bps),
             "auto_execute": self.auto_execute,
+            "use_fee_token_discounts": self.use_fee_token_discounts,
             "interval_ms": self.interval_ms,
             "max_symbols": self.max_symbols,
             "activation_observations": self.activation_observations,
@@ -490,16 +489,13 @@ class ArbitragePaperService:
         self.max_staleness_ms = int(max_staleness_ms)
         self.max_pair_skew_ms = int(max_pair_skew_ms)
         self.clock_ms = clock_ms or _clock_ms
-        default_fees = {
-            venue: DEFAULT_TAKER_FEES.get(venue, Decimal("0.001"))
-            for venue in venue_names
-        }
-        self.taker_fees = {
-            venue.lower(): decimal_value(fee, name=f"taker fee for {venue}")
-            for venue, fee in (
-                default_fees if taker_fees is None else taker_fees
-            ).items()
-        }
+        self.base_taker_fees = resolve_base_taker_fees(
+            venue_names,
+            taker_fees,
+        )
+        # Backwards-compatible public attribute: constructor fees are BASE
+        # assumptions.  Per-scan effective rates live separately.
+        self.taker_fees = self.base_taker_fees
         self._auto_inventory_enabled = initial_balances is None
         self._initial_balance_per_venue_usdt = AUTO_PAPER_INITIAL_USDT
         self._initial_balances = (
@@ -510,8 +506,18 @@ class ArbitragePaperService:
             if initial_balances is None
             else initial_balances
         )
+        self._settings = ScanSettings(symbol=AUTO_SYMBOL)
+        self._active_taker_fees = effective_taker_fees(
+            self.base_taker_fees,
+            use_fee_token_discounts=(
+                self._settings.use_fee_token_discounts
+            ),
+        )
         self._portfolio = PaperPortfolio(self._initial_balances)
-        self._executor = PaperArbitrageExecutor(self._portfolio, self.taker_fees)
+        self._executor = PaperArbitrageExecutor(
+            self._portfolio,
+            self._active_taker_fees,
+        )
         self._execution_opportunities: list[ArbitrageOpportunity] = []
         self._executed_snapshot_pairs: set[tuple[Any, ...]] = set()
 
@@ -521,7 +527,6 @@ class ArbitragePaperService:
         self._running = False
         self._run_generation = 0
         self._scanning = False
-        self._settings = ScanSettings(symbol=AUTO_SYMBOL)
         self._last_scan_ms: int | None = None
         self._scan_count = 0
         self._books: dict[tuple[str, str], OrderBook] = {}
@@ -572,6 +577,20 @@ class ArbitragePaperService:
     def running(self) -> bool:
         return self._running
 
+    def _fees_for(self, settings: ScanSettings | None = None) -> dict[str, Decimal]:
+        selected = settings or self._settings
+        return effective_taker_fees(
+            self.base_taker_fees,
+            use_fee_token_discounts=selected.use_fee_token_discounts,
+        )
+
+    def _activate_fee_policy(self, settings: ScanSettings) -> None:
+        """Use one immutable fee view throughout the current scan."""
+
+        self._active_taker_fees = self._fees_for(settings)
+        # Preserve the executor journal while changing rates for future fills.
+        self._executor.taker_fees = dict(self._active_taker_fees)
+
     def _paper_balances_are_pristine(self) -> bool:
         """Return whether changing the configured seed cannot erase activity."""
 
@@ -602,7 +621,10 @@ class ArbitragePaperService:
             for adapter in self.adapters
         }
         self._portfolio = PaperPortfolio(self._initial_balances)
-        self._executor = PaperArbitrageExecutor(self._portfolio, self.taker_fees)
+        self._executor = PaperArbitrageExecutor(
+            self._portfolio,
+            self._active_taker_fees,
+        )
 
     def _apply_initial_balance_setting(self, settings: ScanSettings) -> None:
         if not self._auto_inventory_enabled or settings.symbol != AUTO_SYMBOL:
@@ -668,7 +690,7 @@ class ArbitragePaperService:
         auto = settings.symbol == AUTO_SYMBOL
         selected_symbols = tuple(symbols or ())
         return ArbitrageConfig(
-            taker_fees=self.taker_fees,
+            taker_fees=self._fees_for(settings),
             min_net_edge=settings.min_net_edge_bps / BPS,
             risk_buffer=settings.risk_buffer_bps / BPS,
             max_notional=settings.notional,
@@ -867,11 +889,11 @@ class ArbitragePaperService:
                 attempt["detail"] = f"{type(exc).__name__}: {exc}"
                 continue
 
-            source_fee_rate = self.taker_fees.get(
+            source_fee_rate = self._active_taker_fees.get(
                 opportunity.buy_venue,
                 Decimal("0.001"),
             )
-            destination_fee_rate = self.taker_fees.get(
+            destination_fee_rate = self._active_taker_fees.get(
                 opportunity.sell_venue,
                 Decimal("0.001"),
             )
@@ -1241,7 +1263,7 @@ class ArbitragePaperService:
                 < settings.auto_usdt_reserve_target
             ):
                 continue
-            fee_rate = self.taker_fees.get(venue, Decimal("0.001"))
+            fee_rate = self._active_taker_fees.get(venue, Decimal("0.001"))
             gross_notional = settings.allocation_per_symbol_venue_usdt / (
                 Decimal("1") + fee_rate
             )
@@ -1449,7 +1471,10 @@ class ArbitragePaperService:
                 if executable_quantity <= 0:
                     continue
                 gross_credit = executable_quantity * book.best_bid
-                fee_rate = self.taker_fees.get(venue, Decimal("0.001"))
+                fee_rate = self._active_taker_fees.get(
+                    venue,
+                    Decimal("0.001"),
+                )
                 net_credit = gross_credit * (Decimal("1") - fee_rate)
                 deltas[(venue, active.base_asset)] = -executable_quantity
                 deltas[(venue, "USDT")] = net_credit
@@ -1667,6 +1692,7 @@ class ArbitragePaperService:
                 )
             self._apply_initial_balance_setting(selected)
             self._settings = selected
+            self._activate_fee_policy(selected)
             self._scanning = True
             self._errors = {}
             try:
@@ -2015,8 +2041,10 @@ class ArbitragePaperService:
                 self._settings = reset_settings
                 self._portfolio = PaperPortfolio(self._initial_balances)
                 self._executor = PaperArbitrageExecutor(
-                    self._portfolio, self.taker_fees
+                    self._portfolio,
+                    self._fees_for(reset_settings),
                 )
+                self._active_taker_fees = self._fees_for(reset_settings)
                 self._execution_opportunities = []
                 self._executed_snapshot_pairs = set()
                 self._books = {}
@@ -2303,7 +2331,10 @@ class ArbitragePaperService:
                 book = self._books.get((f"{asset}USDT", venue))
                 if book is None:
                     return None
-                fee_rate = self.taker_fees.get(venue, Decimal("0.001"))
+                fee_rate = self._active_taker_fees.get(
+                    venue,
+                    Decimal("0.001"),
+                )
                 total += quantity * book.best_bid * (
                     Decimal("1") - fee_rate
                 )
@@ -2483,7 +2514,18 @@ class ArbitragePaperService:
             "inventory_journal": self._inventory_journal_status(),
             "rebalance_journal": self._rebalance_journal_status(),
             "route_profit_evidence": self._route_profit_evidence_status(),
-            "fee_source": "configured_assumptions",
+            "fee_source": "base_assumptions_plus_optional_fee_token_what_if",
+            "fee_policy": fee_policy_status(
+                self.base_taker_fees,
+                use_fee_token_discounts=(
+                    self._settings.use_fee_token_discounts
+                ),
+            ),
+            "fee_token_balance_mode": "what_if_usdt_equivalent",
+            "fee_token_balance_assumption": (
+                "enabled discounts assume a sufficient fee-token balance; "
+                "PAPER does not create, buy, hold, or debit fee tokens"
+            ),
             "market_data_policy": {
                 "max_staleness_ms": self.max_staleness_ms,
                 "max_pair_skew_ms": self.max_pair_skew_ms,

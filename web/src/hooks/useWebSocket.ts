@@ -6,7 +6,9 @@
  */
 
 import { useEffect, useRef } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { useMarketDataStore } from '../store'
+import { getInstrument } from '../api/instruments'
 
 interface WebSocketMessage {
   type?: string
@@ -26,10 +28,16 @@ export function useWebSocket(symbol: string, enabled: boolean = true) {
   const addTrade = useMarketDataStore((state) => state.addTrade)
   const setMarkPrice = useMarketDataStore((state) => state.setMarkPrice)
 
+  // Fetch instrument metadata for tick_size
+  const { data: instrument } = useQuery({
+    queryKey: ['instrument', symbol],
+    queryFn: () => getInstrument(symbol),
+    staleTime: Infinity, // Instrument specs never change
+  })
+
   useEffect(() => {
-    // If disabled - close connection immediately
-    if (!enabled) {
-      console.log('[WebSocket] Disabled, closing connection')
+    // If disabled or no instrument data yet - close connection
+    if (!enabled || !instrument) {
       if (wsRef.current) {
         wsRef.current.close()
         wsRef.current = null
@@ -65,18 +73,22 @@ export function useWebSocket(symbol: string, enabled: boolean = true) {
           }
 
           if (message.type === 'trade' || message.eventType === 'RawTrade') {
-            const tickSize = 0.1 // TODO: Get from instrument metadata
+            if (!instrument) return // Should not happen (checked in useEffect guard)
+
             addTrade(symbol, {
               time: message.exchange_timestamp_ms || Date.now(),
-              price: (message.price_ticks || 0) * tickSize,
-              volume: message.qty_steps || 0,
+              price: (message.price_ticks || 0) * instrument.tick_size,
+              volume: (message.qty_steps || 0) * instrument.qty_step,
               side: message.taker_side || 'Buy',
             })
             return
           }
 
           if (message.type === 'mark_price') {
-            setMarkPrice(symbol, message.price_ticks || 0)
+            if (!instrument) return // Should not happen (checked in useEffect guard)
+
+            const markPrice = (message.price_ticks || 0) * instrument.tick_size
+            setMarkPrice(symbol, markPrice)
             return
           }
 
@@ -115,7 +127,7 @@ export function useWebSocket(symbol: string, enabled: boolean = true) {
         wsRef.current = null
       }
     }
-  }, [symbol, enabled, addTrade, setMarkPrice])
+  }, [symbol, enabled, instrument, addTrade, setMarkPrice])
 
   return {
     connected: wsRef.current?.readyState === WebSocket.OPEN,
