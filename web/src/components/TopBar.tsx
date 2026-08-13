@@ -13,6 +13,7 @@
  * 9. Emergency state: Trading Enabled / Safe Mode / Halted
  */
 
+import { useState } from 'react'
 import { useViewStore, Timeframe, Environment, TradingState } from '../store'
 import DiagnosticsPanel from './DiagnosticsPanel'
 
@@ -30,7 +31,78 @@ export default function TopBar() {
     toggleReplayMode,
   } = useViewStore()
 
-  const symbols = ['BTCUSDT', 'ETHUSDT', 'XRPUSDT']
+  const [isRecording, setIsRecording] = useState(false)
+  const [recordingStatus, setRecordingStatus] = useState<string>('')
+
+  const toggleRecording = async () => {
+    try {
+      if (!isRecording) {
+        // Начать запись
+        const response = await fetch('/api/v1/recording/start', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ symbol }),
+        })
+
+        if (response.ok) {
+          setIsRecording(true)
+          setRecordingStatus(`Recording ${symbol}`)
+          console.log('[Recording] Started for', symbol)
+        } else {
+          const error = await response.text()
+          setRecordingStatus(`Error: ${error}`)
+        }
+      } else {
+        // Остановить запись
+        const response = await fetch('/api/v1/recording/stop', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ symbol }),
+        })
+
+        if (response.ok) {
+          setIsRecording(false)
+          setRecordingStatus('')
+          console.log('[Recording] Stopped for', symbol)
+        }
+      }
+    } catch (err) {
+      console.error('[Recording] Error:', err)
+      setRecordingStatus('Connection error')
+    }
+  }
+
+  const symbols = [
+    'BTCUSDT',
+    'ETHUSDT',
+    'SOLUSDT',
+    'XRPUSDT',
+    'DOGEUSDT',
+    'ADAUSDT',
+    'AVAXUSDT',
+    'DOTUSDT',
+    'MATICUSDT',
+    'LINKUSDT',
+    'UNIUSDT',
+    'ATOMUSDT',
+    'LTCUSDT',
+    'BCHUSDT',
+    'NEARUSDT',
+    'ALGOUSDT',
+    'VETUSDT',
+    'ICPUSDT',
+    'FILUSDT',
+    'APTUSDT',
+    'ARBUSDT',
+    'OPUSDT',
+    'INJUSDT',
+    'SUIUSDT',
+    'PEPEUSDT',
+    'SHIBUSDT',
+    'WLDUSDT',
+    'THETAUSDT',
+    'RNDRUSDT',
+  ]
   const timeframes: Timeframe[] = ['1m', '5m', '15m', '30m', '1h', '4h', '1d']
   const environments: Environment[] = ['OFFLINE', 'DEMO', 'TESTNET', 'LIVE']
   const tradingStates: TradingState[] = ['Enabled', 'SafeMode', 'Halted']
@@ -69,6 +141,14 @@ export default function TopBar() {
           onClick={toggleReplayMode}
         >
           {isReplayMode ? '📹 Replay' : '🔴 Live'}
+        </button>
+
+        <button
+          className={`record-btn ${isRecording ? 'recording' : ''}`}
+          onClick={toggleRecording}
+          title={recordingStatus || 'Start recording trades to database'}
+        >
+          {isRecording ? '⏹ Stop' : '⏺ REC'}
         </button>
 
         <DiagnosticsPanel />
@@ -177,6 +257,36 @@ export default function TopBar() {
         .mode-toggle.replay {
           background: var(--accent-orange);
           color: white;
+        }
+
+        .record-btn {
+          height: 32px;
+          padding: 0 var(--spacing-md);
+          border: 1px solid var(--border-default);
+          border-radius: var(--radius-sm);
+          font-size: 13px;
+          font-weight: 500;
+          cursor: pointer;
+          transition: all 0.2s;
+          background: var(--bg-tertiary);
+          color: var(--text-primary);
+        }
+
+        .record-btn:hover {
+          background: var(--bg-primary);
+          border-color: var(--border-highlight);
+        }
+
+        .record-btn.recording {
+          background: rgba(239, 83, 80, 0.15);
+          color: #ef5350;
+          border-color: #ef5350;
+          animation: pulse-recording 2s infinite;
+        }
+
+        @keyframes pulse-recording {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.6; }
         }
 
         .env-select,

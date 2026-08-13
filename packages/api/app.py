@@ -16,10 +16,16 @@ Endpoints:
 - GET /api/v1/analytics/heatmap — Orderbook Heatmap (Этап 6 / P3-A5)
 - GET /api/v1/analytics/orderflow/regime — Market Regime (Этап 6 / P3-A6)
 - GET /api/v1/analytics/orderflow/features — Active Features (Этап 6 / P3-A7)
+
+Persistence (Roadmap §11.3, §11.7):
+- GET/POST/PUT/DELETE /api/v1/drawings — Server persistence для drawings
+- GET/POST/PUT/DELETE /api/v1/workspaces — Server persistence для workspaces
 """
 
 import logging
+import os
 from pathlib import Path
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
@@ -34,10 +40,84 @@ from packages.storage.parquet_reader import ParquetReader
 from packages.monitoring import get_metrics_collector, Timer
 from packages.monitoring.worker_metrics import APIMetrics
 
+# Persistence (Roadmap §11.3, §11.7)
+from packages.api.persistence_api import persistence_router, set_persistence
+from packages.api.persistence_postgresql import PostgreSQLPersistence
+
 logger = logging.getLogger(__name__)
 
 # Конфигурация
 DATA_DIR = Path("/tmp/bybit-chart-data")  # Переопределяется через env или config
+
+# PostgreSQL configuration (Roadmap §11.7)
+POSTGRES_HOST = os.environ.get("POSTGRES_HOST", "localhost")
+POSTGRES_PORT = int(os.environ.get("POSTGRES_PORT", "5432"))
+POSTGRES_DB = os.environ.get("POSTGRES_DB", "bybit_platform")
+POSTGRES_USER = os.environ.get("POSTGRES_USER", "bybit_user")
+POSTGRES_PASSWORD = os.environ.get("POSTGRES_PASSWORD", None)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Application lifespan manager.
+
+    Startup:
+    - Initialize PostgreSQL persistence
+    - Register Redis subscriber
+    - Start WebSocket live feed
+
+    Shutdown:
+    - Close PostgreSQL pool
+    - Stop Redis subscriber
+    - Stop WebSocket feed
+    """
+    logger.info("Application startup...")
+
+    # Initialize PostgreSQL persistence (Roadmap §11.3, §11.7)
+    try:
+        persistence = await PostgreSQLPersistence.create(
+            host=POSTGRES_HOST,
+            port=POSTGRES_PORT,
+            database=POSTGRES_DB,
+            user=POSTGRES_USER,
+            password=POSTGRES_PASSWORD,
+            min_size=5,
+            max_size=20,
+        )
+        set_persistence(persistence)
+        logger.info("PostgreSQL persistence initialized")
+    except Exception as exc:
+        logger.warning(f"PostgreSQL persistence initialization failed: {exc}")
+        logger.warning("Drawings/Workspaces endpoints will return 500")
+
+    # Register Redis subscriber
+    register_redis_subscriber(app)
+    logger.info("Redis subscriber registered")
+
+    # Start WebSocket live feed manager
+    live_feed_manager.start()
+    logger.info("WebSocket live feed manager started")
+
+    logger.info("Application startup complete")
+
+    yield
+
+    # Shutdown
+    logger.info("Application shutdown...")
+
+    # Close PostgreSQL persistence
+    try:
+        if persistence:
+            await persistence.close()
+            logger.info("PostgreSQL persistence closed")
+    except:
+        pass
+
+    # Stop WebSocket feed
+    live_feed_manager.stop()
+    logger.info("WebSocket live feed manager stopped")
+
+    logger.info("Application shutdown complete")
 
 
 def resolve_time_range(
@@ -79,8 +159,9 @@ def create_app(data_dir: Path | str | None = None) -> FastAPI:
     """
     app = FastAPI(
         title="Bybit Chart Query API",
-        description="REST API для чтения Parquet сегментов с RawTrade/BookCheckpoint",
-        version="0.1.0",
+        description="REST API для чтения Parquet сегментов с RawTrade/BookCheckpoint + Server Persistence",
+        version="0.2.0",
+        lifespan=lifespan,
     )
 
     # CORS middleware для frontend
@@ -1059,6 +1140,89 @@ def create_app(data_dir: Path | str | None = None) -> FastAPI:
                 status_code=500,
                 detail=f"Ошибка чтения features: {exc}"
             )
+
+    # ========== Recording Endpoints ==========
+    from packages.api.recording_manager import recording_manager
+
+    @app.post("/api/v1/recording/start")
+    async def start_recording(request: dict):
+        """
+        Начать запись trades в базу данных.
+
+        Body:
+            {"symbol": "BTCUSDT"}
+
+        Returns:
+            {"success": true, "message": "Recording started", "symbol": "BTCUSDT"}
+        """
+        symbol = request.get("symbol")
+        if not symbol:
+            raise HTTPException(status_code=400, detail="Symbol required")
+
+        success = recording_manager.start_recording(symbol)
+
+        if success:
+            return {
+                "success": True,
+                "message": f"Recording started for {symbol}",
+                "symbol": symbol,
+            }
+        else:
+            return {
+                "success": False,
+                "message": f"Recording already active for {symbol}",
+                "symbol": symbol,
+            }
+
+    @app.post("/api/v1/recording/stop")
+    async def stop_recording(request: dict):
+        """
+        Остановить запись trades.
+
+        Body:
+            {"symbol": "BTCUSDT"}
+
+        Returns:
+            {"success": true, "message": "Recording stopped", "symbol": "BTCUSDT"}
+        """
+        symbol = request.get("symbol")
+        if not symbol:
+            raise HTTPException(status_code=400, detail="Symbol required")
+
+        success = recording_manager.stop_recording(symbol)
+
+        if success:
+            return {
+                "success": True,
+                "message": f"Recording stopped for {symbol}",
+                "symbol": symbol,
+            }
+        else:
+            return {
+                "success": False,
+                "message": f"No active recording for {symbol}",
+                "symbol": symbol,
+            }
+
+    @app.get("/api/v1/recording/status")
+    async def get_recording_status(symbol: str | None = Query(None, description="Symbol (optional)")):
+        """
+        Получить статус записи.
+
+        Query params:
+            symbol: Symbol (optional). Если не указан - вернёт все активные записи.
+
+        Returns:
+            {"BTCUSDT": {"recording": true, "pid": 12345}}
+        """
+        if symbol:
+            return recording_manager.get_status(symbol)
+        else:
+            return recording_manager.get_all_status()
+
+    # ========== Include Persistence Router (Roadmap §11.3, §11.7) ==========
+    app.include_router(persistence_router)
+    logger.info("Persistence router registered: /api/v1/drawings, /api/v1/workspaces")
 
     return app
 

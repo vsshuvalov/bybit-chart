@@ -73,6 +73,82 @@ export interface TradesResponse {
   has_more: boolean
 }
 
+// ----- Bybit Public API (direct) -----
+
+export interface BybitKline {
+  startTime: string
+  openPrice: string
+  highPrice: string
+  lowPrice: string
+  closePrice: string
+  volume: string
+  turnover: string
+}
+
+export interface BybitKlineResponse {
+  retCode: number
+  retMsg: string
+  result: {
+    category: string
+    symbol: string
+    list: string[][] // [startTime, open, high, low, close, volume, turnover]
+  }
+}
+
+/**
+ * Fetch historical OHLC data directly from Bybit public API
+ * Не требует авторизации, быстрая загрузка истории
+ */
+export const getBybitKlines = async (
+  symbol: string,
+  interval: string,
+  limit = 1000
+): Promise<BybitKline[]> => {
+  // Map our intervals to Bybit format
+  const intervalMap: Record<string, string> = {
+    '1m': '1',
+    '5m': '5',
+    '15m': '15',
+    '30m': '30',
+    '1h': '60',
+    '4h': '240',
+    '1d': 'D',
+  }
+
+  const bybitInterval = intervalMap[interval] || '1'
+
+  console.log('[API] Fetching klines from Bybit:', { symbol, interval: bybitInterval, limit })
+
+  const response = await fetch(
+    `https://api.bybit.com/v5/market/kline?category=linear&symbol=${symbol}&interval=${bybitInterval}&limit=${limit}`
+  )
+
+  if (!response.ok) {
+    throw new Error(`Bybit API error: ${response.status}`)
+  }
+
+  const data: BybitKlineResponse = await response.json()
+
+  if (data.retCode !== 0) {
+    throw new Error(`Bybit API error: ${data.retMsg}`)
+  }
+
+  // Transform to our format
+  const klines = data.result.list.map(([startTime, open, high, low, close, volume, turnover]) => ({
+    startTime,
+    openPrice: open,
+    highPrice: high,
+    lowPrice: low,
+    closePrice: close,
+    volume,
+    turnover,
+  }))
+
+  console.log('[API] Received', klines.length, 'klines from Bybit')
+
+  return klines
+}
+
 // ----- API Functions -----
 
 export const getSymbols = async (): Promise<{ symbols: string[]; count: number }> => {

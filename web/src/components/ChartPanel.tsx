@@ -10,7 +10,7 @@ import { useEffect, useRef } from 'react'
 import { createChart, IChartApi, ISeriesApi, CandlestickData } from 'lightweight-charts'
 import { useQuery } from '@tanstack/react-query'
 import { useViewStore, useMarketDataStore } from '../store'
-import { getOHLC } from '../api'
+import { getBybitKlines } from '../api'
 
 export default function ChartPanel() {
   const chartContainerRef = useRef<HTMLDivElement>(null)
@@ -24,19 +24,13 @@ export default function ChartPanel() {
   const recentTradesMap = useMarketDataStore((state) => state.recentTrades)
   const recentTrades = recentTradesMap.get(symbol) || []
 
-  // Fetch OHLC data - отключаем polling в live mode
-  const { data: ohlcData, error } = useQuery({
-    queryKey: ['ohlc', symbol, timeframe],
-    queryFn: async () => {
-      const now = Date.now() * 1000 // microseconds
-      const start = now - 7 * 24 * 60 * 60 * 1000000 // last 7 days
-      return getOHLC(symbol, start, now, timeframe)
-    },
-    refetchInterval: isReplayMode ? 10000 : false, // только в replay mode
+  // 🔥 NEW: Fetch historical data directly from Bybit (не от backend!)
+  const { data: klines, error } = useQuery({
+    queryKey: ['bybit-klines', symbol, timeframe],
+    queryFn: () => getBybitKlines(symbol, timeframe, 1000),
+    staleTime: 60000, // 1 минута
+    refetchInterval: false, // Не refetch автоматически (ни в live, ни в replay)
   })
-
-  // Mock data fallback if API returns no candles
-  const useMockData = !ohlcData || ohlcData.count === 0
 
   // Initialize chart
   useEffect(() => {
@@ -96,30 +90,35 @@ export default function ChartPanel() {
     }
   }, [])
 
-  // Update data when ohlcData changes
+  // Update data when klines change
   useEffect(() => {
     if (!candleSeriesRef.current) return
 
-    console.log('[ChartPanel] ohlcData:', ohlcData)
-    console.log('[ChartPanel] useMockData:', useMockData)
+    console.log('[ChartPanel] Bybit klines:', klines)
 
     let candles: CandlestickData[] = []
 
-    if (ohlcData && ohlcData.count > 0) {
-      // Real data from API
-      console.log('[ChartPanel] Using real data, candles count:', ohlcData.candles.length)
-      candles = ohlcData.candles.map((c) => ({
-        time: Math.floor(c.timestamp_us / 1000000) as any, // seconds
-        open: c.open_ticks / 10, // ticks to price (BTCUSDT tick size = 0.1)
-        high: c.high_ticks / 10,
-        low: c.low_ticks / 10,
-        close: c.close_ticks / 10,
+    if (klines && klines.length > 0) {
+      // Real data from Bybit
+      console.log('[ChartPanel] Using Bybit data, klines count:', klines.length)
+
+      candles = klines.map((k) => ({
+        time: Math.floor(parseInt(k.startTime) / 1000) as any, // ms to seconds
+        open: parseFloat(k.openPrice),
+        high: parseFloat(k.highPrice),
+        low: parseFloat(k.lowPrice),
+        close: parseFloat(k.closePrice),
       }))
-      console.log('[ChartPanel] Transformed candles sample:', candles.slice(0, 3))
+
+      // Bybit возвращает в обратном порядке (новые первыми), нужно развернуть
+      candles.reverse()
+
+      console.log('[ChartPanel] Transformed candles sample:', candles.slice(-3))
     } else {
-      // Mock data for demo (no backend data available)
+      // Fallback: mock data for demo
+      console.log('[ChartPanel] Using mock data')
       const now = Math.floor(Date.now() / 1000)
-      const basePrice = symbol === 'BTCUSDT' ? 50000 : symbol === 'ETHUSDT' ? 2500 : 0.5
+      const basePrice = symbol === 'BTCUSDT' ? 63000 : symbol === 'ETHUSDT' ? 2500 : 0.5
       const intervalSeconds = timeframe === '1m' ? 60 : timeframe === '5m' ? 300 : timeframe === '15m' ? 900 : 3600
 
       for (let i = 0; i < 100; i++) {
@@ -154,13 +153,29 @@ export default function ChartPanel() {
       lastCandleRef.current = candles[candles.length - 1]
       console.log('[ChartPanel] Last candle saved:', lastCandleRef.current)
     }
-  }, [ohlcData, symbol, timeframe, useMockData])
+  }, [klines, symbol, timeframe])
 
   // 🔥 NEW: Update chart from WebSocket trades in real-time
   useEffect(() => {
     if (!candleSeriesRef.current || !lastCandleRef.current || isReplayMode || !recentTrades || recentTrades.length === 0) {
       return
     }
+
+    // Определяем tick_size для конвертации цены
+    const getTickDivisor = (symbol: string): number => {
+      // BTCUSDT, SOLUSDT и большинство крипты: tick_size = 0.1
+      if (symbol.endsWith('USDT') && !symbol.startsWith('ETH')) {
+        return 10
+      }
+      // ETHUSDT: tick_size = 0.01
+      if (symbol === 'ETHUSDT') {
+        return 100
+      }
+      // По умолчанию 0.1
+      return 10
+    }
+
+    const tickDivisor = getTickDivisor(symbol)
 
     // Получаем интервал свечи в секундах
     const getIntervalSeconds = () => {
@@ -184,7 +199,7 @@ export default function ChartPanel() {
     }
 
     const tradeTime = Math.floor(lastTrade.time / 1000) // seconds
-    const tradePrice = lastTrade.price / 10 // ticks to price (BTCUSDT tick size = 0.1)
+    const tradePrice = lastTrade.price / tickDivisor // ticks to price (символо-зависимый tick_size)
 
     // Определяем время текущей свечи
     const currentCandleTime = Math.floor(tradeTime / intervalSeconds) * intervalSeconds
@@ -224,22 +239,22 @@ export default function ChartPanel() {
     <div className="chart-panel">
       <div className="chart-container" ref={chartContainerRef} />
 
-      {useMockData && (
-        <div className="mock-data-badge">
-          ⚠️ Mock Data (no backend data)
-        </div>
-      )}
-
       {!isReplayMode && (
         <div className="live-indicator">
           🔴 LIVE
         </div>
       )}
 
-      {!ohlcData && !error && (
+      {!klines && !error && (
         <div className="chart-loading">
           <div className="loading-spinner" />
-          <div>Loading {symbol} {timeframe} data...</div>
+          <div>Loading {symbol} {timeframe} data from Bybit...</div>
+        </div>
+      )}
+
+      {error && (
+        <div className="chart-loading" style={{ color: 'var(--status-error)' }}>
+          Error loading chart data: {error instanceof Error ? error.message : 'Unknown error'}
         </div>
       )}
 
