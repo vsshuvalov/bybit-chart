@@ -83,7 +83,22 @@ class ParquetReader:
         # Roadmap §6.4: manifest хранит min/max_event_time_ms (если заполнено)
         # Для RawTrade мы не заполняем event_time (используем WAL offsets),
         # поэтому читаем все сегменты (будущая оптимизация — ADR для event_time)
-        relevant_entries = manifest.sorted_entries()
+        all_entries = manifest.sorted_entries()
+
+        # OPTIMIZATION: для последних N минут читаем только последние 100 сегментов
+        # (каждый сегмент ~1 минута данных при 1000 trades/min)
+        # Это временное решение до реализации event_time индексации
+        if len(all_entries) > 100:
+            import time
+            now_us = int(time.time() * 1_000_000)
+            # Если запрашиваем данные за последний час, берём только последние 100 сегментов
+            if end_ts > now_us - (3600 * 1_000_000):
+                relevant_entries = all_entries[-100:]
+                logger.debug(f"Optimized: reading last 100/{len(all_entries)} segments for recent data")
+            else:
+                relevant_entries = all_entries
+        else:
+            relevant_entries = all_entries
 
         if not relevant_entries:
             logger.info(f"Нет сегментов для {symbol}")

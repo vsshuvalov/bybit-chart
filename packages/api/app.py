@@ -18,6 +18,7 @@ Endpoints:
 - GET /api/v1/analytics/orderflow/features — Active Features (Этап 6 / P3-A7)
 """
 
+import logging
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Query
@@ -32,6 +33,8 @@ from packages.api.redis_subscriber import register_redis_subscriber
 from packages.storage.parquet_reader import ParquetReader
 from packages.monitoring import get_metrics_collector, Timer
 from packages.monitoring.worker_metrics import APIMetrics
+
+logger = logging.getLogger(__name__)
 
 # Конфигурация
 DATA_DIR = Path("/tmp/bybit-chart-data")  # Переопределяется через env или config
@@ -1026,7 +1029,8 @@ def create_app(data_dir: Path | str | None = None) -> FastAPI:
 
 
 # Глобальный app instance для uvicorn
-app = create_app()
+import os
+app = create_app(data_dir=os.environ.get("DATA_DIR", DATA_DIR))
 
 
 if __name__ == "__main__":
