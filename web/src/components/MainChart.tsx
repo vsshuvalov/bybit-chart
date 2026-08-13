@@ -87,6 +87,8 @@ export default function MainChart({
 
   // Initialize chart
   useEffect(() => {
+    console.log('[MainChart] MOUNTING chart component')
+
     if (!chartContainerRef.current) return
 
     const container = chartContainerRef.current
@@ -151,6 +153,7 @@ export default function MainChart({
     window.addEventListener('resize', handleResize)
 
     return () => {
+      console.log('[MainChart] UNMOUNTING chart component')
       window.removeEventListener('resize', handleResize)
       chart.remove()
     }
